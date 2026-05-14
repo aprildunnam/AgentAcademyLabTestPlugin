@@ -1,0 +1,38 @@
+# Workshop portal configuration for redeeming a test account.
+#
+# The `workshop_portal_url` is event-specific — get it from whoever distributed
+# your workshop code. The default below is a placeholder; the plugin will
+# prompt you to update this file on first run if the URL is still the placeholder.
+#
+# The selectors describe how to locate the code-entry field, submit button, and
+# credentials display on the redemption page. The defaults match a Skillable-style
+# layout; adjust if your workshop portal differs.
+
+workshop_portal_url: "REPLACE_ME_ON_FIRST_RUN"
+
+# Selectors used during the workshop-code redemption flow.
+# These are accessibility-snapshot ref hints — the actual click/type uses
+# Playwright MCP refs from a fresh snapshot at runtime, but the judge falls
+# back to these hints if no good ref is found.
+redemption_selectors:
+  code_input_label: "Workshop code"           # accessibility label of the code-entry input
+  submit_button_text: "Redeem"                # visible text on the submit button
+  credentials_panel_heading: "Your account"   # heading text on the issued-credentials page
+  username_label: "Username"                  # field label for the issued username
+  password_label: "Password"                  # field label for the issued password
+  tenant_label: "Tenant"                      # optional — present on some portals
+  expiry_label: "Expires"                     # optional — present on some portals
+
+# Where to navigate after redemption to capture SSO state.
+# All AAD-federated portals share a single storage state; signing into
+# login.microsoftonline.com once is sufficient.
+sso_anchor_url: "https://login.microsoftonline.com/"
+
+# Probe URL hit at each scene boundary to detect mid-run auth expiry.
+# Should be cheap and require authentication. Default points at Copilot Studio
+# home, which is in scope for every bootcamp lab.
+auth_probe_url: "https://copilotstudio.microsoft.com/"
+
+# Optional: hint label written to audit-history.yml.tenant_hint. Never the actual
+# tenant id — just a human-readable label for grouping past runs by event.
+tenant_hint: "unspecified"
