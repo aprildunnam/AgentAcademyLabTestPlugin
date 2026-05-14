@@ -1,0 +1,11 @@
+{
+  "name": "mcs-lab-auditor",
+  "version": "0.1.0",
+  "description": "Drive Playwright through every lab in the mcs-labs bootcamp event, compare actual UI behavior to written instructions, and file one GitHub issue per lab when steps are broken or unclear. Clean labs produce local log entries only.",
+  "author": {
+    "name": "dewainr",
+    "email": "dewainr@microsoft.com"
+  },
+  "repository": "https://github.com/microsoft/BootcampLabTestPlugin",
+  "license": "MIT"
+}

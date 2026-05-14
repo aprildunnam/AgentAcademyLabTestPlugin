@@ -1,0 +1,48 @@
+# Judge and orchestration configuration.
+
+# --- Confidence thresholds ---
+# Findings below `min_to_log` are dropped entirely.
+# Findings at or above `min_to_include_in_issue` are sent to GitHub.
+# Findings between these two values are kept locally but excluded from the issue.
+# Findings between `low_confidence_marker_max` and `min_to_include_in_issue` are
+# included in the issue but tagged with "(low confidence — please verify)".
+confidence:
+  min_to_log: 0.5
+  low_confidence_marker_max: 0.7
+  min_to_include_in_issue: 0.5    # same as min_to_log → all logged findings go to issue, low-conf tagged
+
+# --- Step execution ---
+execution:
+  transient_retries: 1            # retry once on `transient` verdict
+  max_steps_per_lab: 200          # hard cap to bound cost on runaway labs
+  min_seconds_between_labs: 30    # pause between labs to avoid rate limits
+  scene_boundary_probe: true      # if true, hit auth_probe_url at each scene start
+  skip_judge_on_pure_navigate: true   # skip the LLM judge for navigate steps with no observable target
+
+# --- Non-deterministic labs ---
+# These labs render LLM-generated UI (Agent Builder, multi-agent demos) that
+# varies per call. Default to log-only (no GitHub issue) and use a softer
+# shape-match rubric in the judge prompt. Override per-run with --force-issue.
+non_deterministic_lab_slugs:
+  - agent-builder-m365
+  - mcs-multi-agent
+
+# --- Critique pass ---
+# If enabled, every finding flagged as `broken` or `unclear` runs through a
+# second-pass critique judge that argues for the opposite verdict. Findings
+# that survive critique keep their original verdict; findings that don't are
+# downgraded to log-only. Adds ~10% cost; significantly reduces false positives.
+critique:
+  enabled: true
+  downgrade_on_failure: true
+
+# --- Issue de-duplication ---
+issues:
+  repo: "microsoft/mcs-labs"
+  dedupe_by_labels: ["lab-audit"]   # find existing issues with these labels + lab:<slug>
+  on_duplicate: "comment"           # "comment" | "skip" | "create_anyway"
+  labels_always: ["lab-audit"]
+  labels_non_deterministic: ["non-deterministic-lab"]
+
+# --- Plugin version (written into manifest.yml and issue bodies) ---
+plugin_version: "0.1.0"
