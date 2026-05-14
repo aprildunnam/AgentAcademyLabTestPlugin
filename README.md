@@ -27,13 +27,15 @@ A Claude Code plugin that audits every lab in the [`microsoft/mcs-labs`](https:/
 
 ## Installation
 
-Clone into your Claude Code user-plugins directory:
+Quick path:
 
 ```powershell
 git clone https://github.com/microsoft/BootcampLabTestPlugin "$env:USERPROFILE\.claude\plugins\mcs-lab-auditor"
 ```
 
-Restart Claude Code (or reload plugins). The four `/audit-*` commands should appear.
+…then restart Claude Code. The four `/audit-*` commands should appear.
+
+For the full setup including prerequisite checks, workshop portal configuration, hard-coded path adjustments (if your `mcs-labs` clone isn't at `C:\Users\dewainr\mcs-labs`), test-account caching, and a smoke-test sequence: see [`docs/installation.md`](docs/installation.md).
 
 ## Prerequisites
 
@@ -85,7 +87,23 @@ The `runtime/` directory is gitignored. It contains:
 ## Limitations
 
 - **Windows-only**, due to DPAPI.
-- **Hard-coded paths** to `C:\Users\dewainr\mcs-labs` in several places — adjust for your clone location.
-- **Single workshop-portal flow** assumed (Skillable-style). Other portals require editing `references/workshop-redemption.md` and `config/workshop.yml`.
+- **Hard-coded paths** to `C:\Users\dewainr\mcs-labs` in several places — adjust for your clone location ([instructions](docs/installation.md#step-5b--adjust-hard-coded-paths-only-if-your-clone-is-not-at-cusersdewainrmcs-labs)).
+- **Single workshop-portal flow** assumed (Skillable-style). Other portals require editing `references/workshop-redemption.md` and `config/workshop.yml` ([how-to](docs/extending.md#adapting-to-a-different-workshop-portal)).
 - **Screenshots aren't attached to issues** — `gh issue create` doesn't support inline file uploads; screenshots stay in local run artifacts and are referenced by path in the issue body.
-- **No automatic tenant cleanup**. Orphan agents created during testing accumulate; the user manages tenant hygiene separately.
+- **No automatic tenant cleanup**. Orphan agents created during testing accumulate; the user manages tenant hygiene separately. (Deliberate — see [ADR-004](docs/design-decisions.md#adr-004--no-environment-cleanup-as-part-of-audit-runs).)
+
+## Documentation
+
+| Doc | When to read |
+|---|---|
+| [`docs/installation.md`](docs/installation.md) | Setting up the plugin on a new machine, end to end. |
+| [`docs/architecture.md`](docs/architecture.md) | Understanding how the plugin works at runtime — component diagram, run lifecycle, per-step data flow, finding→issue mapping. |
+| [`docs/design-decisions.md`](docs/design-decisions.md) | The "why" behind the shape of the plugin — ADR-style enumeration of architectural choices and their alternatives. |
+| [`docs/security.md`](docs/security.md) | What's encrypted, what's logged, what's at risk, what isn't. Read this before extending anything credential-handling. |
+| [`docs/troubleshooting.md`](docs/troubleshooting.md) | Common failure modes during a run, grouped by category. |
+| [`docs/extending.md`](docs/extending.md) | Adding commands, adapting to a different workshop portal, pointing at a different lab repo, tuning the judge. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Project layout, change recipes, testing approach, conventions. |
+| [`SECURITY.md`](SECURITY.md) | How to report security issues (via MSRC, **not** GitHub). |
+| [`CHANGELOG.md`](CHANGELOG.md) | Version history. |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Microsoft Open Source Code of Conduct. |
+| [`LICENSE`](LICENSE) | MIT (Microsoft copyright). |
