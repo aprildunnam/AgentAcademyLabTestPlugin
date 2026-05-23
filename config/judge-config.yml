@@ -13,11 +13,50 @@ confidence:
 
 # --- Step execution ---
 execution:
-  transient_retries: 1            # retry once on `transient` verdict
+  transient_retries: 1            # retry once on `transient` verdict (UI-side, page reachable)
   max_steps_per_lab: 200          # hard cap to bound cost on runaway labs
   min_seconds_between_labs: 30    # pause between labs to avoid rate limits
   scene_boundary_probe: true      # if true, hit auth_probe_url at each scene start
   skip_judge_on_pure_navigate: true   # skip the LLM judge for navigate steps with no observable target
+
+  # --- Interactive phase enforcement ---
+  # When true (default), the orchestrator MUST run Phase 2 (interactive UI
+  # execution) for every audited lab. Static analysis alone catches typos,
+  # broken links, and missing images — it does not catch UI drift in the
+  # live product. Skipping Phase 2 produces a documentation audit, not a
+  # lab audit. The only way to opt out is to set this to `false` or pass
+  # `--static-only` on the command line; either choice is recorded in the
+  # run manifest so future readers know why the interactive phase was
+  # skipped.
+  require_interactive_phase: true
+
+  # --- Run-start account prompt ---
+  # Controls whether Phase 1.5 asks the user "use cached vs. redeem new"
+  # at every run start.
+  # - `always` (default): prompt every fresh run, regardless of cache
+  #   freshness. Forces the user to opt in to reuse — the safety net
+  #   against accidentally running against last week's tenant.
+  # - `only_if_expired`: skip the prompt only when expires_at is in the
+  #   future; prompt when expired or missing.
+  # - `only_if_missing`: prompt only when no cached account exists.
+  #   Equivalent to the pre-0.2 behavior. Not recommended.
+  account_prompt_mode: always
+
+  # --- Connection-error retry policy ---
+  # Distinct from `transient_retries`, which covers UI-side timeouts on a
+  # page that is itself reachable. These settings handle the connection
+  # class: DNS failure, net::ERR_*, repeated navigation timeouts to URLs
+  # that should resolve quickly, or any failed-network entry that recurs
+  # across consecutive steps.
+  #
+  # On a connection failure, the orchestrator retries up to
+  # `network_retry_count` times with the per-attempt backoff below, then
+  # halts the lab and prompts the user via AskUserQuestion for next steps
+  # (retry / wait / skip lab / abort run). Connection failures are NEVER
+  # recorded as lab findings — they're environment issues, not lab issues.
+  network_retry_count: 3
+  network_retry_backoff_seconds: [5, 10, 20]   # exponential, matched to retry count
+  network_wait_seconds: 120        # default "wait then retry" sleep when the user picks that option
 
   # --- Fan-out execution (parallel labs) ---
   # `fanout_concurrency` caps how many labs run their interactive Playwright

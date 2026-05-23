@@ -8,6 +8,55 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ### Added
 
+- **Interactive-phase enforcement.** New
+  `judge-config.yml.execution.require_interactive_phase` (default `true`).
+  When `true`, the orchestrator MUST run Phase 2 against the signed-in
+  training account — static analysis alone catches typos, broken links, and
+  missing images, but it does not catch UI drift in the live product.
+  Opt out per run with `--static-only` on `/audit-bootcamp` or `/audit-lab`;
+  the skipped-interactive choice is recorded in the run manifest as
+  `execution.skipped_interactive: true, reason: <flag|config>` so future
+  readers know the audit didn't exercise the live UI.
+- **Always-on run-start account prompt.** New
+  `judge-config.yml.execution.account_prompt_mode` (default `always`). Other
+  modes: `only_if_expired`, `only_if_missing`. The default forces Phase 1.5
+  to ask "use cached vs. redeem new" every fresh run regardless of cache
+  freshness — the user's safety net against running against the wrong
+  tenant. `--resume` re-prompts unless the mode permits skipping AND the
+  cached `expires_at` is still in the future.
+- **Connection-error retry policy.** New
+  `judge-config.yml.execution.network_retry_count` (default `3`),
+  `network_retry_backoff_seconds` (default `[5, 10, 20]`), and
+  `network_wait_seconds` (default `120`). Connection failures (DNS, ERR_*,
+  repeated navigation timeouts) retry up to the cap, then halt the lab and
+  prompt the user via `AskUserQuestion` with four options:
+  retry now / wait-and-retry / skip this lab / abort the run. Connection
+  failures are NEVER recorded as lab findings — they're environment
+  issues, not lab issues.
+- **`--static-only` flag** on `/audit-bootcamp` and `/audit-lab` for the
+  opt-out path described above.
+- **`--account-prompt <mode>` flag** on both commands to override
+  `account_prompt_mode` for one run without editing config.
+
+### Changed
+
+- `SKILL.md` Phase 1.5 ("Run-start account prompt") is now explicitly
+  marked MANDATORY with a leading note about the failure mode it prevents
+  (running against the wrong tenant).
+- `SKILL.md` Phase 1.7 has a new callout: "the static phase is not a
+  substitute for the interactive phase." Static catches doc drift; only
+  interactive catches UI drift.
+- `SKILL.md` Phase 2 header now reads "interactive UI execution" with a
+  one-paragraph framing of why this is the core deliverable of the audit.
+- `SKILL.md` "Important rules" gained two new rules at the top:
+  "Run the interactive phase by default" and "Always prompt at Phase 1.5
+  unless explicitly told not to."
+- `SKILL.md` "What to do when stuck" gained a new "Network / connection
+  error" section with the retry-then-ask flow, distinct from the existing
+  UI-side `_browser_wait_for` timeout policy.
+
+### Added (from PR #11, also unreleased)
+
 - **Fan-out execution for the bootcamp audit.** `judge-config.yml` now declares
   `execution.fanout_concurrency` (cap on parallel interactive UI passes per
   training account) and `execution.static_fanout_concurrency` (cap on the
