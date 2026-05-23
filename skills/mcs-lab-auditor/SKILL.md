@@ -310,7 +310,6 @@ When `--resume <run-id>` is passed:
   `account_prompt_mode: always` means every fresh run asks "use cached vs.
   redeem new", regardless of how recently the cache was written. This is
   the user's safety net against running against the wrong tenant.
-- **Never re-create an open issue or PR.** Phase 1.4 is mandatory; the per-lab disposition steps must consult `runs/<run-id>/existing-state.yml`. If an open issue exists for a slug, comment on it (with fingerprint dedup); if an open PR exists and a screenshot update is in scope, append to that branch. Filing a second open issue for the same lab, or opening a second fix-PR for the same lab, is **not allowed**.
 - **The mcs-labs repo has two narrow write paths.** (a) `gh issue create | comment | edit` for issue body + label hygiene, always on. (b) The `mcs-lab-pr-appender` sub-skill, which appends a screenshots-only commit to an already-open fix-PR branch — **on by default**, suppress with `--no-update-screenshots` / `--no-append-to-pr` (CLI) or `issues.pr_append.enabled_by_default: false` (config). **You may never create a new branch or open a new PR from this skill.**
 - **Screenshot-only scope.** The PR-append carve-out replaces image files in place; it does not edit markdown or any other file types. Broader edits require a future opt-in (e.g. `--append-edits-too`) that does not yet exist.
 - **Never run `copilot-studio-cleanup` or any agent-deletion command** as part of an audit run. Tenant hygiene is the user's responsibility (see [[feedback_no_cleanup_in_test_automation]]).
