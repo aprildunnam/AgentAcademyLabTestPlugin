@@ -19,6 +19,42 @@ execution:
   scene_boundary_probe: true      # if true, hit auth_probe_url at each scene start
   skip_judge_on_pure_navigate: true   # skip the LLM judge for navigate steps with no observable target
 
+  # --- Fan-out execution (parallel labs) ---
+  # `fanout_concurrency` caps how many labs run their interactive Playwright
+  # pass simultaneously. 1 = strictly serial (legacy behavior). The static
+  # phase always fans out fully — only the interactive phase is throttled,
+  # because every concurrent browser instance signs in to the same training
+  # account and can collide with the others' tenant state.
+  #
+  # Static phase (markdown parsing, link checks, image refs, structural
+  # validation) has no tenant state and is always run in parallel via
+  # background subagents — one per lab — capped at `static_fanout_concurrency`.
+  fanout_concurrency: 1            # interactive UI passes per training account
+  static_fanout_concurrency: 11    # background subagents for static analysis
+
+# --- Lab dependency graph ---
+# Some bootcamp labs build on prior labs' artifacts (agents, topics, knowledge
+# sources, evaluations created in the training tenant). Running them out of
+# order leaves the next lab without the prerequisites its instructions assume.
+#
+# Express each chain as a list of slugs in the order they must execute.
+# The orchestrator topologically sorts these against the planned lab list:
+# - Labs that appear in a chain run in chain order (serially).
+# - Labs that don't appear in any chain run in parallel (up to fanout_concurrency).
+# - When a chain is interleaved with parallel labs, the chain runs to
+#   completion before its dependents start; independent parallel labs run
+#   alongside the chain.
+lab_dependencies:
+  - reason: |
+      core-concepts-* labs share a single agent created in lab #2 and
+      progressively add knowledge sources, topics, variables, channel
+      deployments, and analytics+evaluation telemetry. Each later lab
+      reads state the earlier lab wrote.
+    chain:
+      - core-concepts-agent-knowledge-tools          # #2 — creates the base agent + knowledge sources + topics
+      - core-concepts-variables-agents-channels      # #3 — adds variables, multi-agent refs, and channel deploys
+      - core-concepts-analytics-evaluations          # #4 — reads analytics + runs evaluations against #2/#3 artifacts
+
 # --- Non-deterministic labs ---
 # These labs render LLM-generated UI (Agent Builder, multi-agent demos) that
 # varies per call. Default to log-only (no GitHub issue) and use a softer

@@ -105,9 +105,44 @@ Before any Playwright activity:
 
 After Phase 1.5, the orchestrator has a valid signed-in browser context and a usable `account_user_id`.
 
+### Phase 1.7 — Plan execution order (fan-out vs serial)
+
+After Phase 1.5 but before Phase 2, build the execution plan from
+`judge-config.yml.lab_dependencies` and the planned lab list:
+
+1. **Static phase** is always fully fanned out. Spawn one background
+   subagent per lab in the planned list (capped at
+   `execution.static_fanout_concurrency`). Each subagent does the
+   markdown-only checks: parser-spec validation, image-ref resolution,
+   external-URL link-check via `WebFetch`, TOC-anchor sanity, prereq
+   sanity, self-consistency between the Use Cases Covered table and the
+   real scene headings. Subagents write their findings as
+   `runs/<run-id>/labs/<slug>/findings-static.json`. No browser, no
+   tenant state, no GitHub writes.
+
+2. **Interactive phase** topologically sorts the planned labs against
+   `lab_dependencies`. Each entry under `lab_dependencies` defines a
+   `chain` (ordered list of slugs that must run serially because each
+   lab's tenant artifacts are read by the next). Independent labs run
+   in parallel — but only up to `execution.fanout_concurrency` browser
+   sessions per training account, since concurrent UI activity in the
+   same tenant can collide (e.g. two labs both renaming the same
+   default agent).
+
+   The default `fanout_concurrency: 1` preserves the legacy strict-serial
+   behavior. Raising it requires either (a) a workshop event whose labs
+   genuinely don't share tenant state, or (b) provisioning one training
+   account per concurrent slot.
+
+3. The orchestrator merges static and interactive findings for each lab
+   into a single `findings.json` at the end of the lab's interactive
+   pass. The static `findings-static.json` is also retained for
+   debugging.
+
 ### Phase 2 — Per-lab loop
 
-For each lab slug in the planned list (or one slug for `/audit-lab`):
+For each lab slug in the interactive-phase execution plan
+(respecting topological order from Phase 1.7):
 
 1. **Mark the lab `running`** in `manifest.yml`.
 2. **Parse the lab** (`references/lab-parser-spec.md`). Write the step tree to `runs/<run-id>/labs/<slug>/steps.json`.
