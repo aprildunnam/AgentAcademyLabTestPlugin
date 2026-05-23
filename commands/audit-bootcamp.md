@@ -17,6 +17,8 @@ Parse these flags:
 - `--no-issue` — execute the labs but never file or comment on GitHub issues (everything goes to local log only).
 - `--force-issue` — file issues even for labs in `non_deterministic_lab_slugs` (default skips those). Does NOT bypass open-issue dedup — even with this flag, existing open issues are still commented on, never duplicated.
 - `--no-update-screenshots` (alias `--no-append-to-pr`) — opt out of the **default-on** screenshot refresh. By default, when a lab has an open fix-PR (per Phase 1.4 probe) AND the run produced refreshed screenshot files, the plugin pushes one commit replacing those screenshots onto the PR branch. Screenshot files only; same-author only; mergeable PRs only; never creates a new branch or PR. The legacy `--update-screenshots` / `--append-to-pr` flags are still accepted as no-ops for backwards compatibility.
+- `--static-only` — opt out of the interactive UI phase for this run. Static analysis (markdown, links, images, structure) still runs for every lab. The default is to run BOTH phases — `require_interactive_phase: true` in `judge-config.yml`. Use `--static-only` only when you don't have a workshop account and want a doc-only sweep; the resulting findings will not catch UI drift in the live product.
+- `--account-prompt <always|only_if_expired|only_if_missing>` — override `judge-config.yml.execution.account_prompt_mode` for this run. Default is whatever the config says (ships as `always`).
 
 ## Dedup guarantee (always on)
 
@@ -35,12 +37,15 @@ Invoke the `mcs-lab-auditor` skill following its full lifecycle:
 
 1. Pre-flight (read the configs, enumerate the lab list, check `gh` auth and `microsoft/mcs-labs` viewer permission).
 2. **Phase 1.4 — Probe existing GitHub state** (`gh issue list` + `gh pr list` per slug) and write `runs/<run-id>/existing-state.yml`. Mandatory.
-3. Run-start account prompt (offer cached account or new workshop-code redemption).
-4. Per-lab loop: parse → execute steps in Playwright → judge each step → checkpoint per scene → **disposition** (comment on existing open issue OR file new issue if none exists; **by default**, also append refreshed screenshots to the lab's existing open fix-PR if one is found, unless `--no-update-screenshots` was passed).
-5. Wrap-up: close the browser, print summary, save manifest.
+3. Run-start account prompt (offer cached account or new workshop-code redemption). **This prompt is mandatory** unless `account_prompt_mode` is set to `only_if_expired`/`only_if_missing` AND the cache satisfies the chosen mode. The default ships as `always`.
+4. Plan execution order (Phase 1.7): fan out static analysis across one subagent per lab and topologically sort the interactive phase against `lab_dependencies`.
+5. **Interactive per-lab loop (required by default — controlled by `require_interactive_phase`)**: parse → execute steps in Playwright against the chosen account → judge each step → checkpoint per scene → **disposition** (comment on existing open issue OR file new issue if none exists; **by default**, also append refreshed screenshots to the lab's existing open fix-PR if one is found, unless `--no-update-screenshots` was passed). Network/connection failures retry up to `network_retry_count` (default 3) with `network_retry_backoff_seconds` between attempts, then halt and ask the user via `AskUserQuestion` (retry / wait / skip lab / abort).
+6. Wrap-up: close the browser, print summary, save manifest.
 
-Read `~/.claude/plugins/mcs-lab-auditor/skills/mcs-lab-auditor/SKILL.md` for the full procedure and refer to the `references/` files as needed. Do not skip the run-start account prompt — the user expects it.
+Read `~/.claude/plugins/mcs-lab-auditor/skills/mcs-lab-auditor/SKILL.md` for the full procedure and refer to the `references/` files as needed. **Do not skip the run-start account prompt and do not skip the interactive phase** — both are the user's safety net against running against the wrong tenant or shipping a doc-only audit.
 
-If `--resume` is provided, do NOT prompt for a new account if the cached one is still valid (check `expires_at`).
+If `--resume` is provided, the Phase 1.5 prompt is shown unless `account_prompt_mode` permits skipping AND the cached `expires_at` is still in the future. A resume after the cache expired always re-prompts.
 
 If `--dry-run` is in the arguments, treat it as a per-lab dry-run for every lab (parse only, no browser activity).
+
+If `--static-only` is in the arguments, run the static fan-out but skip Phase 2 for every lab. Record `execution.skipped_interactive: true, reason: cli_flag` in the run manifest so future readers know the audit didn't exercise the live UI.

@@ -132,31 +132,117 @@ If a lab has neither an open issue nor an open PR, both keys are `null`. Do not 
 
 **This file is read by every per-lab disposition step**. Do not skip Phase 1.4 — without it, the issue-filer's inline fallback runs N extra `gh` queries per run and the PR-append carve-out cannot fire at all.
 
-### Phase 1.5 — Run-start account prompt
+### Phase 1.5 — Run-start account prompt (MANDATORY)
 
-Before any Playwright activity:
+Before any Playwright activity. **This prompt is required on every fresh run**
+(only `--resume` with a still-valid cached `expires_at` skips it). An
+implementing agent that silently reuses the cached account without asking is
+violating the skill contract — the prompt is the moment the user gets to
+choose "use the test account I left in DPAPI from last week" vs. "the workshop
+code I just redeemed for a new event." Skipping it has caused at least one
+real audit run to execute against the wrong tenant.
 
-1. Check `runtime/account/account.meta.json`. If it exists, read `user_id`, `tenant_hint`, `cached_at`, `expires_at`.
-2. If a cached account exists, use `AskUserQuestion`:
+The behavior is governed by `judge-config.yml.execution.account_prompt_mode`:
+
+- `always` (default): show the prompt every fresh run, even if a cached
+  account exists and is unexpired. Forces the user to opt in to reuse.
+- `only_if_expired`: skip the prompt only when `expires_at` is in the future;
+  prompt when expired or missing.
+- `only_if_missing`: prompt only when no cached account exists at all.
+  Equivalent to the pre-0.2 behavior. Not recommended.
+
+Procedure:
+
+1. Check `runtime/account/account.meta.json`. If it exists, read `user_id`,
+   `tenant_hint`, `cached_at`, `expires_at`.
+2. Decide whether to prompt based on `account_prompt_mode` above. If you
+   choose to skip the prompt under a non-default mode, log the decision and
+   the reason ("skip_reason: expires_at_in_future") into the run manifest so
+   future readers know the cached account wasn't user-confirmed for this run.
+3. When prompting (the typical path), use `AskUserQuestion`:
    - Question: `Use the cached test account?`
    - Options:
-     - `[Recommended] Use cached: <user_id>` — description: `Cached <relative-time> ago. Expires <expires_at or "unknown">.`
-     - `Redeem a new workshop code` — description: `Discards the cached account and prompts for a fresh workshop code.`
-3. If user picks "Redeem a new..." or no cache exists, follow `references/workshop-redemption.md` end-to-end. The redemption flow:
-   - Prompts the user for the workshop code (use `AskUserQuestion` with a single free-text option labeled "Enter workshop code").
-   - Opens the workshop portal, fills the code, scrapes the issued credentials.
-   - Signs in to AAD, captures `storage-state.json`.
-   - Encrypts the credential blob via DPAPI and writes `credential.enc` + `account.meta.json`.
+     - `[Recommended] Use cached: <user_id>` — description: `Cached
+       <relative-time> ago. Expires <expires_at or "unknown">.`
+     - `Redeem a new workshop code` — description: `Discards the cached
+       account and prompts for a fresh workshop code.`
+4. If the user picks "Redeem a new..." or no cache exists, follow
+   `references/workshop-redemption.md` end-to-end:
+   - Prompt for the workshop code (`AskUserQuestion`, single free-text
+     option labeled "Enter workshop code").
+   - Open the workshop portal, fill the code, scrape the issued credentials.
+   - Sign in to AAD, capture `storage-state.json`.
+   - Encrypt the credential blob via DPAPI and write `credential.enc` +
+     `account.meta.json`.
 
-After Phase 1.5, the orchestrator has a valid signed-in browser context and a usable `account_user_id`.
+After Phase 1.5, the orchestrator has a valid signed-in browser context and a
+usable `account_user_id`. Whichever account was chosen must be recorded in
+the run manifest under `account.user_id` and `account.source: cached | redeemed`.
 
-### Phase 2 — Per-lab loop
+### Phase 1.7 — Plan execution order (fan-out vs serial)
 
-For each lab slug in the planned list (or one slug for `/audit-lab`):
+After Phase 1.5 but before Phase 2, build the execution plan from
+`judge-config.yml.lab_dependencies` and the planned lab list.
+
+> **The static phase is not a substitute for the interactive phase.**
+> Static checks can spot typos, broken links, missing images, and structural
+> drift. They cannot spot UI drift in the live product — controls that have
+> been renamed, dialogs that have been added, settings that have moved.
+> The interactive phase is what catches the issues that actually break a
+> learner mid-lab. Doing only the static phase is the audit equivalent of
+> running `tsc --noEmit` and calling it tested.
+
+The behavior is governed by
+`judge-config.yml.execution.require_interactive_phase` (default `true`).
+When `true`, the orchestrator MUST run Phase 2 against the signed-in
+training account. The only way to skip Phase 2 is to pass the
+`--static-only` CLI flag (or set the config to `false`), and either choice
+is recorded in the run manifest as `execution.skipped_interactive: true,
+reason: <flag|config>`.
+
+1. **Static phase** is always fully fanned out. Spawn one background
+   subagent per lab in the planned list (capped at
+   `execution.static_fanout_concurrency`). Each subagent does the
+   markdown-only checks: parser-spec validation, image-ref resolution,
+   external-URL link-check via `WebFetch`, TOC-anchor sanity, prereq
+   sanity, self-consistency between the Use Cases Covered table and the
+   real scene headings. Subagents write their findings as
+   `runs/<run-id>/labs/<slug>/findings-static.json`. No browser, no
+   tenant state, no GitHub writes.
+
+2. **Interactive phase** (REQUIRED by default — see the callout above)
+   topologically sorts the planned labs against `lab_dependencies`. Each
+   entry under `lab_dependencies` defines a `chain` (ordered list of slugs
+   that must run serially because each lab's tenant artifacts are read by
+   the next). Independent labs run in parallel — but only up to
+   `execution.fanout_concurrency` browser sessions per training account,
+   since concurrent UI activity in the same tenant can collide (e.g. two
+   labs both renaming the same default agent).
+
+   The default `fanout_concurrency: 1` preserves the legacy strict-serial
+   behavior. Raising it requires either (a) a workshop event whose labs
+   genuinely don't share tenant state, or (b) provisioning one training
+   account per concurrent slot.
+
+3. The orchestrator merges static and interactive findings for each lab
+   into a single `findings.json` at the end of the lab's interactive
+   pass. The static `findings-static.json` is also retained for
+   debugging.
+
+### Phase 2 — Per-lab loop (interactive UI execution)
+
+This phase is the **core deliverable** of the audit. The orchestrator drives
+a real browser through every step the lab tells the learner to perform,
+using the account chosen in Phase 1.5, and compares what the live UI does
+to what the lab markdown says. Skip this phase and you have a documentation
+audit, not a lab audit.
+
+For each lab slug in the interactive-phase execution plan
+(respecting topological order from Phase 1.7):
 
 1. **Mark the lab `running`** in `manifest.yml`.
 2. **Parse the lab** (`references/lab-parser-spec.md`). Write the step tree to `runs/<run-id>/labs/<slug>/steps.json`.
-   - On `--dry-run`, stop here for this lab.
+   - On `--dry-run` or `--static-only`, stop here for this lab. Otherwise continue to step 3.
 3. **Execute each scene** in order:
    - **Scene-boundary auth probe** (`playwright-cookbook.md#scene-boundary-auth-probe`). If expired, halt; mark lab `error, reason: auth_expired`; tell user how to resume.
    - For each step in the scene:
@@ -207,10 +293,23 @@ When `--resume <run-id>` is passed:
 3. For `done`/`issue_filed`/`skipped` labs: keep as-is.
 4. For `running`: restart that lab from the last completed scene in `checkpoint.yml`. Findings already in `findings.json` are preserved; new findings append.
 5. For `pending`: run as a fresh lab.
-6. Skip Phase 1.5 if the cached account is still valid (check `expires_at`). Otherwise re-prompt.
+6. Phase 1.5 prompt under `--resume`: re-prompt unless the cached
+   `expires_at` is in the future AND `account_prompt_mode` is not `always`.
+   A resume after the cache expired requires fresh credentials, no
+   exceptions. A resume with `account_prompt_mode: always` still re-prompts —
+   the user may have meant to redeem a different account for the resumed run.
 
 ## Important rules
 
+- **Never re-create an open issue or PR.** Phase 1.4 is mandatory; the per-lab disposition steps must consult `runs/<run-id>/existing-state.yml`. If an open issue exists for a slug, comment on it (with fingerprint dedup); if an open PR exists and a screenshot update is in scope, append to that branch. Filing a second open issue for the same lab, or opening a second fix-PR for the same lab, is **not allowed**.
+- **Run the interactive phase by default.** Static analysis alone is not a
+  complete audit. Skip Phase 2 only when the user has explicitly passed
+  `--static-only` or set `execution.require_interactive_phase: false`. Either
+  case must be recorded in the run manifest.
+- **Always prompt at Phase 1.5 unless explicitly told not to.** Default
+  `account_prompt_mode: always` means every fresh run asks "use cached vs.
+  redeem new", regardless of how recently the cache was written. This is
+  the user's safety net against running against the wrong tenant.
 - **Never re-create an open issue or PR.** Phase 1.4 is mandatory; the per-lab disposition steps must consult `runs/<run-id>/existing-state.yml`. If an open issue exists for a slug, comment on it (with fingerprint dedup); if an open PR exists and a screenshot update is in scope, append to that branch. Filing a second open issue for the same lab, or opening a second fix-PR for the same lab, is **not allowed**.
 - **The mcs-labs repo has two narrow write paths.** (a) `gh issue create | comment | edit` for issue body + label hygiene, always on. (b) The `mcs-lab-pr-appender` sub-skill, which appends a screenshots-only commit to an already-open fix-PR branch — **on by default**, suppress with `--no-update-screenshots` / `--no-append-to-pr` (CLI) or `issues.pr_append.enabled_by_default: false` (config). **You may never create a new branch or open a new PR from this skill.**
 - **Screenshot-only scope.** The PR-append carve-out replaces image files in place; it does not edit markdown or any other file types. Broader edits require a future opt-in (e.g. `--append-edits-too`) that does not yet exist.
@@ -223,7 +322,18 @@ When `--resume <run-id>` is passed:
 ## What to do when stuck
 
 - **Parser couldn't classify a step**: emit a `parser_warning` finding (severity: low) and continue. Don't halt the whole lab.
-- **Playwright timeout on `_browser_wait_for`**: capture diagnostics, mark the step `transient`, retry once. If still failing, record as a finding with `outcome: broken, severity: high, confidence: 0.6`.
+- **Playwright timeout on `_browser_wait_for`** (UI took too long but the page is reachable): capture diagnostics, mark the step `transient`, retry once. If still failing, record as a finding with `outcome: broken, severity: high, confidence: 0.6`. This is a UI-side problem, not a connection problem — keep going.
+- **Network / connection error** (DNS failure, `net::ERR_*`, navigation timeout to a page that should resolve quickly, repeated `net::ERR_INTERNET_DISCONNECTED`, or any failed-network entry that recurs across consecutive steps): treat as a **connection class** failure, distinct from a UI timeout. The retry policy is:
+  1. Retry the failing operation up to `execution.network_retry_count` times (default `3`), pausing `execution.network_retry_backoff_seconds` between attempts (default `5`, `10`, `20` — exponential).
+  2. If all retries fail, **halt the lab** (mark `status: paused, reason: network_unstable`) and prompt the user via `AskUserQuestion`:
+     - Question: `Network looks unstable — what should we do?`
+     - Options:
+       - `[Recommended] Retry now — connection is back` — description: `Re-attempts the failing step and continues the lab from where we paused.`
+       - `Wait <N> seconds and retry` — description: `Sleeps for execution.network_wait_seconds (default 120) before retrying. Use this if the outage is ongoing.`
+       - `Skip this lab` — description: `Marks the lab status: error, reason: network_unstable and continues with the next lab in the plan.`
+       - `Abort the run` — description: `Halts the entire run. Resume later with /audit-bootcamp --resume <run-id> when the connection is stable.`
+  3. Do NOT silently keep retrying past the cap, and do NOT record a connection-class failure as a lab finding — it's an environment issue, not a lab issue. Lab findings are reserved for things the lab author can fix.
+  4. Record every connection-class pause in `runs/<run-id>/transcript.md` with the timestamp, retry count, and the user's chosen response.
 - **Judge call fails**: retry once with a JSON-only reminder. If still failing, log the step as `error` in the transcript but continue with the next step — don't halt the lab over one bad judge call.
 - **Issue creation fails**: write a clear error to `runs/<run-id>/labs/<slug>/transcript.md`, set `status: error, reason: gh_unavailable`, keep the rendered `issue-body.md` for the user to file manually.
 

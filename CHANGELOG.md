@@ -18,12 +18,75 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 - New config block `issues.pr_append` in `config/judge-config.yml` (default `enabled_by_default: true` — screenshot refresh runs on every audit by default; opt out per-run with the CLI flag or globally via this config).
 - New config block `existing_state` in `config/judge-config.yml`.
 - New config flags: `issues.dedupe_loose_title_match`, `issues.dedupe_by_fingerprint`, `issues.on_duplicate_all_covered`, `issues.backfill_per_slug_label`.
+- **Interactive-phase enforcement.** New
+  `judge-config.yml.execution.require_interactive_phase` (default `true`).
+  When `true`, the orchestrator MUST run Phase 2 against the signed-in
+  training account — static analysis alone catches typos, broken links, and
+  missing images, but it does not catch UI drift in the live product.
+  Opt out per run with `--static-only` on `/audit-bootcamp` or `/audit-lab`;
+  the skipped-interactive choice is recorded in the run manifest as
+  `execution.skipped_interactive: true, reason: <flag|config>` so future
+  readers know the audit didn't exercise the live UI.
+- **Always-on run-start account prompt.** New
+  `judge-config.yml.execution.account_prompt_mode` (default `always`). Other
+  modes: `only_if_expired`, `only_if_missing`. The default forces Phase 1.5
+  to ask "use cached vs. redeem new" every fresh run regardless of cache
+  freshness — the user's safety net against running against the wrong
+  tenant. `--resume` re-prompts unless the mode permits skipping AND the
+  cached `expires_at` is still in the future.
+- **Connection-error retry policy.** New
+  `judge-config.yml.execution.network_retry_count` (default `3`),
+  `network_retry_backoff_seconds` (default `[5, 10, 20]`), and
+  `network_wait_seconds` (default `120`). Connection failures (DNS, ERR_*,
+  repeated navigation timeouts) retry up to the cap, then halt the lab and
+  prompt the user via `AskUserQuestion` with four options:
+  retry now / wait-and-retry / skip this lab / abort the run. Connection
+  failures are NEVER recorded as lab findings — they're environment
+  issues, not lab issues.
+- **`--static-only` flag** on `/audit-bootcamp` and `/audit-lab` for the
+  opt-out path described above.
+- **`--account-prompt <mode>` flag** on both commands to override
+  `account_prompt_mode` for one run without editing config.
+- **Fan-out execution for the bootcamp audit.** `judge-config.yml` now declares
+  `execution.fanout_concurrency` (cap on parallel interactive UI passes per
+  training account) and `execution.static_fanout_concurrency` (cap on the
+  background subagent pool that does markdown/link/image-ref checks). The
+  static phase always fans out fully — only the interactive phase is throttled,
+  because every concurrent browser instance signs in to the same tenant and
+  can collide with other concurrent labs' state.
+- **`lab_dependencies` graph in `judge-config.yml`**. Defines chains of slugs
+  that must execute serially because each lab's tenant artifacts (agents,
+  topics, knowledge sources, variables, evaluations) are read by the next.
+  The orchestrator topologically sorts the planned lab list against this
+  graph; independent labs run in parallel up to `fanout_concurrency`, while
+  declared chains run in order. The bootcamp's current chain is
+  `core-concepts-agent-knowledge-tools` → `core-concepts-variables-agents-channels`
+  → `core-concepts-analytics-evaluations`.
+- **SKILL.md Phase 1.7** documents the new fan-out planning step that runs
+  between the run-start account prompt and the per-lab loop.
 
 ### Changed
 
 - **`on_duplicate: "create_anyway"` is deprecated.** The plugin will never file a second open issue for the same lab. The value is now silently coerced to `"comment"` and logged as a warning to the run transcript.
 - **`mcs-lab-auditor/SKILL.md` "Important rules" section rewritten.** "Issues only" becomes "two narrow write paths: issue API (always on) + screenshots-only PR-append (default on, opt out per-run)". The carve-out is documented in three places (rule list, `references/pr-append-flow.md`, and the sub-skill itself) so a future reader can't miss what is and isn't allowed.
 - Default screenshot scope is `"screenshots_only"` — no markdown or other-file edits are auto-applied. A future `--append-edits-too` flag would relax this; it does not exist yet.
+- `SKILL.md` Phase 1.5 ("Run-start account prompt") is now explicitly
+  marked MANDATORY with a leading note about the failure mode it prevents
+  (running against the wrong tenant).
+- `SKILL.md` Phase 1.7 has a new callout: "the static phase is not a
+  substitute for the interactive phase." Static catches doc drift; only
+  interactive catches UI drift.
+- `SKILL.md` Phase 2 header now reads "interactive UI execution" with a
+  one-paragraph framing of why this is the core deliverable of the audit.
+- `SKILL.md` "Important rules" gained two new rules at the top:
+  "Run the interactive phase by default" and "Always prompt at Phase 1.5
+  unless explicitly told not to."
+- `SKILL.md` "What to do when stuck" gained a new "Network / connection
+  error" section with the retry-then-ask flow, distinct from the existing
+  UI-side `_browser_wait_for` timeout policy.
+- Default `fanout_concurrency` is `1`, preserving strict-serial legacy behavior
+  for existing runs. Raise only when (a) labs genuinely don't share tenant
+  state, or (b) you've provisioned one training account per slot.
 
 ### Fixed
 
