@@ -55,7 +55,7 @@ execution:
   # (retry / wait / skip lab / abort run). Connection failures are NEVER
   # recorded as lab findings — they're environment issues, not lab issues.
   network_retry_count: 3
-  network_retry_backoff_seconds: [5, 10, 20]   # increasing delays; keep length aligned with network_retry_count
+  network_retry_backoff_seconds: [5, 10, 20]   # increasing retry delays (seconds)
   network_wait_seconds: 120        # default "wait then retry" sleep when the user picks that option
 
   # --- Fan-out execution (parallel labs) ---
