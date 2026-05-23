@@ -6,6 +6,32 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+### Added
+
+- **Fan-out execution for the bootcamp audit.** `judge-config.yml` now declares
+  `execution.fanout_concurrency` (cap on parallel interactive UI passes per
+  training account) and `execution.static_fanout_concurrency` (cap on the
+  background subagent pool that does markdown/link/image-ref checks). The
+  static phase always fans out fully — only the interactive phase is throttled,
+  because every concurrent browser instance signs in to the same tenant and
+  can collide with other concurrent labs' state.
+- **`lab_dependencies` graph in `judge-config.yml`**. Defines chains of slugs
+  that must execute serially because each lab's tenant artifacts (agents,
+  topics, knowledge sources, variables, evaluations) are read by the next.
+  The orchestrator topologically sorts the planned lab list against this
+  graph; independent labs run in parallel up to `fanout_concurrency`, while
+  declared chains run in order. The bootcamp's current chain is
+  `core-concepts-agent-knowledge-tools` → `core-concepts-variables-agents-channels`
+  → `core-concepts-analytics-evaluations`.
+- **SKILL.md Phase 1.7** documents the new fan-out planning step that runs
+  between the run-start account prompt and the per-lab loop.
+
+### Changed
+
+- Default `fanout_concurrency` is `1`, preserving strict-serial legacy behavior
+  for existing runs. Raise only when (a) labs genuinely don't share tenant
+  state, or (b) you've provisioned one training account per slot.
+
 ## [0.1.0] — 2026-05-14
 
 Initial scaffold. The plugin is structurally complete: every file referenced by the design plan is in place, frontmatter validates, and all 11 bootcamp slugs in `_data/lab-config.yml` resolve to existing lab markdown files. End-to-end exercise against a live workshop tenant is the immediate next step.
