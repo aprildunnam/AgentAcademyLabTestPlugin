@@ -78,12 +78,14 @@ If `account_user_id` is sensitive in your context (e.g., the workshop account's 
 - **Compromise of `storage-state.json`**: the thief can act as the workshop account for as long as the cookies remain valid (usually a few hours). The workshop account itself has limited scope and expires within 24–48 hours.
 - **Accidental disclosure via the audit log**: the log contains workshop-account identities and timestamps, no secrets.
 - **Accidental disclosure via filed GitHub issues**: the issue body template excludes secrets by construction.
+- **Accidental write to `microsoft/mcs-labs`** outside the two narrow paths (Issues API + screenshots-only PR-append). The orchestrator's "Important rules" section and the `mcs-lab-pr-appender` sub-skill enumerate every write the plugin is allowed to make; anything beyond that is a bug, not a feature. The PR-append guardrails (`require_same_author`, `require_mergeable`, `allow_force_push: false`, branch-name protection list, screenshots-only scope) defend against the most common ways an automated push could damage a shared repo.
 
 ### Out of scope
 
 - **Compromise of the user's Windows account.** Any tool running as the user can read decrypted state. If your account is owned, secrets are gone — this is true of every plugin that handles credentials.
 - **Compromise of the workshop portal itself.** If the issuer hands out a credential, anyone with that credential can use it; this plugin doesn't change that calculus.
-- **Compromise of `microsoft/mcs-labs` repo permissions.** If a malicious actor has write access to the repo, they can read the issues this plugin files — but those issues contain only lab-content corrections, not credentials.
+- **Compromise of `microsoft/mcs-labs` repo permissions.** If a malicious actor has write access to the repo, they can read the issues this plugin files — but those issues contain only lab-content corrections, not credentials. The PR-append write path uses the same `gh` token the user is already signed in with; it does not escalate write access the user didn't already have.
+- **Misuse of the user's `gh` token by other processes on the machine.** The PR-append sub-skill relies on `gh auth` having a token in the keyring; any process running as the same user can call `gh` directly. This is the same model as every CLI-tool-driven push and is not specific to this plugin.
 
 ## Recommendations
 

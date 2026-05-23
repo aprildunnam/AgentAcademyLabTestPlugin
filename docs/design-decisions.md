@@ -15,7 +15,7 @@ When proposing a change to the plugin's shape, check whether your change affects
 **Decision.** File **GitHub issues**. One issue per lab with findings. Suggested corrections appear in the issue body as `diff`-style blocks but are never applied as edits.
 
 **Consequences.**
-- The plugin is strictly read-only on `microsoft/mcs-labs` — no branches, commits, pushes, or PRs touch that repo.
+- The plugin writes to `microsoft/mcs-labs` through **two narrow paths only**: the Issues API (always on) and a screenshots-only commit appended to an already-open fix-PR (default on; opt out per-run with `--no-update-screenshots`). It never creates a new branch or new PR. See ADR-014 for the carve-out's design.
 - CODEOWNERS, branch protection, and signed-commit policies are irrelevant to the plugin's operation.
 - Maintainers triage findings and decide which corrections to apply; false positives are filtered by humans rather than amplified into bad commits.
 - Re-audits comment on existing issues (de-duplication via label combo) rather than opening duplicates.
@@ -243,22 +243,58 @@ When proposing a change to the plugin's shape, check whether your change affects
 
 ---
 
-## ADR-013 — Issue de-duplication via label matching
+## ADR-013 — Issue de-duplication via label matching, loose-title fallback, and finding-fingerprint dedup
 
-**Status:** Accepted.
+**Status:** Accepted (revised — see ADR-014 for the v0.2 hardening).
 
-**Context.** Audit runs are recurring. If lab X stays broken across three audit runs, we should not open three identical issues.
+**Context.** Audit runs are recurring. If lab X stays broken across three audit runs, we should not open three identical issues, and re-runs should not re-post findings that the existing issue already covers.
 
-**Decision.** Before filing an issue, query `gh issue list --label "lab-audit,lab:<slug>" --state open`. If a matching issue exists, **comment on it** rather than open a new one (default `judge-config.yml.issues.on_duplicate: comment`). Configurable to `skip` or `create_anyway`.
+**Decision.** Before any disposition decision, Phase 1.4 of the orchestrator queries `gh issue list` + `gh pr list` per slug and writes `runs/<run-id>/existing-state.yml`. The issue filer consults that file. Dedup runs as a **two-query union** to cover history:
+
+1. Strict: `--label "lab-audit" --label "lab:<slug>"`.
+2. Loose: `--label "lab-audit" --search "<slug> in:title"`.
+
+If either returns a match, the filer **comments** on the most recent open issue with a fingerprint-deduped delta. Every rendered finding carries an HTML marker `<!-- finding:fp:<12-char-hex> -->`; on re-runs, fingerprints already present in the body or any prior comment are dropped. If every new finding is a duplicate, no comment is posted (`issue_action: skipped_no_new_findings`).
+
+The historical `on_duplicate: "create_anyway"` config value is **deprecated** and silently coerced to `"comment"` — filing a second open issue is never an option.
 
 **Consequences.**
 - An issue per lab becomes a longitudinal thread, not a heap.
-- The comment is a full re-render of the issue body — maintainers see the latest state, including any new findings or resolved old ones.
-- Closing the issue when fixed signals to the plugin that future findings should open a new issue. (Auto-close on clean re-audit is a future enhancement, gated by `--auto-close-resolved`.)
+- Comments are deltas, not full re-renders — maintainers see only what's new since the last update.
+- Closing the issue when fixed signals to the plugin that future findings should open a new issue.
+- Issues filed before the per-slug label convention existed are still recognized via the loose-match query, and their `lab:<slug>` label is backfilled on the next comment.
 
 **Alternatives considered.**
-- **Issue de-duplication by title hash.** Rejected — title changes when finding counts shift; matching by stable label combo is more robust.
+- **Issue de-duplication by title hash.** Rejected — title changes when finding counts shift; matching by stable label combo + slug-in-title is more robust.
 - **Always open new issues.** Rejected for the obvious reason.
+- **Full body re-render on every comment.** Rejected after observing duplicate-comment churn in early runs; fingerprint dedup keeps the thread readable.
+
+---
+
+## ADR-014 — Narrow open-PR append carve-out (screenshots only)
+
+**Status:** Accepted (v0.2 addition).
+
+**Context.** The original "issues only, no commits, no PRs" stance in ADR-001 was a deliberate safety property. But in practice, when a fix-PR for a lab is already open and a re-audit produces refreshed screenshots, the natural place for those screenshots is *that PR* — not a new branch, not a new PR, not yet another issue thread. Splitting screenshot updates across a stale PR + a fresh issue creates more work for the maintainer, not less.
+
+**Decision.** Add a narrow, **default-on** carve-out: whenever Phase 1.4 found an open fix-PR for the lab AND the run produced screenshot files that map (by basename) to images already present under `labs/<slug>/images/`, invoke the new `mcs-lab-pr-appender` sub-skill. Users can suppress the carve-out per-run with `--no-update-screenshots` / `--no-append-to-pr`, or globally by setting `judge-config.yml.issues.pr_append.enabled_by_default: false`. The legacy positive flags (`--update-screenshots`, `--append-to-pr`) are still accepted as no-ops for backwards compatibility. The sub-skill:
+
+- Verifies the PR is open, mergeable, authored by the current `gh` user, and not on a protected branch.
+- Checks out the PR branch, replaces matched image files in place, commits with `chore({slug}): refresh screenshots from audit {run_id}`, pushes.
+- Comments on the PR with a summary of the changed files.
+- Restores the user's prior working state.
+
+No new branches. No new PRs. No edits to markdown or any non-image file. No `Co-Authored-By: Claude` trailer. No force-push.
+
+**Consequences.**
+- Re-audits keep screenshots and prose edits together on one PR per lab.
+- The "default read-only" safety property still holds for everything outside the screenshot scope.
+- Each new guardrail is explicit and enumerated in `references/pr-append-flow.md` so a future contributor can't quietly broaden the carve-out without amending the docs.
+
+**Alternatives considered.**
+- **Open a separate "screenshot refresh" PR.** Rejected — produces clutter and contradicts the user's standing rule that we don't open new PRs for the same lab.
+- **File screenshot drift as a separate issue.** Rejected — it's mechanical, not editorial; the value of an issue is the human discussion, which screenshot drift doesn't need.
+- **Strictly opt-in append (positive flag required).** Considered initially and shipped in the first cut; revised to default-on at the user's request once the guardrails (same-author, mergeable, screenshots-only, no force-push) were confirmed sufficient to make accidental damage unlikely. The `--no-update-screenshots` opt-out preserves the read-only behavior for users who want it.
 
 ---
 

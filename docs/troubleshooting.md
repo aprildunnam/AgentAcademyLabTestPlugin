@@ -115,7 +115,26 @@ If your account doesn't have permission to file issues on `microsoft/mcs-labs`, 
 
 **Symptom:** New issue opened even though an existing one should have matched.
 
-Check the labels on the existing issue. The de-duplication query is `--label "lab-audit,lab:<slug>"` — if those labels are missing from the existing issue, it won't match. Add the labels manually and re-run, or set `judge-config.yml.issues.on_duplicate: skip` to never duplicate (you'll need to comment on the old issue manually).
+The v0.2 dedup is a **union of two queries**: strict (`--label "lab-audit" --label "lab:<slug>"`) and loose (`--label "lab-audit" --search "<slug> in:title"`). A new issue would only be created if both queries return zero results. Check:
+
+1. Does the existing issue have the `lab-audit` label? Without it, neither query matches. Add the label and re-run.
+2. Does the existing issue's title contain the slug? If not, the loose query also misses; either edit the title to include the slug or add a `lab:<slug>` label.
+3. Was `issues.dedupe_loose_title_match` set to `false` in `judge-config.yml`? If so, only the strict query runs — set it back to `true`.
+
+The filer also auto-backfills the `lab:<slug>` label on every commented issue, so over time the loose query becomes redundant.
+
+**Symptom:** Re-audit comment repeats findings the existing issue already covers.
+
+Finding-fingerprint dedup may be off. Check `judge-config.yml.issues.dedupe_by_fingerprint`. When enabled (default), each rendered finding carries an HTML marker `<!-- finding:fp:<hex> -->` and re-runs drop findings whose fingerprint already appears in the issue body or any prior comment. If you intentionally want full re-renders, set `dedupe_by_fingerprint: false`.
+
+**Symptom:** PR-append push failed or got skipped.
+
+The `mcs-lab-pr-appender` sub-skill records a `skipped_reason` in `manifest.yml.labs[<slug>].pr_append_result`. The full taxonomy is in `skills/mcs-lab-auditor/references/pr-append-flow.md` — common ones:
+
+- `not_pr_author` — your `gh` identity doesn't match the PR author. Sign in as the author or skip the append (`--no-update-screenshots`).
+- `pr_has_conflicts` — the open PR has merge conflicts. Resolve manually, then re-run.
+- `no_mapped_screenshots` — none of the new `.png` files matched an existing image path in `labs/<slug>/images/`. The appender only replaces existing files; adding net-new images is not in scope.
+- `no_visual_diff` — files were byte-identical. Nothing to commit.
 
 **Symptom:** Issue body looks malformed (broken markdown, missing sections).
 
