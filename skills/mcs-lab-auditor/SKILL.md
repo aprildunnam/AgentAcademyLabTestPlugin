@@ -134,7 +134,7 @@ If a lab has neither an open issue nor an open PR, both keys are `null`. Do not 
 
 ### Phase 1.5 — Run-start account prompt (MANDATORY)
 
-Before any Playwright activity. **This prompt is required on every fresh run**
+Before any Playwright activity. **This prompt is required on every fresh run.**
 (only `--resume` with a still-valid cached `expires_at` skips it). An
 implementing agent that silently reuses the cached account without asking is
 violating the skill contract — the prompt is the moment the user gets to
@@ -323,12 +323,12 @@ When `--resume <run-id>` is passed:
 - **Parser couldn't classify a step**: emit a `parser_warning` finding (severity: low) and continue. Don't halt the whole lab.
 - **Playwright timeout on `_browser_wait_for`** (UI took too long but the page is reachable): capture diagnostics, mark the step `transient`, retry once. If still failing, record as a finding with `outcome: broken, severity: high, confidence: 0.6`. This is a UI-side problem, not a connection problem — keep going.
 - **Network / connection error** (DNS failure, `net::ERR_*`, navigation timeout to a page that should resolve quickly, repeated `net::ERR_INTERNET_DISCONNECTED`, or any failed-network entry that recurs across consecutive steps): treat as a **connection class** failure, distinct from a UI timeout. The retry policy is:
-  1. Retry the failing operation up to `execution.network_retry_count` times (default `3`), pausing `execution.network_retry_backoff_seconds` between attempts (default schedule `[5, 10, 20]` seconds, one entry per retry attempt).
+  1. Retry the failing operation up to `execution.network_retry_count` times (default `3`), pausing `execution.network_retry_backoff_seconds` between attempts (default retry delays `[5, 10, 20]` seconds for retry 1/2/3).
   2. If all retries fail, **halt the lab** (mark `status: paused, reason: network_unstable`) and prompt the user via `AskUserQuestion`:
      - Question: `Network looks unstable — what should we do?`
      - Options:
        - `[Recommended] Retry now — connection is back` — description: `Re-attempts the failing step and continues the lab from where we paused.`
-       - `Wait <N> seconds and retry` — description: `Sleeps for execution.network_wait_seconds (default 120) before retrying. Use this if the outage is ongoing.`
+       - `Wait execution.network_wait_seconds seconds and retry` — description: `Sleeps for execution.network_wait_seconds (default 120) before retrying. Use this if the outage is ongoing.`
        - `Skip this lab` — description: `Marks the lab status: error, reason: network_unstable and continues with the next lab in the plan.`
        - `Abort the run` — description: `Halts the entire run. Resume later with /audit-bootcamp --resume <run-id> when the connection is stable.`
   3. Do NOT silently keep retrying past the cap, and do NOT record a connection-class failure as a lab finding — it's an environment issue, not a lab issue. Lab findings are reserved for things the lab author can fix.
