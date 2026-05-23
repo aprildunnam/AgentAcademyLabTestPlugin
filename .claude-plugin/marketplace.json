@@ -1,0 +1,17 @@
+{
+  "name": "BootcampLabTestPlugin",
+  "owner": {
+    "name": "Microsoft"
+  },
+  "metadata": {
+    "description": "Claude Code plugin for auditing Microsoft Copilot Studio bootcamp labs end-to-end via Playwright."
+  },
+  "plugins": [
+    {
+      "name": "mcs-lab-auditor",
+      "description": "Drive Playwright through every lab in the mcs-labs bootcamp event, compare actual UI behavior to written instructions, and file one GitHub issue per lab when steps are broken or unclear. Clean labs produce local log entries only.",
+      "version": "0.1.0",
+      "source": "./"
+    }
+  ]
+}
