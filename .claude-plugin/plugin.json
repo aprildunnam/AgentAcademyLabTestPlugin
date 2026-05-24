@@ -1,7 +1,7 @@
 {
   "name": "mcs-lab-auditor",
   "version": "0.1.0",
-  "description": "Drive Playwright through every lab in the mcs-labs bootcamp event, compare actual UI behavior to written instructions, and file one GitHub issue per lab when steps are broken or unclear. Clean labs produce local log entries only.",
+  "description": "Drive Playwright through every lab in the mcs-labs bootcamp event, compare actual UI behavior to written instructions, then ALWAYS file both a GitHub issue (documenting findings + evidence) AND a fix PR (applying the suggested corrections + screenshot updates, closing the issue) per lab. Clean labs produce local log entries only.",
   "author": {
     "name": "dewainr",
     "email": "dewainr@microsoft.com"

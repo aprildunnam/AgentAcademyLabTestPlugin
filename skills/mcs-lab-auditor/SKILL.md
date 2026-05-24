@@ -210,17 +210,22 @@ For each lab slug in the interactive-phase execution plan
      - If the judge produced a finding, run it through the critique pass (if enabled) and apply downgrades.
      - Append the finding (if any) to `runs/<run-id>/labs/<slug>/findings.json`.
    - Write a checkpoint to `runs/<run-id>/checkpoint.yml` at scene end.
-4. **End-of-lab disposition**:
-   - If `findings.json` has any finding with `confidence >= judge-config.yml.confidence.min_to_include_in_issue` AND the lab is not in `non_deterministic_lab_slugs` (or `--force-issue` was passed): invoke `mcs-lab-issue-filer` (sub-skill).
-   - Otherwise: append a clean entry to `runs/<run-id>/clean-labs.yml`.
-   - Either way: append the per-lab summary entry to `runtime/audit-history.yml` (`references/audit-log-schema.md`).
-   - Mark lab `done` (or `issue_filed`) in `manifest.yml`.
+4. **End-of-lab disposition** — **always file an issue AND open a fix PR** when findings exist:
+   - If `findings.json` has any finding with `confidence >= judge-config.yml.confidence.min_to_include_in_issue` AND the lab is not in `non_deterministic_lab_slugs` (or `--force-issue` was passed):
+     1. Invoke `mcs-lab-issue-filer` (sub-skill) — files (or comments on) the GitHub issue and returns the issue number.
+     2. **Then** invoke `mcs-lab-fix-pr-filer` (sub-skill) with the issue number — applies the findings' `suggested_correction` diffs to the lab markdown, copies any `proposed_screenshot_replacement` images into `labs/<slug>/images/`, commits on branch `dewain/fix-<slug>-content-audit` (creating the branch from `main` if it does not exist), pushes, and opens a PR titled `<slug>: fix audit findings from #<issue-number>` with body `Closes #<issue-number>`.
+     3. If an open PR already exists on the matching branch, the PR filer appends commits to it rather than opening a duplicate.
+   - Otherwise: append a clean entry to `runs/<run-id>/clean-labs.yml` (no issue, no PR).
+   - In all cases: append the per-lab summary entry to `runtime/audit-history.yml` (`references/audit-log-schema.md`).
+   - Mark lab `done`, `issue_filed`, or `issue_and_pr_filed` in `manifest.yml`.
+
+   > **Why both an issue AND a PR?** The issue documents the *why* (audit run, evidence, screenshots, links to the run directory) so maintainers can triage and decide whether each finding is real. The PR ships the *what* (concrete markdown edits + screenshot replacements) so the fix is ready to review and merge with no copy-paste burden. This combined flow replaces the prior issues-only policy (2026-05 onward).
 5. **Pause** for `judge-config.yml.execution.min_seconds_between_labs` before the next lab.
 
 ### Phase 3 — Wrap-up
 
 1. Close the browser (`mcp__plugin_playwright_playwright__browser_close`).
-2. Print a summary to the user: total labs, count by status, list of filed issue URLs, run-id for future `/audit-report` lookups.
+2. Print a summary to the user: total labs, count by status, list of filed issue URLs **and PR URLs**, run-id for future `/audit-report` lookups.
 3. Write `runs/<run-id>/manifest.yml` final state.
 
 ## Resume flow (`--resume <run-id>`)
@@ -229,7 +234,7 @@ When `--resume <run-id>` is passed:
 
 1. Read `runs/<run-id>/manifest.yml`.
 2. Determine which labs are `pending`, `running` (interrupted mid-run), or `error`.
-3. For `done`/`issue_filed`/`skipped` labs: keep as-is.
+3. For `done`/`issue_filed`/`issue_and_pr_filed`/`skipped` labs: keep as-is.
 4. For `running`: restart that lab from the last completed scene in `checkpoint.yml`. Findings already in `findings.json` are preserved; new findings append.
 5. For `pending`: run as a fresh lab.
 6. Phase 1.5 prompt under `--resume`: re-prompt unless the cached
