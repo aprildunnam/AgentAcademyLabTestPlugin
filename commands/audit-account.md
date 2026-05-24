@@ -60,7 +60,7 @@ Dispatch by `config/workshop.yml.portal_kind`:
 - `skillable` (or missing) → `references/workshop-redemption.md`
 - `email` → submit code, detect "check your email", ask user for username/password, then continue with sign-in/cache steps.
 
-1. Check `config/workshop.yml.workshop_portal_url` and `portal_kind`. If `workshop_portal_url` is missing, blank, or still `REPLACE_ME_ON_FIRST_RUN`, prompt the user via `AskUserQuestion` for the workshop event URL, then write it back to `workshop.yml` before proceeding.
+1. Check `config/workshop.yml.workshop_portal_url` and `portal_kind`. If `workshop_portal_url` is still `REPLACE_ME_ON_FIRST_RUN`, prompt the user via `AskUserQuestion` for the workshop event URL, then write it back to `workshop.yml` before proceeding.
 
 2. Prompt the user for the workshop code (`AskUserQuestion` with one option labeled "Enter workshop code" plus the user's free-text). Never echo the code back; only the first 4 chars become `workshop_code_hint`.
 
