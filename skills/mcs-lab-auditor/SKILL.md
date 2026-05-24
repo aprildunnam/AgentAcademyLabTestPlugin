@@ -9,6 +9,8 @@ allowed-tools:
   - Write
   - Edit
   - Bash(gh issue list:*)
+  - Bash(gh pr list:*)
+  - Bash(gh pr view:*)
   - Bash(gh auth status:*)
   - Bash(gh repo view:*)
   - PowerShell
@@ -32,7 +34,9 @@ allowed-tools:
 
 You are auditing Microsoft Copilot Studio bootcamp labs. You run a real browser through each lab's instructions, decide whether what you see matches what the lab says, and produce either a GitHub issue (when something's wrong) or a local log entry (when everything passes).
 
-**Read-only on the mcs-labs repo.** You never branch, commit, push, or open a pull request. The only write path is `gh issue create` and `gh issue comment`.
+**Default: read-only on the mcs-labs repo.** The standard write paths are `gh issue create`, `gh issue comment`, and `gh issue edit` (label hygiene only). You never create new branches or new pull requests from this skill.
+
+**Narrow carve-out (default ON; opt out with `--no-update-screenshots` / `--no-append-to-pr`):** if Phase 1.4's existing-state probe finds an open fix-PR for a lab AND the run produced refreshed screenshot files for that lab, you invoke the `mcs-lab-pr-appender` sub-skill, which checks out the existing PR branch, replaces the lab's screenshot files in place, and pushes a single commit. **This carve-out is screenshot-only**; it never edits markdown, never creates a new branch, never opens a new PR. Suppression is per-run (CLI flag) or per-environment (`issues.pr_append.enabled_by_default: false` in `config/judge-config.yml`). See `references/pr-append-flow.md` for the full procedure and guardrails.
 
 This file is the orchestrator. It loads the reference files below as needed:
 
@@ -42,6 +46,7 @@ This file is the orchestrator. It loads the reference files below as needed:
 - `references/llm-judge-prompts.md` — the per-step judge, the second-pass critique, the action classifier.
 - `references/finding-schema.md` — finding record fields, outcome and severity definitions.
 - `references/audit-log-schema.md` — `audit-history.yml` entry shape.
+- `references/pr-append-flow.md` — when and why the orchestrator opts into the narrow PR-append carve-out, and the full guardrail list.
 
 Read whichever you need before doing the corresponding step. Don't try to keep all of them in your head at once.
 
@@ -87,9 +92,49 @@ Read whichever you need before doing the corresponding step. Don't try to keep a
    ```
    Initialize `manifest.yml` with the planned lab list, all `status: pending`, and the run start timestamp.
 
+### Phase 1.4 — Probe existing GitHub state (MANDATORY)
+
+Before Phase 1.5 and before any Playwright activity, build a per-slug map of **already-open issues and PRs** so every per-lab disposition step in Phase 2 reuses the same authoritative picture. This is the user's standing rule made executable: **never re-create an issue or PR that's already open**.
+
+For each slug in the planned list:
+
+1. Run two issue queries (strict + loose) — see `mcs-lab-issue-filer/SKILL.md` §4 for the exact form. Union the results. Pick the most recent open issue (by `createdAt`) as the canonical one.
+2. Run a PR query:
+   ```
+   gh pr list \
+     --repo microsoft/mcs-labs \
+     --state open \
+     --json number,title,headRefName,author,mergeable,files \
+     --search "{slug} in:title"
+   ```
+   Filter to PRs where any file matches `_labs/{slug}.md` OR `labs/{slug}/**` OR `headRefName` matches the configured `issues.pr_branch_pattern` (default `dewain/fix-{slug}-content-audit`). Pick the most recent as the canonical PR.
+
+Write `runs/<run-id>/existing-state.yml`:
+```yaml
+generated_at: <iso>
+labs:
+  <slug>:
+    open_issue:
+      number: <int>            # null if none
+      url: <string>
+      created_at: <iso>
+      labels: [<string>, ...]
+    open_pr:
+      number: <int>            # null if none
+      url: <string>
+      branch: <string>
+      author: <login>
+      mergeable: <bool|null>
+      files: [<path>, ...]
+```
+
+If a lab has neither an open issue nor an open PR, both keys are `null`. Do not abort if `gh` returns transient errors here — log the failure to the transcript and treat that slug as "unknown existing state" (issue-filer will re-probe inline as a fallback).
+
+**This file is read by every per-lab disposition step**. Do not skip Phase 1.4 — without it, the issue-filer's inline fallback runs N extra `gh` queries per run and the PR-append carve-out cannot fire at all.
+
 ### Phase 1.5 — Run-start account prompt (MANDATORY)
 
-Before any Playwright activity. **This prompt is required on every fresh run**
+Before any Playwright activity. **This prompt is required on every fresh run.**
 (only `--resume` with a still-valid cached `expires_at` skips it). An
 implementing agent that silently reuses the cached account without asking is
 violating the skill contract — the prompt is the moment the user gets to
@@ -210,11 +255,27 @@ For each lab slug in the interactive-phase execution plan
      - If the judge produced a finding, run it through the critique pass (if enabled) and apply downgrades.
      - Append the finding (if any) to `runs/<run-id>/labs/<slug>/findings.json`.
    - Write a checkpoint to `runs/<run-id>/checkpoint.yml` at scene end.
-4. **End-of-lab disposition**:
-   - If `findings.json` has any finding with `confidence >= judge-config.yml.confidence.min_to_include_in_issue` AND the lab is not in `non_deterministic_lab_slugs` (or `--force-issue` was passed): invoke `mcs-lab-issue-filer` (sub-skill).
+4. **End-of-lab disposition** (consults `runs/<run-id>/existing-state.yml` for every decision):
+
+   **4a. Issue routing.** If `findings.json` has any finding with `confidence >= judge-config.yml.confidence.min_to_include_in_issue` AND the lab is not in `non_deterministic_lab_slugs` (or `--force-issue` was passed):
+   - Invoke `mcs-lab-issue-filer` (sub-skill), passing the slug's `open_issue` block from `existing-state.yml` as input. The filer will:
+     - **Comment** on the existing open issue if one was found (with finding-fingerprint dedup so already-reported findings are not re-posted).
+     - **Create a new issue** only if no open issue exists for the slug.
+     - **Skip** the comment entirely if every new finding is already covered (records `issue_action: skipped_no_new_findings`).
    - Otherwise: append a clean entry to `runs/<run-id>/clean-labs.yml`.
-   - Either way: append the per-lab summary entry to `runtime/audit-history.yml` (`references/audit-log-schema.md`).
-   - Mark lab `done` (or `issue_filed`) in `manifest.yml`.
+
+   **4b. Screenshot append (default ON).** Resolve the effective flag: it is `true` unless the run was started with `--no-update-screenshots` / `--no-append-to-pr`, OR `judge-config.yml.issues.pr_append.enabled_by_default` is `false`. If the effective flag is `true` AND `existing-state.yml.labs[<slug>].open_pr` is non-null AND new screenshots exist at `runs/<run-id>/labs/<slug>/screenshots/`:
+   - Invoke `mcs-lab-pr-appender` (sub-skill — see its `SKILL.md`). It will:
+     - Verify the PR is mergeable and authored by the current `gh` user (otherwise skip with a logged reason).
+     - Map each new screenshot in `runs/<run-id>/labs/<slug>/screenshots/<name>.png` to the corresponding file under `labs/<slug>/images/<name>.png` in the mcs-labs working tree (by filename match; unmapped files are skipped, not auto-created).
+     - Check out the PR branch, replace matched files in place, commit with a message of the form `chore({slug}): refresh screenshots from audit {run_id}`, push.
+     - Comment on the PR with a one-line summary listing the changed files.
+   - Append the resulting commit URL to `manifest.yml.labs[<slug>].pr_append_result`.
+   - **No new branch and no new PR** are ever created by this sub-skill. If no open PR exists, the screenshot files stay local and the issue body (rendered in 4a) notes them as evidence references only.
+
+   **4c. Bookkeeping.** Either way:
+   - Append the per-lab summary entry to `runtime/audit-history.yml` (`references/audit-log-schema.md`), including `issue_action` and any `pr_append_result`.
+   - Mark lab `done`, `issue_filed`, or `issue_filed+pr_appended` in `manifest.yml`.
 5. **Pause** for `judge-config.yml.execution.min_seconds_between_labs` before the next lab.
 
 ### Phase 3 — Wrap-up
@@ -240,6 +301,7 @@ When `--resume <run-id>` is passed:
 
 ## Important rules
 
+- **Never re-create an open issue or PR.** Phase 1.4 is mandatory; the per-lab disposition steps must consult `runs/<run-id>/existing-state.yml`. If an open issue exists for a slug, comment on it (with fingerprint dedup); if an open PR exists and a screenshot update is in scope, append to that branch. Filing a second open issue for the same lab, or opening a second fix-PR for the same lab, is **not allowed**.
 - **Run the interactive phase by default.** Static analysis alone is not a
   complete audit. Skip Phase 2 only when the user has explicitly passed
   `--static-only` or set `execution.require_interactive_phase: false`. Either
@@ -248,24 +310,25 @@ When `--resume <run-id>` is passed:
   `account_prompt_mode: always` means every fresh run asks "use cached vs.
   redeem new", regardless of how recently the cache was written. This is
   the user's safety net against running against the wrong tenant.
-- **Never modify the mcs-labs repo.** Only read its `_labs/` and `_data/` directories.
-- **Never commit, push, branch, or PR.** Issues only.
+- **The mcs-labs repo has two narrow write paths.** (a) `gh issue create | comment | edit` for issue body + label hygiene, always on. (b) The `mcs-lab-pr-appender` sub-skill, which appends a screenshots-only commit to an already-open fix-PR branch — **on by default**, suppress with `--no-update-screenshots` / `--no-append-to-pr` (CLI) or `issues.pr_append.enabled_by_default: false` (config). **You may never create a new branch or open a new PR from this skill.**
+- **Screenshot-only scope.** The PR-append carve-out replaces image files in place; it does not edit markdown or any other file types. Broader edits require a future opt-in (e.g. `--append-edits-too`) that does not yet exist.
 - **Never run `copilot-studio-cleanup` or any agent-deletion command** as part of an audit run. Tenant hygiene is the user's responsibility (see [[feedback_no_cleanup_in_test_automation]]).
 - **Never log secrets.** The credential blob is DPAPI-encrypted; passwords never appear in transcripts, audit history, issue bodies, or `manifest.yml`. The first 4 chars of the workshop code may appear as `workshop_code_hint`.
 - **Halt loudly on auth_expired.** Don't try to silently re-auth mid-run — that's how data loss happens.
 - **Trust the critique pass.** If critique downgrades a finding to `pass` or `cannot_verify`, drop it from the issue.
+- **Never add a Claude co-author trailer** to any commit (see [[feedback_no_claude_coauthor]]). The PR-append sub-skill must enforce this on every commit it creates.
 
 ## What to do when stuck
 
 - **Parser couldn't classify a step**: emit a `parser_warning` finding (severity: low) and continue. Don't halt the whole lab.
 - **Playwright timeout on `_browser_wait_for`** (UI took too long but the page is reachable): capture diagnostics, mark the step `transient`, retry once. If still failing, record as a finding with `outcome: broken, severity: high, confidence: 0.6`. This is a UI-side problem, not a connection problem — keep going.
 - **Network / connection error** (DNS failure, `net::ERR_*`, navigation timeout to a page that should resolve quickly, repeated `net::ERR_INTERNET_DISCONNECTED`, or any failed-network entry that recurs across consecutive steps): treat as a **connection class** failure, distinct from a UI timeout. The retry policy is:
-  1. Retry the failing operation up to `execution.network_retry_count` times (default `3`), pausing `execution.network_retry_backoff_seconds` between attempts (default `5`, `10`, `20` — exponential).
+  1. Retry the failing operation up to `execution.network_retry_count` times (default `3`), pausing `execution.network_retry_backoff_seconds` between attempts (default retry delays `[5, 10, 20]` seconds for retry 1/2/3).
   2. If all retries fail, **halt the lab** (mark `status: paused, reason: network_unstable`) and prompt the user via `AskUserQuestion`:
      - Question: `Network looks unstable — what should we do?`
      - Options:
        - `[Recommended] Retry now — connection is back` — description: `Re-attempts the failing step and continues the lab from where we paused.`
-       - `Wait <N> seconds and retry` — description: `Sleeps for execution.network_wait_seconds (default 120) before retrying. Use this if the outage is ongoing.`
+       - `Wait execution.network_wait_seconds seconds and retry` — description: `Sleeps for execution.network_wait_seconds (default 120) before retrying. Use this if the outage is ongoing.`
        - `Skip this lab` — description: `Marks the lab status: error, reason: network_unstable and continues with the next lab in the plan.`
        - `Abort the run` — description: `Halts the entire run. Resume later with /audit-bootcamp --resume <run-id> when the connection is stable.`
   3. Do NOT silently keep retrying past the cap, and do NOT record a connection-class failure as a lab finding — it's an environment issue, not a lab issue. Lab findings are reserved for things the lab author can fix.

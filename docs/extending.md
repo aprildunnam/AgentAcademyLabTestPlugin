@@ -118,7 +118,13 @@ Most behavior changes can be made via `config/judge-config.yml` alone:
 | Cap a runaway lab | Lower `execution.max_steps_per_lab` |
 | Disable critique pass | Set `critique.enabled: false` (saves ~10% cost, accepts higher false-positive rate) |
 | Add a lab to the non-deterministic list | Append to `non_deterministic_lab_slugs` |
-| Change the dedupe behavior | Set `issues.on_duplicate` to `comment` (default) / `skip` / `create_anyway` |
+| Change the dedupe behavior | Set `issues.on_duplicate` to `comment` (default) or `skip`. `create_anyway` is deprecated and silently coerced to `comment`. |
+| Disable fingerprint dedup (post every finding on every run) | Set `issues.dedupe_by_fingerprint: false`. Not recommended — produces duplicate-comment churn. |
+| Disable loose-title dedup query | Set `issues.dedupe_loose_title_match: false`. Only safe once every open audit issue has the `lab:<slug>` label. |
+| Disable per-slug label backfill | Set `issues.backfill_per_slug_label: false`. |
+| Disable open-PR screenshot append by default | Set `issues.pr_append.enabled_by_default: false`. On by default; this flips the plugin to pure read-only behavior unless the per-run flag explicitly re-enables it. |
+| Change the PR branch pattern the probe matches against | Set `issues.pr_append.pr_branch_pattern` (default `dewain/fix-{slug}-content-audit`). |
+| Disable the Phase 1.4 existing-state probe | Set `existing_state.check_open_issues: false` and `existing_state.check_open_prs: false`. The filer will fall back to its inline dedup queries. Not recommended — costs extra `gh` calls per lab. |
 
 No code changes needed — config tweaks take effect on the next invocation.
 

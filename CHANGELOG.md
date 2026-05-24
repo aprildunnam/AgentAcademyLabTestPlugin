@@ -8,6 +8,16 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ### Added
 
+- **Phase 1.4 — Existing-state probe** in `mcs-lab-auditor/SKILL.md`. Before any Playwright work, the orchestrator now runs `gh issue list` + `gh pr list` for every planned slug and writes `runs/<run-id>/existing-state.yml`. Every per-lab disposition step consults this file, so we never re-create an issue or PR that's already open.
+- **Loose-match dedup query** in `mcs-lab-issue-filer/SKILL.md` §4. In addition to the strict `lab-audit + lab:<slug>` label query, the filer now also issues a title-substring query (`{slug} in:title`) so older issues that pre-date the per-slug label still register as duplicates.
+- **Finding-level fingerprint dedup** in `mcs-lab-issue-filer/SKILL.md` §6a. Every rendered finding now carries an HTML comment marker (`<!-- finding:fp:<12-char-hex> -->`). Before commenting on an existing issue, the filer extracts all fingerprints already present in the body + every prior comment and drops any new finding that matches. If everything is a duplicate, no comment is posted and the disposition is recorded as `skipped_no_new_findings`.
+- **Per-slug label backfill** — when commenting, the filer now adds the `lab:<slug>` label to issues that pre-date the labeling convention, so future strict-query dedup matches without needing the loose query.
+- **`mcs-lab-pr-appender` sub-skill** (new) — narrow carve-out from the "issues only" rule. **On by default.** Fires whenever (a) Phase 1.4 found an open fix-PR for the slug AND (b) the run produced refreshed screenshot files. The sub-skill checks out the PR branch, replaces matched image files in place under `labs/<slug>/images/`, commits with a `chore({slug}): refresh screenshots from audit {run_id}` message, and pushes. Screenshot files only; same-author only; mergeable PRs only; no force-push; no `Co-Authored-By: Claude` trailer. Suppress with `--no-update-screenshots` / `--no-append-to-pr` (CLI) or `issues.pr_append.enabled_by_default: false` (config).
+- **`references/pr-append-flow.md`** in the orchestrator references — explains when and why the carve-out fires, with the full guardrail list and the `skipped_reason` taxonomy.
+- New CLI opt-out flag **`--no-update-screenshots`** (alias `--no-append-to-pr`) on `/audit-bootcamp` and `/audit-lab`. The legacy positive flags (`--update-screenshots`, `--append-to-pr`) are still accepted as no-ops.
+- New config block `issues.pr_append` in `config/judge-config.yml` (default `enabled_by_default: true` — screenshot refresh runs on every audit by default; opt out per-run with the CLI flag or globally via this config).
+- New config block `existing_state` in `config/judge-config.yml`.
+- New config flags: `issues.dedupe_loose_title_match`, `issues.dedupe_by_fingerprint`, `issues.on_duplicate_all_covered`, `issues.backfill_per_slug_label`.
 - **Interactive-phase enforcement.** New
   `judge-config.yml.execution.require_interactive_phase` (default `true`).
   When `true`, the orchestrator MUST run Phase 2 against the signed-in
@@ -37,26 +47,6 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
   opt-out path described above.
 - **`--account-prompt <mode>` flag** on both commands to override
   `account_prompt_mode` for one run without editing config.
-
-### Changed
-
-- `SKILL.md` Phase 1.5 ("Run-start account prompt") is now explicitly
-  marked MANDATORY with a leading note about the failure mode it prevents
-  (running against the wrong tenant).
-- `SKILL.md` Phase 1.7 has a new callout: "the static phase is not a
-  substitute for the interactive phase." Static catches doc drift; only
-  interactive catches UI drift.
-- `SKILL.md` Phase 2 header now reads "interactive UI execution" with a
-  one-paragraph framing of why this is the core deliverable of the audit.
-- `SKILL.md` "Important rules" gained two new rules at the top:
-  "Run the interactive phase by default" and "Always prompt at Phase 1.5
-  unless explicitly told not to."
-- `SKILL.md` "What to do when stuck" gained a new "Network / connection
-  error" section with the retry-then-ask flow, distinct from the existing
-  UI-side `_browser_wait_for` timeout policy.
-
-### Added (from PR #11, also unreleased)
-
 - **Fan-out execution for the bootcamp audit.** `judge-config.yml` now declares
   `execution.fanout_concurrency` (cap on parallel interactive UI passes per
   training account) and `execution.static_fanout_concurrency` (cap on the
@@ -77,9 +67,31 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ### Changed
 
+- **`on_duplicate: "create_anyway"` is deprecated.** The plugin will never file a second open issue for the same lab. The value is now silently coerced to `"comment"` and logged as a warning to the run transcript.
+- **`mcs-lab-auditor/SKILL.md` "Important rules" section rewritten.** "Issues only" becomes "two narrow write paths: issue API (always on) + screenshots-only PR-append (default on, opt out per-run)". The carve-out is documented in three places (rule list, `references/pr-append-flow.md`, and the sub-skill itself) so a future reader can't miss what is and isn't allowed.
+- Default screenshot scope is `"screenshots_only"` — no markdown or other-file edits are auto-applied. A future `--append-edits-too` flag would relax this; it does not exist yet.
+- `SKILL.md` Phase 1.5 ("Run-start account prompt") is now explicitly
+  marked MANDATORY with a leading note about the failure mode it prevents
+  (running against the wrong tenant).
+- `SKILL.md` Phase 1.7 has a new callout: "the static phase is not a
+  substitute for the interactive phase." Static catches doc drift; only
+  interactive catches UI drift.
+- `SKILL.md` Phase 2 header now reads "interactive UI execution" with a
+  one-paragraph framing of why this is the core deliverable of the audit.
+- `SKILL.md` "Important rules" gained two new rules at the top:
+  "Run the interactive phase by default" and "Always prompt at Phase 1.5
+  unless explicitly told not to."
+- `SKILL.md` "What to do when stuck" gained a new "Network / connection
+  error" section with the retry-then-ask flow, distinct from the existing
+  UI-side `_browser_wait_for` timeout policy.
 - Default `fanout_concurrency` is `1`, preserving strict-serial legacy behavior
   for existing runs. Raise only when (a) labs genuinely don't share tenant
   state, or (b) you've provisioned one training account per slot.
+
+### Fixed
+
+- **Duplicate-issue blind spot.** Before today, the dedup filter used `--label "lab-audit,lab:{slug}"` with comma-AND semantics; open issues missing the `lab:<slug>` label were invisible to it, so re-runs filed a second issue. The new loose-match + label-backfill flow closes the gap.
+- **Comment churn on re-runs.** Re-auditing a lab no longer re-posts findings that were already present in the existing issue or its comments — fingerprint dedup drops them before the `gh issue comment` call.
 
 ## [0.1.0] — 2026-05-14
 

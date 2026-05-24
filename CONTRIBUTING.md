@@ -85,7 +85,9 @@ See [docs/extending.md](docs/extending.md). The workshop redemption flow in `ref
 - Confidence thresholds (what gets logged vs. included in the issue vs. tagged low-confidence).
 - Retry counts on `transient` outcomes.
 - Per-lab "non-deterministic" flagging for labs that exercise LLM-generated UI.
-- Issue de-duplication behavior (`comment` vs. `skip` vs. `create_anyway`).
+- Issue de-duplication behavior (`comment` vs. `skip`; `create_anyway` is deprecated and silently coerced to `comment`). Finding-level fingerprint dedup, loose-title matching, and per-slug label backfill are also configurable here.
+- Open-PR append carve-out (`issues.pr_append.*`) — default-on screenshot-only push onto an existing fix-PR's branch. Suppress per-run with `--no-update-screenshots` or globally with `enabled_by_default: false`.
+- Existing-state probe behavior (`existing_state.*`) — Phase 1.4 of every run.
 - Whether the second-pass critique judge is enabled.
 
 Tune these without touching the skills.

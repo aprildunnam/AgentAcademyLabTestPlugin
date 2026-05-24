@@ -55,7 +55,7 @@ execution:
   # (retry / wait / skip lab / abort run). Connection failures are NEVER
   # recorded as lab findings — they're environment issues, not lab issues.
   network_retry_count: 3
-  network_retry_backoff_seconds: [5, 10, 20]   # exponential, matched to retry count
+  network_retry_backoff_seconds: [5, 10, 20]   # retry delays (seconds): retry1=5, retry2=10, retry3=20
   network_wait_seconds: 120        # default "wait then retry" sleep when the user picks that option
 
   # --- Fan-out execution (parallel labs) ---
@@ -111,13 +111,44 @@ critique:
   enabled: true
   downgrade_on_failure: true
 
-# --- Issue de-duplication ---
+# --- Issue de-duplication (UNCONDITIONAL) ---
+# The plugin will never create a second open issue for the same lab. The only
+# tunable here is what to do when an open issue already exists: "comment" (the
+# default — append a fingerprint-deduped delta comment) or "skip" (record the
+# existing issue URL and write nothing). "create_anyway" is DEPRECATED and is
+# silently treated as "comment".
 issues:
   repo: "microsoft/mcs-labs"
-  dedupe_by_labels: ["lab-audit"]   # find existing issues with these labels + lab:<slug>
-  on_duplicate: "comment"           # "comment" | "skip" | "create_anyway"
+  dedupe_by_labels: ["lab-audit"]               # required label on every audit-filed issue
+  dedupe_loose_title_match: true                # also match open issues by `{slug} in:title` for back-compat with un-per-slug-labeled history
+  dedupe_by_fingerprint: true                   # finding-level fingerprint dedup across the existing issue body + all comments
+  on_duplicate: "comment"                       # "comment" | "skip" (legacy "create_anyway" → coerced to "comment")
+  on_duplicate_all_covered: "skip_no_comment"   # if every finding fingerprint already exists, post nothing
+  backfill_per_slug_label: true                 # `gh issue edit --add-label lab:<slug>` on comment so future strict dedup queries match
   labels_always: ["lab-audit"]
   labels_non_deterministic: ["non-deterministic-lab"]
+
+  # --- Open-PR append carve-out (default ON, screenshots-only) ---
+  # Default behavior: when an open fix-PR for a lab exists AND the run produced
+  # refreshed screenshots, push them onto that branch. Suppress with the CLI
+  # flag --no-update-screenshots (alias --no-append-to-pr) or by setting
+  # `enabled_by_default: false` here. The guardrails (same-author, mergeable,
+  # unprotected branch, no force-push, screenshots-only) still apply.
+  # See skills/mcs-lab-pr-appender/SKILL.md and
+  # skills/mcs-lab-auditor/references/pr-append-flow.md.
+  pr_append:
+    enabled_by_default: true                    # screenshot updates are part of every run by default
+    pr_branch_pattern: "dewain/fix-{slug}-content-audit"   # used as a fallback match if the title query misses
+    scope: "screenshots_only"                   # "screenshots_only" — no other value supported yet
+    require_same_author: true                   # current `gh` user must match PR author
+    require_mergeable: true                     # `mergeable: MERGEABLE` required
+    allow_force_push: false                     # never enabled
+
+# --- Existing-state probe (Phase 1.4) ---
+existing_state:
+  check_open_issues: true       # off → orchestrator falls back to inline filer queries (legacy behavior)
+  check_open_prs: true          # required for pr_append to fire
+  cache_file: "existing-state.yml"   # written under runs/<run-id>/
 
 # --- Plugin version (written into manifest.yml and issue bodies) ---
 plugin_version: "0.1.0"
