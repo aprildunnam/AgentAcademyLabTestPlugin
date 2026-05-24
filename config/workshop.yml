@@ -1,7 +1,7 @@
 # Workshop portal configuration for redeeming a test account.
 #
-# The `workshop_portal_url` is event-specific — get it from whoever distributed
-# your workshop code. The default below is the Architecture Bootcamp chatbot.
+# The default `workshop_portal_url` below targets the Architecture Bootcamp
+# chatbot. Override it only if your event uses a different redemption portal.
 #
 # Portal shape switch used by the redemption flow dispatcher.
 # - chatbot: Copilot Studio chat flow (Adaptive Cards)
