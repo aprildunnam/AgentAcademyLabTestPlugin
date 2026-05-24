@@ -38,7 +38,8 @@ This file is the orchestrator. It loads the reference files below as needed:
 
 - `references/lab-parser-spec.md` — how to convert a lab's markdown into a step tree.
 - `references/playwright-cookbook.md` — portal sign-in flow, scene-boundary auth probe, tool mapping per step kind, known quirks.
-- `references/workshop-redemption.md` — exchange a workshop code for a test account; DPAPI encryption flow.
+- `references/workshop-redemption.md` — Skillable-style workshop redemption flow.
+- `references/workshop-redemption-chatbot.md` — chatbot Adaptive Card workshop redemption flow.
 - `references/llm-judge-prompts.md` — the per-step judge, the second-pass critique, the action classifier.
 - `references/finding-schema.md` — finding record fields, outcome and severity definitions.
 - `references/audit-log-schema.md` — `audit-history.yml` entry shape.
@@ -87,52 +88,167 @@ Read whichever you need before doing the corresponding step. Don't try to keep a
    ```
    Initialize `manifest.yml` with the planned lab list, all `status: pending`, and the run start timestamp.
 
-### Phase 1.5 — Run-start account prompt (MANDATORY)
+### Phase 1.5 — Run-start interview (MANDATORY)
 
-Before any Playwright activity. **This prompt is required on every fresh run**
-(only `--resume` with a still-valid cached `expires_at` skips it). An
-implementing agent that silently reuses the cached account without asking is
-violating the skill contract — the prompt is the moment the user gets to
-choose "use the test account I left in DPAPI from last week" vs. "the workshop
-code I just redeemed for a new event." Skipping it has caused at least one
-real audit run to execute against the wrong tenant.
+Before any Playwright activity, run an interactive interview to confirm the
+scope of the run. The interview is a series of `AskUserQuestion` calls. Each
+question is **skipped only when a CLI flag has already provided the answer**
+— never silently default away a question the user hasn't answered, since
+silent defaults have caused real audit runs to execute against the wrong
+tenant or to ship a doc-only sweep when the user expected a live audit.
 
-The behavior is governed by `judge-config.yml.execution.account_prompt_mode`:
+The four interview questions, in order:
 
-- `always` (default): show the prompt every fresh run, even if a cached
-  account exists and is unexpired. Forces the user to opt in to reuse.
-- `only_if_expired`: skip the prompt only when `expires_at` is in the future;
-  prompt when expired or missing.
-- `only_if_missing`: prompt only when no cached account exists at all.
-  Equivalent to the pre-0.2 behavior. Not recommended.
+#### Q1. Account — which test account?
 
-Procedure:
+Governed by `judge-config.yml.execution.account_prompt_mode`:
 
-1. Check `runtime/account/account.meta.json`. If it exists, read `user_id`,
-   `tenant_hint`, `cached_at`, `expires_at`.
-2. Decide whether to prompt based on `account_prompt_mode` above. If you
-   choose to skip the prompt under a non-default mode, log the decision and
-   the reason ("skip_reason: expires_at_in_future") into the run manifest so
-   future readers know the cached account wasn't user-confirmed for this run.
-3. When prompting (the typical path), use `AskUserQuestion`:
-   - Question: `Use the cached test account?`
-   - Options:
-     - `[Recommended] Use cached: <user_id>` — description: `Cached
-       <relative-time> ago. Expires <expires_at or "unknown">.`
-     - `Redeem a new workshop code` — description: `Discards the cached
-       account and prompts for a fresh workshop code.`
-4. If the user picks "Redeem a new..." or no cache exists, follow
-   `references/workshop-redemption.md` end-to-end:
-   - Prompt for the workshop code (`AskUserQuestion`, single free-text
-     option labeled "Enter workshop code").
-   - Open the workshop portal, fill the code, scrape the issued credentials.
-   - Sign in to AAD, capture `storage-state.json`.
-   - Encrypt the credential blob via DPAPI and write `credential.enc` +
-     `account.meta.json`.
+- `always` (default): always ask, even if cache is valid.
+- `only_if_expired`: skip only if cached `expires_at` is in the future.
+- `only_if_missing`: skip only if no cached account exists at all.
 
-After Phase 1.5, the orchestrator has a valid signed-in browser context and a
-usable `account_user_id`. Whichever account was chosen must be recorded in
-the run manifest under `account.user_id` and `account.source: cached | redeemed`.
+When asking, use `AskUserQuestion`:
+
+- Question: `Use the cached test account?`
+- Options:
+  - `[Recommended] Use cached: <user_id>` — description: `Cached
+    <relative-time> ago. Expires <expires_at or "unknown">.` (Show only if
+    a cache exists.)
+  - `Redeem a new workshop code` — description: `Discards the cached
+    account and prompts for a fresh workshop code.`
+  - `Abort` — description: `Stop the run before any browser activity.`
+
+If the user picks "Redeem a new..." or no cache exists:
+
+1. Read `config/workshop.yml.portal_kind` (`chatbot | skillable | email`).
+2. Dispatch redemption flow:
+   - `chatbot` → follow `references/workshop-redemption-chatbot.md`.
+   - `skillable` (or missing) → follow `references/workshop-redemption.md`.
+   - `email` → submit code on the portal, detect "check your email", then use
+     `AskUserQuestion` to collect username/password (optional tenant), then continue.
+3. For all kinds, finish with the same AAD sign-in + caching path:
+   keep the MCP browser session authenticated, DPAPI-encrypt
+   `credential.enc`, and write `account.meta.json`.
+
+The redemption flow is responsible for first-run portal setup too: if
+`config/workshop.yml.workshop_portal_url` is still
+`REPLACE_ME_ON_FIRST_RUN`, it must prompt for `Workshop portal URL`, validate
+`^https?://`, persist the URL to `config/workshop.yml`, then continue to the
+workshop-code prompt.
+
+When skipping under a non-default `account_prompt_mode`, record the
+decision in the run manifest as `account.skip_reason:
+expires_at_in_future` (or similar) so future readers know the cached
+account wasn't user-confirmed for this run.
+
+#### Q2. Phase mix — static, interactive, or both?
+
+Skip this question when ANY of:
+- `--static-only` CLI flag was passed (mix = static).
+- `--interactive-only` CLI flag was passed (mix = interactive).
+- `judge-config.yml.execution.require_interactive_phase: false` (mix = static).
+
+When asking, use `AskUserQuestion`:
+
+- Question: `Which phase(s) should this run execute?`
+- Options:
+  - `[Recommended] Both static and interactive` — description: `Full audit.
+    Static markdown checks fan out per lab, then interactive Playwright
+    drives the live UI for every lab in the plan. Highest cost, most
+    coverage.`
+  - `Static only` — description: `Markdown parser checks, image-ref
+    resolution, external link probes, prereq sanity. No browser, no
+    tenant state. Fast and cheap.`
+  - `Interactive only` — description: `Assumes a prior static pass
+    produced findings-static.json for each lab. Drives the live UI and
+    merges with the prior static findings at lab completion. Useful when
+    re-verifying a previously-audited lab in a new product release.`
+
+Record the chosen mix as `execution.phase_mix: static | interactive | both`
+in the run manifest. If "static only" or "interactive only", also set
+`execution.skipped_interactive: true` or `execution.skipped_static: true`
+respectively, with `reason: cli_flag` or `reason: interview`.
+
+#### Q3. Scope — all labs or a single one?
+
+Skip this question when ANY of:
+- `--labs <csv>` CLI flag was passed (scope = csv).
+- The entry point is `/audit-lab <slug>` (slug already names the scope).
+- `--resume <run-id>` was passed (scope is inherited from the prior manifest).
+
+When asking, use `AskUserQuestion`:
+
+- Question: `Which labs should this run audit?`
+- Options:
+  - `[Recommended] All <N> bootcamp labs` — description: `Run the entire
+    bootcamp event lab list in order, respecting lab_dependencies.`
+  - `Just one lab` — description: `Pick a single lab. Follow-up question
+    will list the choices.`
+
+#### Q4. One-lab picker (only if Q3 = "Just one lab")
+
+Because `AskUserQuestion` supports only 2–4 options per question and the
+bootcamp has 11 labs, ask in two steps:
+
+**Q4a — Group**. Use `AskUserQuestion`:
+
+- Question: `Which group is the lab in?`
+- Options:
+  - `Foundations (#1-#4)` — description: `agent-builder-m365,
+    core-concepts-* trio.`
+  - `Platform (#5-#7)` — description: `mcs-alm, component-collections,
+    mcs-tools.`
+  - `Advanced (#8-#11)` — description: `mcs-orchestration, mcs-governance,
+    mcs-multi-agent, autonomous-account-news.`
+
+**Q4b — Lab in the chosen group**. Render the group's labs as the
+`AskUserQuestion` options, with the lab's title as the description:
+
+- Foundations group:
+  1. `agent-builder-m365` — `Build Progressive AI Assistants with Agent
+     Builder in Microsoft 365`
+  2. `core-concepts-agent-knowledge-tools` — title from front-matter
+  3. `core-concepts-variables-agents-channels` — title from front-matter
+  4. `core-concepts-analytics-evaluations` — title from front-matter
+- Platform group:
+  1. `mcs-alm` — title from front-matter
+  2. `component-collections` — title from front-matter
+  3. `mcs-tools` — title from front-matter
+- Advanced group:
+  1. `mcs-orchestration` — title from front-matter
+  2. `mcs-governance` — title from front-matter
+  3. `mcs-multi-agent` — title from front-matter
+  4. `autonomous-account-news` — title from front-matter
+
+Read the title from the front-matter `title:` field of each
+`_labs/<slug>.md` at interview time so renamed labs don't drift.
+
+If `AskUserQuestion`'s auto-provided "Other" is selected, accept the
+free-text response as a slug and validate it exists in the bootcamp lab
+list. If the typed slug isn't in the list, re-ask Q4a.
+
+#### Recording the interview outcome
+
+Append all interview answers to the run manifest before Phase 1.7 starts:
+
+```yaml
+interview:
+  account_choice: cached | redeemed | aborted
+  phase_mix: static | interactive | both
+  scope: all | one
+  scope_labs: [<slug>, ...]      # the final list driving Phase 1.7
+  skipped_questions:              # questions short-circuited by CLI flags
+    - { question: "phase_mix", reason: "cli_flag: --static-only" }
+```
+
+After the interview, the orchestrator has:
+- A valid signed-in browser context (or `phase_mix: static` so none is needed).
+- A confirmed `account_user_id`.
+- An explicit `phase_mix`.
+- An explicit lab list for Phase 1.7's plan.
+
+Record the account itself under `account.user_id` and `account.source:
+cached | redeemed` as before.
 
 ### Phase 1.7 — Plan execution order (fan-out vs serial)
 
@@ -184,7 +300,7 @@ reason: <flag|config>`.
    pass. The static `findings-static.json` is also retained for
    debugging.
 
-### Phase 2 — Per-lab loop (interactive UI execution)
+### Phase 2 — Per-lab loop (interactive UI execution via per-UC subagents)
 
 This phase is the **core deliverable** of the audit. The orchestrator drives
 a real browser through every step the lab tells the learner to perform,
@@ -192,35 +308,178 @@ using the account chosen in Phase 1.5, and compares what the live UI does
 to what the lab markdown says. Skip this phase and you have a documentation
 audit, not a lab audit.
 
-For each lab slug in the interactive-phase execution plan
-(respecting topological order from Phase 1.7):
+#### Why per-UC subagents (and not per-lab or per-step)
+
+The interactive phase is the most context-heavy part of the run by far —
+each step generates 2 accessibility snapshots, 1 screenshot, console +
+network logs, and an LLM-judge call. At ~50 steps × 11 labs the
+orchestrator's conversation context would overflow long before the audit
+completed.
+
+**Granularity choice: per Use Case (the `### Use Case #N:` boundaries in
+the lab markdown).** Each UC is 5–20 steps, self-contained ("create a
+learning assistant" / "build a sales assistant"), and runs as a
+**dedicated subagent**. The orchestrator only ever sees the UC's return
+summary (counts, status, findings JSON path) — not the per-step
+snapshots. Per-step granularity is too fine (subagent boot overhead
+dominates and intra-UC state — "the agent I just created is in the
+left-nav now" — would have to be reconstructed each time). Per-lab
+granularity is too coarse (subagent itself overflows on a 50-step lab).
+
+#### Browser handoff: shared MCP browser process
+
+The orchestrator signs in **once** in Phase 1.5. The Playwright MCP
+server keeps the browser process alive across subagent boundaries — a
+per-UC subagent that calls `mcp__plugin_playwright_playwright__*` reuses
+the same browser tab the orchestrator left it in. The subagent's first
+real step is typically `_browser_navigate` to the URL the UC's first
+parser step expects, then a `_browser_snapshot` to confirm state.
+
+No re-auth, no session export/import, no second sign-in. The session
+cookies are tenant-side, not subagent-side.
+
+#### Per-UC state handoff: `uc-state.yml`
+
+UCs inside the same lab share tenant artifacts (UC#1 creates an agent
+named "Copilot Teacher"; UC#3 tests that agent; the judge for UC#3 needs
+to know "Copilot Teacher" was the chosen name). Each UC subagent writes
+`runs/<run-id>/labs/<slug>/uc-<N>-state.yml`:
+
+```yaml
+uc_id: usecase-1
+finished_at: <iso>
+status: complete | error | partial
+ctx_vars:             # variables the next UC's judge can use as CTX_VARS
+  agent_name: "Copilot Teacher"
+  topic_names: ["Welcome", "PolicyLookup"]
+  knowledge_sources: ["https://learn.microsoft.com/en-us/microsoft-365-copilot/"]
+  solution_name: "Travel Tools"     # any artifact name set in this UC
+browser_left_at:      # for resumes
+  url: "https://m365.cloud.microsoft/chat/..."
+  scene_completed: "Share and test your agent"
+findings_count:
+  high: 0
+  medium: 0
+  low: 0
+```
+
+The next UC's subagent reads all prior `uc-*-state.yml` files in the lab
+dir and merges their `ctx_vars` into its per-step judge `CTX_VARS` input
+(see `references/llm-judge-prompts.md` §A inputs). Resumable: a failed
+UC N can be retried in isolation as long as UC N-1's state file exists.
+
+#### Per-lab orchestration steps (executed by the orchestrator)
+
+For each lab slug in the interactive-phase execution plan (respecting
+topological order from Phase 1.7):
 
 1. **Mark the lab `running`** in `manifest.yml`.
-2. **Parse the lab** (`references/lab-parser-spec.md`). Write the step tree to `runs/<run-id>/labs/<slug>/steps.json`.
-   - On `--dry-run` or `--static-only`, stop here for this lab. Otherwise continue to step 3.
-3. **Execute each scene** in order:
-   - **Scene-boundary auth probe** (`playwright-cookbook.md#scene-boundary-auth-probe`). If expired, halt; mark lab `error, reason: auth_expired`; tell user how to resume.
-   - For each step in the scene:
-     - Capture `_browser_snapshot()` and store it as `snapshot_before`.
-     - Dispatch via the action map in `playwright-cookbook.md#tool-mapping`. The dispatch may itself contain a `_browser_snapshot` + targeted action.
-     - Capture `_browser_snapshot()` post-action as `snapshot_after`.
-     - Capture `_browser_take_screenshot({ filename: "screenshots/<step-id>.png" })`.
-     - Capture `_browser_console_messages` and `_browser_network_requests` for the step duration.
-     - Call the per-step judge (`llm-judge-prompts.md#a-per-step-judge`). On `transient`, retry once before recording the failure.
-     - If the judge produced a finding, run it through the critique pass (if enabled) and apply downgrades.
-     - Append the finding (if any) to `runs/<run-id>/labs/<slug>/findings.json`.
-   - Write a checkpoint to `runs/<run-id>/checkpoint.yml` at scene end.
-4. **End-of-lab disposition**:
-   - If `findings.json` has any finding with `confidence >= judge-config.yml.confidence.min_to_include_in_issue` AND the lab is not in `non_deterministic_lab_slugs` (or `--force-issue` was passed): invoke `mcs-lab-issue-filer` (sub-skill).
+2. **Parse the lab** (`references/lab-parser-spec.md`). Write the step
+   tree to `runs/<run-id>/labs/<slug>/steps.json`.
+   - On `--dry-run`, stop here for this lab. Otherwise continue.
+   - If `phase_mix: static` for this run, this whole loop is skipped at
+     the Phase 1.7 plan level — the orchestrator never reaches Phase 2.
+3. **Slice steps.json by use case.** For each use case in
+   `steps.json.use_cases[]`, write
+   `runs/<run-id>/labs/<slug>/uc-<N>-steps.json` containing only that
+   UC's scenes and steps. This is the subagent's input.
+4. **For each use case in order (serial)**:
+   - **Scene-boundary auth probe** at the start of UC N (cookbook
+     §scene-boundary-auth-probe). If expired, halt; mark lab `error,
+     reason: auth_expired`; tell user how to resume. Do NOT spawn the
+     subagent if auth failed.
+   - **Spawn a per-UC subagent** (background or foreground depending on
+     orchestrator preference — see "Spawning" below for the prompt
+     shape). Pass the subagent: the UC's `uc-<N>-steps.json` path, the
+     paths of all prior `uc-*-state.yml` files in this lab dir, the
+     run-id, the lab slug, the lab-level transcript path, and the
+     allowed-tools list scoped to `mcp__plugin_playwright_playwright__*`
+     + `Read` + `Write` + the per-step judge invocation.
+   - **Wait for the subagent to return.** Its summary tells the
+     orchestrator: status (complete/error/partial), findings counts by
+     severity, the UC-state file path. The orchestrator does NOT need
+     the per-step snapshots — those are written to disk by the subagent
+     and only the judge reads them.
+   - **On error**: read the subagent's `uc-<N>-state.yml.status`. If
+     `error, reason: auth_expired`, halt the whole lab. If
+     `error, reason: ui_blocker`, mark the UC failed and decide whether
+     to continue to UC N+1 (default: continue — a blocker in UC#1 may
+     not affect UC#2's independent flow) or halt the lab (when
+     `lab_dependencies` says the next UC depends on this UC's artifacts).
+   - **On partial**: the subagent retried `transient` failures and
+     captured findings, but couldn't finish the UC's scenes. Same
+     handling as `error` based on whether downstream UCs depend on the
+     unfinished state.
+5. **Merge UC findings into the lab's `findings.json`.** Concatenate
+   each `uc-<N>-findings.json` into the single lab-level `findings.json`
+   the issue-filer reads. Merge with the static-phase
+   `findings-static.json` (if `phase_mix: both` or `interactive` with a
+   prior static run on disk).
+6. **End-of-lab disposition** — **always file an issue AND open a fix PR** when findings exist:
+   - If `findings.json` has any finding with `confidence >=
+     judge-config.yml.confidence.min_to_include_in_issue` AND the lab is
+     not in `non_deterministic_lab_slugs` (or `--force-issue` was
+     passed):
+     1. Invoke `mcs-lab-issue-filer` (sub-skill) — files (or comments on)
+        the GitHub issue and returns the issue number.
+     2. **Then** invoke `mcs-lab-fix-pr-filer` (sub-skill) with that issue
+        number — applies the findings' `suggested_correction` diffs to the
+        lab markdown, copies any `proposed_screenshot_replacement` images
+        into `labs/<slug>/images/`, commits on branch
+        `dewain/fix-<slug>-content-audit` (creating the branch from `main`
+        if needed), pushes, and opens a PR titled
+        `<slug>: fix audit findings from #<issue-number>` with body
+        `Closes #<issue-number>`.
+     3. If an open PR already exists on that branch, append commits to it
+        rather than opening a duplicate.
    - Otherwise: append a clean entry to `runs/<run-id>/clean-labs.yml`.
-   - Either way: append the per-lab summary entry to `runtime/audit-history.yml` (`references/audit-log-schema.md`).
-   - Mark lab `done` (or `issue_filed`) in `manifest.yml`.
-5. **Pause** for `judge-config.yml.execution.min_seconds_between_labs` before the next lab.
+   - Either way: append the per-lab summary entry to
+     `runtime/audit-history.yml` (`references/audit-log-schema.md`).
+   - Mark lab `done`, `issue_filed`, or `issue_and_pr_filed` in
+     `manifest.yml`.
+   
+   > **Why both an issue AND a PR?** The issue documents the *why* (audit
+   > run, evidence, screenshots, links to run artifacts) so maintainers can
+   > triage confidently. The PR ships the *what* (concrete markdown edits +
+   > screenshot replacements) so fixes are immediately reviewable and
+   > mergeable without copy/paste.
+7. **Pause** for `judge-config.yml.execution.min_seconds_between_labs`
+   before the next lab.
 
+#### Spawning: what the per-UC subagent's prompt looks like
+
+The orchestrator hands each per-UC subagent a self-contained prompt with:
+
+- Lab slug, UC id, run id, account user_id (for context only — the
+  browser is already signed in).
+- Path to `uc-<N>-steps.json` (input).
+- Paths to all `uc-<1..N-1>-state.yml` for prior UCs in this lab
+  (read-only).
+- Path where the subagent must write `uc-<N>-state.yml` and
+  `uc-<N>-findings.json`.
+- The dispatch table from `references/playwright-cookbook.md#tool-mapping`.
+- The judge prompt template from `references/llm-judge-prompts.md#A`.
+- Explicit rules:
+  - **The browser is already signed in and on a URL related to the prior
+    UC (or the lab's landing URL for UC#1).** Navigate as the first
+    step requires; never call sign-in flow.
+  - **Save snapshots to disk by default** —
+    `_browser_snapshot({filename: "snapshots/<step-id>-before.yml"})`
+    instead of returning inline. The judge reads from disk. This is the
+    single biggest context-saver for the subagent itself.
+  - **Save screenshots to
+    `runs/<run-id>/labs/<slug>/screenshots/<step-id>.png`** as before.
+  - **Write `uc-<N>-state.yml` at the end** with all ctx_vars set
+    during the UC.
+  - **Return to the orchestrator** only: status, findings counts,
+    `uc-<N>-state.yml` path. Do NOT echo back snapshots or transcripts.
+  - **Connection-class failures** follow the network-retry policy and
+    if exhausted, halt with `error, reason: network_unstable` so the
+    orchestrator can `AskUserQuestion` the user.
 ### Phase 3 — Wrap-up
 
 1. Close the browser (`mcp__plugin_playwright_playwright__browser_close`).
-2. Print a summary to the user: total labs, count by status, list of filed issue URLs, run-id for future `/audit-report` lookups.
+2. Print a summary to the user: total labs, count by status, list of filed issue URLs **and PR URLs**, run-id for future `/audit-report` lookups.
 3. Write `runs/<run-id>/manifest.yml` final state.
 
 ## Resume flow (`--resume <run-id>`)
@@ -229,14 +488,26 @@ When `--resume <run-id>` is passed:
 
 1. Read `runs/<run-id>/manifest.yml`.
 2. Determine which labs are `pending`, `running` (interrupted mid-run), or `error`.
-3. For `done`/`issue_filed`/`skipped` labs: keep as-is.
-4. For `running`: restart that lab from the last completed scene in `checkpoint.yml`. Findings already in `findings.json` are preserved; new findings append.
+3. For `done`/`issue_filed`/`issue_and_pr_filed`/`skipped` labs: keep as-is.
+4. For `running` or `error` (interrupted mid-lab): resume at the
+   **UC-level**. List `runs/<run-id>/labs/<slug>/uc-*-state.yml` files;
+   the first UC without a state file is where Phase 2 restarts for this
+   lab. Findings already on disk (`uc-<N>-findings.json` for completed
+   UCs) are preserved; new UCs append. If a UC partially completed
+   (`uc-<N>-state.yml.status: partial`), the orchestrator MAY re-run
+   that UC from scratch (since UC-level idempotency is best-effort —
+   the tenant may already have the agent the UC was supposed to create)
+   or skip ahead based on the partial state. Default behavior is to
+   re-run the partial UC and let its judge mark the "create" steps
+   `cannot_verify` if the artifact already exists.
 5. For `pending`: run as a fresh lab.
-6. Phase 1.5 prompt under `--resume`: re-prompt unless the cached
-   `expires_at` is in the future AND `account_prompt_mode` is not `always`.
-   A resume after the cache expired requires fresh credentials, no
-   exceptions. A resume with `account_prompt_mode: always` still re-prompts —
-   the user may have meant to redeem a different account for the resumed run.
+6. Phase 1.5 interview under `--resume`: inherit `phase_mix` and
+   `scope_labs` from the prior manifest (skip Q2 and Q3). Re-ask the
+   account question (Q1) unless `account_prompt_mode` permits skipping
+   AND the cached `expires_at` is still in the future. A resume after
+   the cache expired requires fresh credentials, no exceptions. A
+   resume with `account_prompt_mode: always` still re-prompts — the
+   user may have meant to redeem a different account for the resumed run.
 
 ## Important rules
 

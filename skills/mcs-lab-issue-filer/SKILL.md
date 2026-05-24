@@ -68,6 +68,7 @@ Write `runs/<run-id>/labs/<slug>/issue-body.md` using this template (variables i
 
 {for each finding}
 ### Finding {n} — `severity:{level}`{ if 0.5 <= confidence < 0.7: "  (low confidence — please verify)" }
+<!-- finding:fp:{fingerprint} -->
 
 **Location:** `{scene_heading}` → step {step_ordinal_within_scene} of `_labs/{slug}.md`
 **Instruction in lab (verbatim):**
@@ -117,24 +118,39 @@ The plugin is at `~/.claude/plugins/mcs-lab-auditor/`. See its README for setup 
 </details>
 ```
 
-### 4. Look for an existing open issue (de-duplication)
+### 4. Look for an existing open issue (de-duplication — UNCONDITIONAL)
 
-Run:
+**This step is mandatory on every run. You may not skip it, and you may not file a new issue when a matching open issue exists.** The user's standing rule: never recreate an issue that's already open. If the orchestrator's existing-state probe (`runs/<run-id>/existing-state.yml`) already resolved an `open_issue.number` for this slug, **use that number directly** and jump to step 6.
 
+Otherwise, run **two queries** and union the results — issues filed before the `lab:<slug>` label existed will only match the loose query:
+
+Strict (per-slug label present):
 ```
 gh issue list \
   --repo microsoft/mcs-labs \
   --state open \
-  --label "lab-audit,lab:{slug}" \
-  --json number,title,url \
-  --limit 5
+  --label "lab-audit" \
+  --label "lab:{slug}" \
+  --json number,title,url,createdAt \
+  --limit 10
 ```
 
-If the result is non-empty, the dedupe behavior is controlled by `judge-config.yml.issues.on_duplicate`:
+Loose (slug appears in title, only `lab-audit` label required):
+```
+gh issue list \
+  --repo microsoft/mcs-labs \
+  --state open \
+  --label "lab-audit" \
+  --search "{slug} in:title" \
+  --json number,title,url,createdAt \
+  --limit 10
+```
 
-- `"comment"` (default): take the most-recent matching issue's number and add a comment instead of creating a new issue. Skip to step 6 with the comment URL.
-- `"skip"`: do not file. Record status as `issue_filed` but with `issue_url = <existing>`, `issue_action: skipped_duplicate`. Stop.
-- `"create_anyway"`: ignore the duplicates and proceed to step 5.
+If either query returns at least one result, treat the most recent (by `createdAt`) as the **canonical open issue**. Record the number and URL in `manifest.yml.labs[<slug>].existing_issue` and jump to step 6 (comment).
+
+`judge-config.yml.issues.on_duplicate` is honored for one purpose only: choosing between `"comment"` (default — append findings) and `"skip"` (record `issue_action: skipped_duplicate`, write nothing). The legacy `"create_anyway"` value is **deprecated and ignored** — it is treated as `"comment"` with a warning logged to the transcript. Filing a new duplicate issue is never an option.
+
+If the existing-state probe has not been run (e.g., issue-filer was invoked outside the orchestrator), perform the two queries above before deciding.
 
 ### 5. Create a new issue
 
@@ -166,6 +182,52 @@ Capture stdout — `gh` prints the new issue URL on the last line. Save as `issu
 
 ### 6. Comment on an existing issue (if step 4 found one)
 
+#### 6a. Finding-level fingerprint dedup
+
+Before posting, **fingerprint** each finding in `findings.json` and the existing issue's body + every existing comment, then drop any finding whose fingerprint already appears.
+
+Fingerprint algorithm (SHA-256 hex, first 12 chars):
+```
+fingerprint = sha256(
+  normalize(step_ref) + "|" +
+  outcome + "|" +
+  normalize(suggested_correction.original_text or instruction_excerpt)
+)[:12]
+```
+`normalize` = lowercase, collapse whitespace, strip leading/trailing punctuation.
+
+To extract existing fingerprints, fetch:
+```
+gh issue view <issue-number> --repo microsoft/mcs-labs --json body,comments
+```
+Parse the body and every `comments[].body`. Each rendered finding includes a hidden HTML marker `<!-- finding:fp:<12-char-hex> -->` placed immediately after the finding heading (see step 3 template update). Collect every fingerprint found this way.
+
+A finding is a **duplicate** if its computed fingerprint matches any extracted fingerprint. Drop duplicates from the comment payload entirely.
+
+If after dedup the comment payload is empty (every finding already covered), do **not** post a comment. Record:
+```yaml
+issue_action: skipped_no_new_findings
+issue_url: <existing-issue-url>
+```
+and stop. The clean-pass behavior still applies — append an entry to `runtime/audit-history.yml` noting no new findings.
+
+#### 6b. Render the delta comment
+
+Re-render `issue-body.md` using only the surviving (non-duplicate) findings. Prepend a one-line header:
+
+```markdown
+> **Re-audit comment** — run `{run_id}` ({iso_timestamp}). {N} new finding(s) since the last update; duplicates from earlier comments suppressed.
+```
+
+Every finding heading must include the fingerprint marker so the next run can dedup against it:
+
+```markdown
+### Finding {n} — `severity:{level}`
+<!-- finding:fp:{fingerprint} -->
+```
+
+#### 6c. Post the comment
+
 ```
 gh issue comment <issue-number> \
   --repo microsoft/mcs-labs \
@@ -174,7 +236,21 @@ gh issue comment <issue-number> \
 
 Capture the comment URL. Save as `issue_url`. Set `issue_action: commented`.
 
-Optional: also re-apply any missing labels with `gh issue edit <n> --add-label "severity:{highest}"` — useful if a re-audit reveals more severe findings than the original issue captured.
+#### 6d. Cross-link any open fix PR
+
+If the orchestrator's existing-state probe resolved an `open_pr` for this slug, append (as a separate comment for clarity):
+
+```markdown
+> Open fix PR for this lab: #{pr_number} (branch `{branch}`). If a screenshot update was applied in this run, it has been pushed onto that branch — see the PR commits.
+```
+
+#### 6e. Label hygiene (best-effort)
+
+After commenting, also re-apply any missing labels with:
+```
+gh issue edit <issue-number> --repo microsoft/mcs-labs --add-label "lab:{slug}" --add-label "severity:{highest}"
+```
+This backfills the per-slug label on issues that pre-date the labeling convention, so future strict-query dedup works without needing the loose query.
 
 ### 7. Record the outcome
 
@@ -220,3 +296,6 @@ Do NOT swallow these errors silently. The user must be told that the issue body 
 - **Do not include `cannot_verify` findings in the issue body.** They mean "the user's setup couldn't run this step" — not a lab bug.
 - **Do not include screenshots inline** with `![](path)` — `gh` doesn't upload local files. Reference them by path; the maintainer can DM for the artifact if needed.
 - **Do not edit `_labs/<slug>.md`.** Suggested corrections are described, not applied.
+- **Never file a duplicate open issue for the same lab.** If any open issue with the `lab-audit` label matches the slug (via per-slug label OR title substring), you must comment on it — not create a new one. The `on_duplicate: "create_anyway"` config value is deprecated and treated as `"comment"`.
+- **Never re-post a finding whose fingerprint is already present** in the existing issue body or any of its comments. If every finding is a duplicate, skip the comment entirely and record `issue_action: skipped_no_new_findings`.
+- **Never strip the `<!-- finding:fp:... -->` markers** from rendered issue bodies or comments. They are how future runs dedup against past output.
