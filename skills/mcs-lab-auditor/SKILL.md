@@ -415,15 +415,34 @@ topological order from Phase 1.7):
    the issue-filer reads. Merge with the static-phase
    `findings-static.json` (if `phase_mix: both` or `interactive` with a
    prior static run on disk).
-6. **End-of-lab disposition** (unchanged from prior version):
+6. **End-of-lab disposition** — **always file an issue AND open a fix PR** when findings exist:
    - If `findings.json` has any finding with `confidence >=
      judge-config.yml.confidence.min_to_include_in_issue` AND the lab is
      not in `non_deterministic_lab_slugs` (or `--force-issue` was
-     passed): invoke `mcs-lab-issue-filer` (sub-skill).
+     passed):
+     1. Invoke `mcs-lab-issue-filer` (sub-skill) — files (or comments on)
+        the GitHub issue and returns the issue number.
+     2. **Then** invoke `mcs-lab-fix-pr-filer` (sub-skill) with that issue
+        number — applies the findings' `suggested_correction` diffs to the
+        lab markdown, copies any `proposed_screenshot_replacement` images
+        into `labs/<slug>/images/`, commits on branch
+        `dewain/fix-<slug>-content-audit` (creating the branch from `main`
+        if needed), pushes, and opens a PR titled
+        `<slug>: fix audit findings from #<issue-number>` with body
+        `Closes #<issue-number>`.
+     3. If an open PR already exists on that branch, append commits to it
+        rather than opening a duplicate.
    - Otherwise: append a clean entry to `runs/<run-id>/clean-labs.yml`.
    - Either way: append the per-lab summary entry to
      `runtime/audit-history.yml` (`references/audit-log-schema.md`).
-   - Mark lab `done` (or `issue_filed`) in `manifest.yml`.
+   - Mark lab `done`, `issue_filed`, or `issue_and_pr_filed` in
+     `manifest.yml`.
+   
+   > **Why both an issue AND a PR?** The issue documents the *why* (audit
+   > run, evidence, screenshots, links to run artifacts) so maintainers can
+   > triage confidently. The PR ships the *what* (concrete markdown edits +
+   > screenshot replacements) so fixes are immediately reviewable and
+   > mergeable without copy/paste.
 7. **Pause** for `judge-config.yml.execution.min_seconds_between_labs`
    before the next lab.
 
@@ -457,11 +476,10 @@ The orchestrator hands each per-UC subagent a self-contained prompt with:
   - **Connection-class failures** follow the network-retry policy and
     if exhausted, halt with `error, reason: network_unstable` so the
     orchestrator can `AskUserQuestion` the user.
-
 ### Phase 3 — Wrap-up
 
 1. Close the browser (`mcp__plugin_playwright_playwright__browser_close`).
-2. Print a summary to the user: total labs, count by status, list of filed issue URLs, run-id for future `/audit-report` lookups.
+2. Print a summary to the user: total labs, count by status, list of filed issue URLs **and PR URLs**, run-id for future `/audit-report` lookups.
 3. Write `runs/<run-id>/manifest.yml` final state.
 
 ## Resume flow (`--resume <run-id>`)
@@ -470,7 +488,7 @@ When `--resume <run-id>` is passed:
 
 1. Read `runs/<run-id>/manifest.yml`.
 2. Determine which labs are `pending`, `running` (interrupted mid-run), or `error`.
-3. For `done`/`issue_filed`/`skipped` labs: keep as-is.
+3. For `done`/`issue_filed`/`issue_and_pr_filed`/`skipped` labs: keep as-is.
 4. For `running` or `error` (interrupted mid-lab): resume at the
    **UC-level**. List `runs/<run-id>/labs/<slug>/uc-*-state.yml` files;
    the first UC without a state file is where Phase 2 restarts for this

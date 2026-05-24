@@ -1,7 +1,7 @@
 {
   "name": "mcs-lab-auditor",
   "version": "0.2.0",
-  "description": "Drive Playwright through every lab in the mcs-labs bootcamp event, compare actual UI behavior to written instructions, and post findings to GitHub. Comments on existing open issues with finding-fingerprint dedup; never creates duplicate issues. By default also pushes a screenshots-only commit onto an existing open fix-PR for a lab when one is found (opt out with --no-update-screenshots).",
+  "description": "Drive Playwright through every lab in the mcs-labs bootcamp event, compare actual UI behavior to written instructions, and post findings to GitHub with finding-fingerprint dedup. For audited labs with findings, always file (or update) an issue and then open (or append to) a fix PR that closes that issue.",
   "author": {
     "name": "dewainr",
     "email": "dewainr@microsoft.com"
