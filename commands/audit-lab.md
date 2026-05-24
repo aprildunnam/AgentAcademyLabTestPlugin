@@ -1,6 +1,6 @@
 ---
-description: Audit a single mcs-labs bootcamp lab end-to-end; comment on existing open issue or file a new one (never duplicates); refresh screenshots on existing open fix-PR by default.
-argument-hint: "<lab-slug> [--no-issue] [--force-issue] [--dry-run] [--static-only] [--account-prompt <mode>] [--no-update-screenshots]"
+description: Audit a single mcs-labs bootcamp lab end-to-end; file one GitHub issue with findings if any, or log a clean pass locally.
+argument-hint: "[<lab-slug>] [--no-issue] [--force-issue] [--dry-run] [--static-only] [--interactive-only] [--account-prompt <mode>]"
 ---
 
 # /audit-lab
@@ -11,17 +11,13 @@ You are auditing a single bootcamp lab.
 
 Arguments passed: `$ARGUMENTS`
 
-The first positional argument is the lab slug (e.g. `core-concepts-analytics-evaluations`). Flags:
+The first positional argument is the lab slug (e.g. `core-concepts-analytics-evaluations`). The slug is **optional** — when omitted, the orchestrator runs the lab picker (Phase 1.5 Q4 in `SKILL.md`) so the user can choose interactively. Flags:
 - `--dry-run` — parse the lab into `steps.json` only. No browser activity, no issue, no audit-history entry.
-- `--no-issue` — execute the lab but never file or comment on a GitHub issue.
-- `--force-issue` — file an issue even if the lab is in `non_deterministic_lab_slugs`. Does NOT bypass open-issue dedup — an existing open issue for this lab is always commented on, never duplicated.
-- `--no-update-screenshots` (alias `--no-append-to-pr`) — opt out of the **default-on** screenshot refresh. By default, if the lab has an open fix-PR AND the run produced refreshed screenshot files, the plugin pushes one commit replacing those screenshots onto the PR branch. Screenshot files only; same-author only; mergeable PRs only; never creates a new branch or PR. The legacy `--update-screenshots` / `--append-to-pr` flags are still accepted as no-ops for backwards compatibility.
-- `--static-only` — skip the interactive UI phase; do static checks only. Default is to run both phases — `require_interactive_phase: true` in `judge-config.yml`.
+- `--no-issue` — execute the lab (interactive UI phase still runs) but never file a GitHub issue.
+- `--force-issue` — file an issue even if the lab is in `non_deterministic_lab_slugs`.
+- `--static-only` — skip the interactive UI phase; do static checks only. The interview skips the phase-mix question (Q2). Default (no flag) is to ask interactively.
+- `--interactive-only` — skip the static fan-out; assumes a prior run produced `findings-static.json`. The interview skips the phase-mix question (Q2).
 - `--account-prompt <always|only_if_expired|only_if_missing>` — override `judge-config.yml.execution.account_prompt_mode` for this run.
-
-## Dedup guarantee (always on)
-
-This command will **never create a second open GitHub issue for a lab that already has one open**, and it will **never open a new PR**. Phase 1.4 of the orchestrator probes for existing open issues + PRs for the slug before doing anything else; the disposition step uses that result. Findings already covered by the existing issue (matched by per-finding fingerprint) are dropped before commenting.
 
 ## Pre-flight context
 
@@ -30,12 +26,12 @@ This command will **never create a second open GitHub issue for a lab that alrea
 
 ## Your task
 
-Invoke the `mcs-lab-auditor` skill for the single given slug:
+Invoke the `mcs-lab-auditor` skill for the given (or interactively-picked) slug:
 
-1. Validate the slug exists in `_data/lab-config.yml` `lab_orders.event.bootcamp` AND `_labs/<slug>.md` exists. Abort with a clear message if either is missing.
+1. **Slug resolution**: If a slug was passed positionally, validate it exists in `_data/lab-config.yml` `lab_orders.event.bootcamp` AND `_labs/<slug>.md` exists. Abort with a clear message if either is missing. If no slug was passed, defer to the Phase 1.5 Q4 lab picker.
 2. Pre-flight (configs, `gh` auth).
-3. **Run-start account prompt** — mandatory per `judge-config.yml.execution.account_prompt_mode` (ships as `always`). Skip only when `--dry-run` is set OR the mode + cache state allow it (see SKILL.md Phase 1.5). Even on `--static-only` the prompt still runs if you want the static phase recorded against a known account, but it is safe to skip if you don't.
-4. Single-lab loop: parse → **execute steps in Playwright against the chosen account** → judge → file-or-log. The interactive execution is required by default — pass `--static-only` only when you intend a doc-only sweep. Connection-class failures during execution follow the network-retry policy in `judge-config.yml.execution.network_retry_count` (default 3) before halting and asking the user.
-5. Print summary: status, issue URL (if any), run-id, and whether the interactive phase ran.
+3. **Run-start interview** (Phase 1.5 in `SKILL.md`): asks the account question (Q1, governed by `account_prompt_mode`) and the phase-mix question (Q2, unless `--static-only`/`--interactive-only` was passed). The scope question (Q3) is auto-answered (scope = single lab from arg 1, or Q4 picker if no arg). Mandatory unless a CLI flag short-circuits a specific question. Even on `--static-only` the account prompt may run if you want the static pass recorded against a known account; it's safe to skip otherwise.
+4. Single-lab loop: parse → **execute steps in Playwright against the chosen account** (when `phase_mix` includes interactive) → judge → file-or-log. Connection-class failures during execution follow the network-retry policy in `judge-config.yml.execution.network_retry_count` (default 3) before halting and asking the user.
+5. Print summary: status, issue URL (if any), run-id, and which phase(s) actually ran.
 
-Follow `~/.claude/plugins/mcs-lab-auditor/skills/mcs-lab-auditor/SKILL.md` for the procedure. The single-lab path is the same as the full-bootcamp path, just with a list of one.
+Follow `~/.claude/plugins/mcs-lab-auditor/skills/mcs-lab-auditor/SKILL.md` for the procedure. The single-lab path is the same as the full-bootcamp path, just with a list of one and the scope question short-circuited.
