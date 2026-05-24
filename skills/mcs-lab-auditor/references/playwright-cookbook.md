@@ -44,8 +44,62 @@ After decrypting the cached credential blob:
 9. **"Stay signed in?" prompt**: click `Yes`. This is required to ensure cookies persist long enough for the run.
 10. **MFA prompt**: if challenged, abort with `error, reason: mfa_required` — workshop accounts should be exempt; if they're not, the workshop org didn't configure them correctly.
 11. Wait for redirect to either the M365 home page or `office.com`. Capture cookies + localStorage via `_browser_evaluate` and write `runtime/account/storage-state.json`.
+12. **Dismiss first-run welcome modals.** Workshop-issued accounts are fresh tenants, so any portal the run touches will show a one-time welcome dialog. Call the `Welcome-to-Copilot-Studio modal handler` below to clear it before the first lab step. The handler is idempotent — if the modal isn't there, it's a no-op.
 
 The captured storage state covers all federated portals. The orchestrator does NOT need to re-sign-in per portal.
+
+## Welcome-to-Copilot-Studio modal handler
+
+The first time a workshop-issued account visits `https://copilotstudio.microsoft.com/`, a one-time **"Welcome to Microsoft Copilot Studio"** modal pops up over the home page. It contains a "Choose your country/region" combobox and a primary **Get Started** button, plus an unchecked marketing-opt-in checkbox. Until it is dismissed, the rest of the Copilot Studio UI is non-interactable, which means the scene-boundary auth probe — and every lab step that touches Copilot Studio — would otherwise get stuck behind it.
+
+The handler is **always set to `United States`** and **always clicks Get Started**, regardless of what AAD pre-populated. Forcing US keeps audit runs deterministic across workshop venues; we never check the marketing opt-in.
+
+### Pseudocode
+
+```
+# Precondition: we just navigated to https://copilotstudio.microsoft.com/ (or its preview redirect).
+# This handler is idempotent and safe to call after every navigation that lands on copilotstudio.microsoft.com.
+
+_browser_wait_for(text: "Welcome to Microsoft Copilot Studio", time: 10)
+# If the wait times out: no modal — already dismissed for this tenant. Return silently.
+
+_browser_snapshot()
+
+# 1) Force "United States" in the country/region dropdown.
+#    The control is a native-looking dropdown labeled "Choose your country/region".
+#    Try _browser_select_option first; if it's a custom combobox, fall back to click-open + click "United States".
+let region_ref = ref_of_label("Choose your country/region")
+try:
+    _browser_select_option(ref: region_ref, value: "United States")
+catch (not_a_native_select):
+    _browser_click(ref: region_ref)
+    _browser_snapshot()
+    _browser_click(ref: ref_of_option("United States"))
+
+# 2) Do NOT check the marketing opt-in checkbox ("I will receive information, tips, and offers...").
+#    Leave it unchecked; that's the audit's intent.
+
+# 3) Click "Get Started".
+_browser_click(ref: ref_of_button("Get Started"))
+
+# 4) Confirm dismissal.
+_browser_wait_for(textGone: "Welcome to Microsoft Copilot Studio", time: 15)
+_browser_snapshot()
+# Page should now show the Copilot Studio home with the "Agents" left-nav item visible.
+```
+
+### When to call the handler
+
+- **Run-start sign-in flow**, after the M365 home redirect (step 12 above). Call it once before any per-UC subagent starts.
+- **Scene-boundary auth probe**, right after the probe URL settles successfully (see below).
+- **Post-redemption**, in `workshop-redemption.md` §5.5 — the redemption flow is the very first time the account hits Copilot Studio.
+
+The handler never emits a finding. The modal is a Microsoft product onboarding screen, not a lab issue; if a lab's instructions tell the learner to dismiss it, the static phase will flag that separately.
+
+### Variants we don't handle (yet)
+
+- M365 Copilot Chat shows a different "first-run" carousel inside the chat pane. Labs that target `m365.cloud.microsoft/chat/` work around it by sending an explicit message; no dedicated handler is needed.
+- Azure portal has its own "Welcome to Azure" splash; see the Azure portal quirks section.
 
 ## Scene-boundary auth probe
 
@@ -56,12 +110,13 @@ At the start of each scene (h4 heading), navigate to `config/workshop.yml#auth_p
 3. Append the run entry to `audit-history.yml` with the same status.
 4. Tell the user to run `/audit-account redeem` and `/audit-bootcamp --resume <run-id>`.
 
-If the probe succeeds (`copilotstudio.microsoft.com/environments` or similar in the URL), proceed with the scene.
+If the probe succeeds (`copilotstudio.microsoft.com/environments` or similar in the URL), **invoke the Welcome-to-Copilot-Studio modal handler** above before proceeding with the scene. The handler is a no-op once the modal has been dismissed for the tenant, so it's safe to call at every probe.
 
 ## Known portal quirks
 
 ### Copilot Studio
 
+- **First-run welcome modal** ("Welcome to Microsoft Copilot Studio" with a country/region dropdown and Get Started button) blocks all interaction on the first visit per tenant. See the `Welcome-to-Copilot-Studio modal handler` section above — every entry point that lands on `copilotstudio.microsoft.com` must call it.
 - **Environment selector** appears in the top-right; after sign-in, the default environment may not be the one the lab expects. The judge should not flag this as `broken` — instead, flag as `cannot_verify` with a hint to switch environments.
 - **Publish modal** appears slowly. After clicking "Publish", wait up to 30s for the confirmation modal — the actual publish operation can be 10-20s.
 - **Generated topic regenerates** when you click "Generate". Lab screenshots from before regen may not match. This is `non_deterministic` territory.
