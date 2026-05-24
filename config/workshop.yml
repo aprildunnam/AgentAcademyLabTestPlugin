@@ -23,9 +23,9 @@ redemption_selectors:
   tenant_label: "Tenant"                      # optional — present on some portals
   expiry_label: "Expires"                     # optional — present on some portals
 
-# Where to navigate after redemption to capture SSO state.
-# All AAD-federated portals share a single storage state; signing into
-# login.microsoftonline.com once is sufficient.
+# Where to navigate after redemption to establish SSO state.
+# All AAD-federated portals share one signed-in browser session; signing
+# into login.microsoftonline.com once is sufficient.
 sso_anchor_url: "https://login.microsoftonline.com/"
 
 # Probe URL hit at each scene boundary to detect mid-run auth expiry.

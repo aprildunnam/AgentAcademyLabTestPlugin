@@ -16,7 +16,7 @@ The default workshop redemption flow (`references/workshop-redemption.md`) assum
    3. Detect the "code accepted, check your email" confirmation.
    4. Use AskUserQuestion to prompt the user for the username, password, and (optionally) tenant from the received email.
    ```
-3. Update §5 (sign-in flow) to use the user-supplied credentials. The rest of the flow (DPAPI encryption, metadata file, storage-state capture) is unchanged.
+3. Update §5 (sign-in flow) to use the user-supplied credentials. The rest of the flow (DPAPI encryption, metadata file, MCP-session reuse) is unchanged.
 4. Document the new flow inline in `workshop-redemption.md` so the next maintainer doesn't re-derive it.
 
 ### Portal uses multi-step redemption (e.g., select event, then enter code)

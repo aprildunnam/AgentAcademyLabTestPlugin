@@ -74,7 +74,7 @@ sequenceDiagram
     Skill->>Acct: decrypt credential briefly
     Skill->>PW: sign in to login.microsoftonline.com
     PW->>Portals: AAD SSO cascade
-    Skill->>Acct: dump cookies/localStorage → storage-state.json
+    Skill->>PW: keep signed-in MCP browser session active
 
     loop per lab slug
         Skill->>Labs: read _labs/<slug>.md
@@ -180,7 +180,6 @@ runtime/
 ├── account/                                    # written once at run start
 │   ├── credential.enc                          # DPAPI blob; user-scoped
 │   ├── account.meta.json                       # cleartext metadata only
-│   └── storage-state.json                      # post-SSO cookies/localStorage
 ├── audit-history.yml                           # appended once per lab per run
 └── runs/<run-id>/
     ├── manifest.yml                            # written/updated continuously

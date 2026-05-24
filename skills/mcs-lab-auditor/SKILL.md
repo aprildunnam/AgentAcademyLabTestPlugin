@@ -119,8 +119,8 @@ When asking, use `AskUserQuestion`:
 
 If the user picks "Redeem a new..." or no cache exists, follow
 `references/workshop-redemption.md` end-to-end (prompt for the code, open
-the portal, scrape credentials, sign in to AAD, capture
-`storage-state.json`, DPAPI-encrypt the blob, write `credential.enc` +
+the portal, scrape credentials, sign in to AAD, keep the MCP browser
+session authenticated, DPAPI-encrypt the blob, write `credential.enc` +
 `account.meta.json`).
 
 When skipping under a non-default `account_prompt_mode`, record the
@@ -322,8 +322,8 @@ the same browser tab the orchestrator left it in. The subagent's first
 real step is typically `_browser_navigate` to the URL the UC's first
 parser step expects, then a `_browser_snapshot` to confirm state.
 
-No re-auth, no re-load of `storage-state.json`, no second sign-in. The
-session cookies are tenant-side, not subagent-side.
+No re-auth, no session export/import, no second sign-in. The session
+cookies are tenant-side, not subagent-side.
 
 #### Per-UC state handoff: `uc-state.yml`
 
