@@ -2,7 +2,9 @@
 
 A Claude Code plugin that audits every lab in the [`microsoft/mcs-labs`](https://github.com/microsoft/mcs-labs) **bootcamp event** end-to-end. It drives the live product UI with Playwright, has an LLM judge compare observed behavior to each written instruction, and files **one GitHub issue per lab** against `microsoft/mcs-labs` whenever steps are broken or unclear. Clean labs produce a local-only entry in an audit-history log — no GitHub activity at all when nothing's wrong.
 
-**The plugin is read-only on the mcs-labs repo.** It never branches, commits, pushes, or opens pull requests. The only write target is the GitHub issues API.
+**The plugin writes to the mcs-labs repo through two narrow paths.** (a) `gh issue create | comment | edit` for issues + label hygiene (always on). (b) A screenshots-only commit appended to an **already-open** fix-PR for a lab when one exists, the PR is authored by the current user, and the PR is mergeable — this is on by default and can be suppressed with `--no-update-screenshots` / `--no-append-to-pr` (CLI) or `issues.pr_append.enabled_by_default: false` (config). The plugin never opens new pull requests and never creates new branches. See `skills/mcs-lab-pr-appender/SKILL.md`.
+
+**The plugin will never create a duplicate open issue or PR for a lab that already has one open.** Phase 1.4 of every run probes `gh issue list` + `gh pr list` per slug, and the per-lab disposition uses that result — new findings go into a fingerprint-deduped delta comment on the existing issue.
 
 ## Status
 
@@ -80,7 +82,6 @@ The `runtime/` directory is gitignored. It contains:
 
 - `account/credential.enc` — DPAPI-encrypted credential blob.
 - `account/account.meta.json` — non-secret account metadata (user_id, timestamps).
-- `account/storage-state.json` — post-SSO cookies + localStorage.
 - `audit-history.yml` — rolling local log of every audit run, pass or fail.
 - `runs/<run-id>/...` — per-run parsed steps, findings, screenshots, transcripts.
 

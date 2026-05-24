@@ -20,14 +20,18 @@ flowchart LR
     PW -->|navigates| Portals[(Copilot Studio<br/>M365 Copilot<br/>Power Platform<br/>Azure portal<br/>SharePoint)]
     Skill -->|writes| Runtime[(runtime/<br/>account/, runs/,<br/>audit-history.yml)]
     Skill -->|invokes| IssueSkill[mcs-lab-issue-filer SKILL]
-    IssueSkill -->|gh issue create<br/>gh issue comment| GH[(microsoft/mcs-labs<br/>Issues API)]
+    Skill -->|invokes when<br/>open fix-PR exists| PRSkill[mcs-lab-pr-appender SKILL]
+    IssueSkill -->|gh issue create<br/>gh issue comment<br/>gh issue edit| GH[(microsoft/mcs-labs<br/>Issues API)]
+    PRSkill -->|git push to existing<br/>open fix-PR branch<br/>screenshots only| MCSRepo[(microsoft/mcs-labs<br/>working tree<br/>+ open PR branch)]
     Workshop[(Workshop portal<br/>Skillable-style)] -.->|workshop code<br/>→ credentials| PW
 ```
 
 ### Key boundaries
 
 - **Source-of-truth boundary**: `_data/lab-config.yml` → `lab_orders.event.bootcamp` enumerates labs at runtime. The slug list is never hard-coded in this plugin.
-- **Write boundary**: the only writes outside `runtime/` are GitHub issue creations and comments. The plugin never modifies the `mcs-labs` working tree.
+- **Write boundary** (two narrow paths only):
+  1. **Issues API** — `gh issue create | comment | edit`. Always on. Comments on existing open issues with finding-fingerprint dedup; never creates a duplicate open issue for the same lab.
+  2. **Open PR append** — `git push` of one screenshots-only commit onto an already-open fix-PR branch. **On by default**, suppress with `--no-update-screenshots`. Same-author, mergeable, unprotected-branch guardrails enforced in `mcs-lab-pr-appender`. Never creates a new branch or new PR.
 - **Secret boundary**: workshop credentials live only in `runtime/account/credential.enc` (DPAPI-encrypted) and in memory for the duration of one sign-in dispatch. See [`security.md`](security.md).
 
 ## Run lifecycle
@@ -47,7 +51,9 @@ sequenceDiagram
     participant PW as Playwright MCP
     participant Portals as MS portals (Copilot Studio, M365, ...)
     participant Filer as mcs-lab-issue-filer
-    participant GH as GitHub Issues
+    participant PRAppender as mcs-lab-pr-appender
+    participant MCSRepo as mcs-labs working tree
+    participant GH as GitHub Issues / PRs
 
     User->>CC: /audit-bootcamp
     CC->>Skill: load skill + command
@@ -68,7 +74,7 @@ sequenceDiagram
     Skill->>Acct: decrypt credential briefly
     Skill->>PW: sign in to login.microsoftonline.com
     PW->>Portals: AAD SSO cascade
-    Skill->>Acct: dump cookies/localStorage → storage-state.json
+    Skill->>PW: keep signed-in MCP browser session active
 
     loop per lab slug
         Skill->>Labs: read _labs/<slug>.md
@@ -94,16 +100,28 @@ sequenceDiagram
             Skill->>Skill: checkpoint.yml ← scene complete
         end
         alt findings exist (above threshold)
-            Skill->>Filer: invoke with findings.json
-            Filer->>GH: gh issue list --label "lab-audit,lab:<slug>"
+            Skill->>Filer: invoke with findings.json + existing-state.yml
+            Note over Filer: existing_state probed in Phase 1.4<br/>(strict + loose query union)
             alt existing open issue
-                Filer->>GH: gh issue comment
-            else
-                Filer->>GH: gh issue create
+                Filer->>Filer: fingerprint-dedup findings vs.<br/>existing body + comments
+                alt all findings already covered
+                    Filer->>Skill: issue_action: skipped_no_new_findings
+                else new findings remain
+                    Filer->>GH: gh issue comment (delta only)
+                    Filer->>GH: gh issue edit --add-label lab:slug (backfill)
+                end
+            else no open issue
+                Filer->>GH: gh issue create<br/>(lab-audit + lab:slug + severity:max)
             end
             GH-->>Filer: issue/comment URL
         else clean pass
             Skill->>Skill: append to clean-labs.yml (no GitHub call)
+        end
+        opt --no-update-screenshots NOT passed AND open fix-PR exists AND screenshots refreshed
+            Skill->>PRAppender: invoke with existing_pr + screenshots/
+            PRAppender->>PRAppender: guardrails (same-author,<br/>mergeable, unprotected branch)
+            PRAppender->>MCSRepo: gh pr checkout + replace images + git commit + git push
+            PRAppender->>GH: gh pr comment (summary)
         end
         Skill->>Acct: append to audit-history.yml
     end
@@ -145,10 +163,14 @@ flowchart LR
     F --> Filt{filter}
     Filt -->|drop| Skipped[cannot_verify<br/>critique-failed<br/>confidence < 0.5]
     Filt -->|keep| Sorted[sort by severity then step]
-    Sorted --> Body[issue-body.md<br/>rendered template]
-    Body --> Dedup{existing open issue with<br/>label `lab-audit,lab:slug`?}
-    Dedup -->|yes| Comment[gh issue comment]
+    Sorted --> FP[compute SHA-256 fingerprint<br/>per finding]
+    FP --> Body[issue-body.md<br/>rendered template<br/>with fp markers]
+    Body --> Dedup{existing open issue?<br/>strict label OR<br/>loose title match}
     Dedup -->|no| Create[gh issue create<br/>--label lab-audit,lab:slug,severity:max]
+    Dedup -->|yes| FPCheck{any new fingerprints<br/>not already in<br/>body + comments?}
+    FPCheck -->|no| SkipNoNew[no comment posted<br/>issue_action: skipped_no_new_findings]
+    FPCheck -->|yes| Comment[gh issue comment<br/>delta-only body]
+    Comment --> Backfill[gh issue edit<br/>--add-label lab:slug, severity:max]
 ```
 
 ## Files written per run
@@ -158,7 +180,6 @@ runtime/
 ├── account/                                    # written once at run start
 │   ├── credential.enc                          # DPAPI blob; user-scoped
 │   ├── account.meta.json                       # cleartext metadata only
-│   └── storage-state.json                      # post-SSO cookies/localStorage
 ├── audit-history.yml                           # appended once per lab per run
 └── runs/<run-id>/
     ├── manifest.yml                            # written/updated continuously

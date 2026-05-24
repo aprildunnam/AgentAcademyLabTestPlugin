@@ -2,7 +2,6 @@
 # This directory holds:
 #   - account/credential.enc      DPAPI-encrypted workshop-account credentials (user-scoped)
 #   - account/account.meta.json   cached account metadata (user_id, timestamps)
-#   - account/storage-state.json  post-SSO cookies and localStorage
 #   - audit-history.yml           rolling local log of every audit run
 #   - runs/<run-id>/...           per-run parsed steps, findings, screenshots, transcripts
 # All of it is local, user-specific, and frequently contains secrets or PII. Never commit.

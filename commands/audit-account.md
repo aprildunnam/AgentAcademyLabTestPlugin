@@ -29,13 +29,13 @@ Arguments passed: `$ARGUMENTS`
 The first positional argument is the mode (default: `show` if no args).
 - `show` — print the cached account's user_id, tenant_hint, cached_at, expires_at. No browser activity.
 - `redeem` — prompt for a workshop code, redeem it, encrypt the issued credential, cache it. Replaces any existing cache.
-- `clear` — delete `credential.enc`, `account.meta.json`, and `storage-state.json`.
+- `clear` — delete `credential.enc` and `account.meta.json`.
 
 ## Pre-flight context
 
-- cached account meta: !`if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json") { Get-Content "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -Raw } else { "(no cached account)" }`
-- credential.enc present: !`if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\credential.enc") { "yes ($((Get-Item 'C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\credential.enc').Length) bytes)" } else { "no" }`
-- workshop portal configured: !`(Get-Content "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\config\workshop.yml" | Select-String "workshop_portal_url").Line`
+- cached account meta: !`powershell -NoProfile -Command 'if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json") { Get-Content "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -Raw } else { "(no cached account)" }'`
+- credential.enc present: !`powershell -NoProfile -Command 'if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\credential.enc") { $size = (Get-Item "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\credential.enc").Length; "yes ($size bytes)" } else { "no" }'`
+- workshop portal configured: !`powershell -NoProfile -Command '(Get-Content "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\config\workshop.yml" | Select-String "workshop_portal_url").Line'`
 
 ## Your task
 
@@ -55,17 +55,20 @@ Workshop code hint:  <workshop_code_hint>****
 
 ### Mode: redeem
 
-Follow `~/.claude/plugins/mcs-lab-auditor/skills/mcs-lab-auditor/references/workshop-redemption.md` end-to-end.
+Dispatch by `config/workshop.yml.portal_kind`:
+- `chatbot` → `references/workshop-redemption-chatbot.md`
+- `skillable` (or missing) → `references/workshop-redemption.md`
+- `email` → submit code, detect "check your email", ask user for username/password, then continue with sign-in/cache steps.
 
-1. Check `config/workshop.yml.workshop_portal_url`. If it's still `REPLACE_ME_ON_FIRST_RUN`, prompt the user via `AskUserQuestion` for the workshop event URL, then write it back to `workshop.yml` before proceeding.
+1. Check `config/workshop.yml.workshop_portal_url` and `portal_kind`. If `workshop_portal_url` is still `REPLACE_ME_ON_FIRST_RUN`, prompt the user via `AskUserQuestion` for the workshop event URL, then write it back to `workshop.yml` before proceeding.
 
 2. Prompt the user for the workshop code (`AskUserQuestion` with one option labeled "Enter workshop code" plus the user's free-text). Never echo the code back; only the first 4 chars become `workshop_code_hint`.
 
-3. Run the Playwright redemption flow: open portal → fill code → submit → wait for credentials page → scrape username/password/tenant/expiry via `_browser_evaluate`.
+3. Run the portal-kind-specific redemption flow to obtain username/password/tenant/expiry.
 
 4. Sign in to `https://login.microsoftonline.com/` with the captured credentials. Handle "Stay signed in?" by clicking Yes. Abort with a clear message if MFA or first-login password change is required.
 
-5. Capture cookies + localStorage to `runtime/account/storage-state.json`.
+5. Confirm the AAD sign-in succeeded and keep using the same Playwright MCP browser session. Do not attempt to export `storage-state.json` (Playwright MCP does not expose `context.storageState()`).
 
 6. Encrypt the `{username, password, tenant_id}` JSON via PowerShell DPAPI (`ConvertTo-SecureString -AsPlainText -Force | ConvertFrom-SecureString`) into `runtime/account/credential.enc`. User-scoped — never machine-scoped.
 
@@ -79,11 +82,10 @@ Follow `~/.claude/plugins/mcs-lab-auditor/skills/mcs-lab-auditor/references/work
 ```powershell
 Remove-Item -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\credential.enc" -ErrorAction SilentlyContinue
 Remove-Item -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -ErrorAction SilentlyContinue
-Remove-Item -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\storage-state.json" -ErrorAction SilentlyContinue
 ```
 
 Print:
-> "Cleared cached test account and storage state. Run `/audit-account redeem` to cache a new one."
+> "Cleared cached test account. Run `/audit-account redeem` to cache a new one."
 
 ## Important
 

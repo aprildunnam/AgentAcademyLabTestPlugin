@@ -6,27 +6,31 @@ For each extension, the rule of thumb: **change the reference doc first, then th
 
 ## Adapting to a different workshop portal
 
-The default workshop redemption flow (`references/workshop-redemption.md`) assumes a Skillable-style portal: enter a code in a single input, submit, see issued credentials on a confirmation page. Other shapes:
+The redemption flow is selected by `config/workshop.yml.portal_kind`:
+
+- `chatbot` → `references/workshop-redemption-chatbot.md`
+- `skillable` → `references/workshop-redemption.md`
+- `email` → manual credential collection after "check your email" confirmation
+
+The default bootcamp configuration is `portal_kind: chatbot` at `https://aka.ms/MCSWorkshopAgent/`.
 
 ### Portal emails credentials instead of displaying them
 
-1. Open `references/workshop-redemption.md`.
-2. Replace §3–§4 (wait for confirmation page → scrape credentials) with a manual prompt:
+1. Keep `portal_kind: email` in `config/workshop.yml`.
+2. After code submit, detect the email-confirmation message and prompt manually:
    ```
    3. Detect the "code accepted, check your email" confirmation.
    4. Use AskUserQuestion to prompt the user for the username, password, and (optionally) tenant from the received email.
    ```
-3. Update §5 (sign-in flow) to use the user-supplied credentials. The rest of the flow (DPAPI encryption, metadata file, storage-state capture) is unchanged.
-4. Document the new flow inline in `workshop-redemption.md` so the next maintainer doesn't re-derive it.
+3. Continue with the standard sign-in and credential-cache steps (shared MCP session, DPAPI encryption, metadata write).
 
 ### Portal uses multi-step redemption (e.g., select event, then enter code)
 
-1. Update the `redemption_selectors` section of `config/workshop.yml` to add the new step's selectors.
-2. Insert a new step between §1 (navigate) and §2 (enter code) in `workshop-redemption.md` that handles the prerequisite click/select.
+Set `portal_kind: chatbot` and adapt `references/workshop-redemption-chatbot.md` for your card sequence.
 
 ### Portal requires login to access the redemption form
 
-Document the pre-redemption login flow in `workshop-redemption.md` §1. The Playwright sequence is the same as the AAD sign-in flow — `_browser_type` username, `_browser_type` password, click submit — just against the workshop portal's identity provider instead of AAD.
+Document the pre-redemption login flow in the portal-kind-specific reference doc. The Playwright sequence is the same as the AAD sign-in flow — `_browser_type` username, `_browser_type` password, click submit — just against the workshop portal's identity provider instead of AAD.
 
 ## Adding a new slash command
 
@@ -118,7 +122,13 @@ Most behavior changes can be made via `config/judge-config.yml` alone:
 | Cap a runaway lab | Lower `execution.max_steps_per_lab` |
 | Disable critique pass | Set `critique.enabled: false` (saves ~10% cost, accepts higher false-positive rate) |
 | Add a lab to the non-deterministic list | Append to `non_deterministic_lab_slugs` |
-| Change the dedupe behavior | Set `issues.on_duplicate` to `comment` (default) / `skip` / `create_anyway` |
+| Change the dedupe behavior | Set `issues.on_duplicate` to `comment` (default) or `skip`. `create_anyway` is deprecated and silently coerced to `comment`. |
+| Disable fingerprint dedup (post every finding on every run) | Set `issues.dedupe_by_fingerprint: false`. Not recommended — produces duplicate-comment churn. |
+| Disable loose-title dedup query | Set `issues.dedupe_loose_title_match: false`. Only safe once every open audit issue has the `lab:<slug>` label. |
+| Disable per-slug label backfill | Set `issues.backfill_per_slug_label: false`. |
+| Disable open-PR screenshot append by default | Set `issues.pr_append.enabled_by_default: false`. On by default; this flips the plugin to pure read-only behavior unless the per-run flag explicitly re-enables it. |
+| Change the PR branch pattern the probe matches against | Set `issues.pr_append.pr_branch_pattern` (default `dewain/fix-{slug}-content-audit`). |
+| Disable the Phase 1.4 existing-state probe | Set `existing_state.check_open_issues: false` and `existing_state.check_open_prs: false`. The filer will fall back to its inline dedup queries. Not recommended — costs extra `gh` calls per lab. |
 
 No code changes needed — config tweaks take effect on the next invocation.
 

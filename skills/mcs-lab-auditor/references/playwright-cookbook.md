@@ -27,7 +27,7 @@ This document captures known quirks, sign-in flows, and selectors for the five p
 | Azure portal | `https://portal.azure.com/` | `/#home` |
 | SharePoint | tenant-specific `https://<tenant>.sharepoint.com/` | tenant root |
 
-All five federate to AAD — a single sign-in at `https://login.microsoftonline.com` cascades to all of them via SSO. After sign-in, the orchestrator dumps `cookies + localStorage` via `_browser_evaluate` to `runtime/account/storage-state.json` and reuses it across portals.
+All five federate to AAD — a single sign-in at `https://login.microsoftonline.com` cascades to all of them via SSO. In Playwright MCP, the orchestrator reuses the same browser session across turns/subagents; it does not persist auth via `storage-state.json`.
 
 ## Sign-in flow (run-start)
 
@@ -43,9 +43,9 @@ After decrypting the cached credential blob:
 8. **First-login password change**: if the URL navigates to `…/password/Change` or a "Update your password" page appears, abort the run with status `error, reason: first_login_password_change_required` — the workshop-issued account needs to be initialized once interactively before the plugin can use it.
 9. **"Stay signed in?" prompt**: click `Yes`. This is required to ensure cookies persist long enough for the run.
 10. **MFA prompt**: if challenged, abort with `error, reason: mfa_required` — workshop accounts should be exempt; if they're not, the workshop org didn't configure them correctly.
-11. Wait for redirect to either the M365 home page or `office.com`. Capture cookies + localStorage via `_browser_evaluate` and write `runtime/account/storage-state.json`.
+11. Wait for redirect to either the M365 home page or `office.com`. Confirm the signed-in landing page is reached and keep the current MCP browser session open for downstream portal steps.
 
-The captured storage state covers all federated portals. The orchestrator does NOT need to re-sign-in per portal.
+That active MCP browser session covers all federated portals. The orchestrator does NOT need to re-sign-in per portal.
 
 ## Scene-boundary auth probe
 

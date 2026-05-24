@@ -1,16 +1,17 @@
 # Workshop portal configuration for redeeming a test account.
 #
-# The `workshop_portal_url` is event-specific — get it from whoever distributed
-# your workshop code. The default below is a placeholder; the plugin will
-# prompt you to update this file on first run if the URL is still the placeholder.
+# The default `workshop_portal_url` below targets the Architecture Bootcamp
+# chatbot. Override it only if your event uses a different redemption portal.
 #
-# The selectors describe how to locate the code-entry field, submit button, and
-# credentials display on the redemption page. The defaults match a Skillable-style
-# layout; adjust if your workshop portal differs.
+# Portal shape switch used by the redemption flow dispatcher.
+# - chatbot: Copilot Studio chat flow (Adaptive Cards)
+# - skillable: code-entry form + confirmation-page credentials
+# - email: portal accepts code but credentials are delivered by email
+portal_kind: "chatbot"
 
-workshop_portal_url: "REPLACE_ME_ON_FIRST_RUN"
+workshop_portal_url: "https://aka.ms/MCSWorkshopAgent/"
 
-# Selectors used during the workshop-code redemption flow.
+# Selectors used only for `portal_kind: skillable`.
 # These are accessibility-snapshot ref hints — the actual click/type uses
 # Playwright MCP refs from a fresh snapshot at runtime, but the judge falls
 # back to these hints if no good ref is found.
@@ -23,9 +24,9 @@ redemption_selectors:
   tenant_label: "Tenant"                      # optional — present on some portals
   expiry_label: "Expires"                     # optional — present on some portals
 
-# Where to navigate after redemption to capture SSO state.
-# All AAD-federated portals share a single storage state; signing into
-# login.microsoftonline.com once is sufficient.
+# Where to navigate after redemption to establish SSO state.
+# All AAD-federated portals share one signed-in browser session; signing
+# into login.microsoftonline.com once is sufficient.
 sso_anchor_url: "https://login.microsoftonline.com/"
 
 # Probe URL hit at each scene boundary to detect mid-run auth expiry.
