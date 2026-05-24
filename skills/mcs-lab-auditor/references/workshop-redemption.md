@@ -12,15 +12,25 @@ This flow is for `portal_kind: skillable` (`enter code → get credentials on co
 
 ## Flow
 
-### 1. Open the redemption page
+### 1. Resolve portal URL, then open the redemption page
+
+Read `config/workshop.yml.workshop_portal_url` first.
+
+If it's the placeholder `REPLACE_ME_ON_FIRST_RUN`, prompt via `AskUserQuestion`
+with one free-text option labeled `Workshop portal URL`, then validate the
+answer with regex `^https?://`.
+
+- If validation fails, re-ask with a clear error ("Please enter a full URL that
+  starts with http:// or https://").
+- If validation passes, write the value back to
+  `config/workshop.yml.workshop_portal_url` and continue.
+
+Use this resolved URL for navigation:
 
 ```
 _browser_navigate(url: <workshop_portal_url>)
 _browser_snapshot()
 ```
-
-If the URL is missing or blank, abort with a clear message:
-> "Edit `~/.claude/plugins/mcs-lab-auditor/config/workshop.yml` and set `workshop_portal_url` to your workshop event's redemption URL."
 
 ### 2. Enter the code
 

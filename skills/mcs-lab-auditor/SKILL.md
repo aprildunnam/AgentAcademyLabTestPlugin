@@ -130,6 +130,12 @@ If the user picks "Redeem a new..." or no cache exists:
    capture `storage-state.json`, DPAPI-encrypt `credential.enc`, and write
    `account.meta.json`.
 
+The redemption flow is responsible for first-run portal setup too: if
+`config/workshop.yml.workshop_portal_url` is still
+`REPLACE_ME_ON_FIRST_RUN`, it must prompt for `Workshop portal URL`, validate
+`^https?://`, persist the URL to `config/workshop.yml`, then continue to the
+workshop-code prompt.
+
 When skipping under a non-default `account_prompt_mode`, record the
 decision in the run manifest as `account.skip_reason:
 expires_at_in_future` (or similar) so future readers know the cached
