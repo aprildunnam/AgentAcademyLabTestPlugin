@@ -82,7 +82,6 @@ The `runtime/` directory is gitignored. It contains:
 
 - `account/credential.enc` — DPAPI-encrypted credential blob.
 - `account/account.meta.json` — non-secret account metadata (user_id, timestamps).
-- `account/storage-state.json` — post-SSO cookies + localStorage.
 - `audit-history.yml` — rolling local log of every audit run, pass or fail.
 - `runs/<run-id>/...` — per-run parsed steps, findings, screenshots, transcripts.
 

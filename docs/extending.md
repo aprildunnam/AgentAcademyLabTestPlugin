@@ -22,7 +22,7 @@ The default bootcamp configuration is `portal_kind: chatbot` at `https://aka.ms/
    3. Detect the "code accepted, check your email" confirmation.
    4. Use AskUserQuestion to prompt the user for the username, password, and (optionally) tenant from the received email.
    ```
-3. Continue with the standard sign-in/cache steps.
+3. Continue with the standard sign-in and credential-cache steps (shared MCP session, DPAPI encryption, metadata write).
 
 ### Portal uses multi-step redemption (e.g., select event, then enter code)
 

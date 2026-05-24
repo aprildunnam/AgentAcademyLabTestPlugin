@@ -210,9 +210,9 @@ When proposing a change to the plugin's shape, check whether your change affects
 
 **Status:** Accepted.
 
-**Context.** The bootcamp labs target five Microsoft portals (Copilot Studio, M365 Copilot, Power Platform admin, Azure portal, SharePoint). The original design proposed per-portal `storageState` capture after manual login per portal.
+**Context.** The bootcamp labs target five Microsoft portals (Copilot Studio, M365 Copilot, Power Platform admin, Azure portal, SharePoint). The original design proposed per-portal auth-state capture after manual login per portal.
 
-**Decision.** Sign in to **`login.microsoftonline.com`** once at run start. Capture cookies + localStorage into a single `storage-state.json`. The shared state covers all five portals via AAD SSO federation.
+**Decision.** Sign in to **`login.microsoftonline.com`** once at run start and keep that Playwright MCP browser session alive across orchestrator/subagent boundaries. The shared authenticated session covers all five portals via AAD SSO federation.
 
 **Consequences.**
 - One sign-in flow instead of five.
@@ -220,7 +220,7 @@ When proposing a change to the plugin's shape, check whether your change affects
 - If a portal has a tenant-specific oddity that breaks the cascade, fall back to a portal-specific sign-in inside the relevant scene — exception, not rule.
 
 **Alternatives considered.**
-- **Per-portal `storageState`.** Rejected — over-engineered; doesn't match how AAD works.
+- **Per-portal auth-state export/import.** Rejected — over-engineered, and Playwright MCP does not expose `context.storageState()`.
 
 ---
 

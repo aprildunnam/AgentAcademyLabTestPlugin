@@ -127,8 +127,8 @@ If the user picks "Redeem a new..." or no cache exists:
    - `email` → submit code on the portal, detect "check your email", then use
      `AskUserQuestion` to collect username/password (optional tenant), then continue.
 3. For all kinds, finish with the same AAD sign-in + caching path:
-   capture `storage-state.json`, DPAPI-encrypt `credential.enc`, and write
-   `account.meta.json`.
+   keep the MCP browser session authenticated, DPAPI-encrypt
+   `credential.enc`, and write `account.meta.json`.
 
 The redemption flow is responsible for first-run portal setup too: if
 `config/workshop.yml.workshop_portal_url` is still
@@ -335,8 +335,8 @@ the same browser tab the orchestrator left it in. The subagent's first
 real step is typically `_browser_navigate` to the URL the UC's first
 parser step expects, then a `_browser_snapshot` to confirm state.
 
-No re-auth, no re-load of `storage-state.json`, no second sign-in. The
-session cookies are tenant-side, not subagent-side.
+No re-auth, no session export/import, no second sign-in. The session
+cookies are tenant-side, not subagent-side.
 
 #### Per-UC state handoff: `uc-state.yml`
 

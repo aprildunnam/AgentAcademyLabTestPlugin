@@ -1,7 +1,7 @@
 # Workshop portal configuration for redeeming a test account.
 #
-# The `workshop_portal_url` is event-specific — get it from whoever distributed
-# your workshop code. The default below is the Architecture Bootcamp chatbot.
+# The default `workshop_portal_url` below targets the Architecture Bootcamp
+# chatbot. Override it only if your event uses a different redemption portal.
 #
 # Portal shape switch used by the redemption flow dispatcher.
 # - chatbot: Copilot Studio chat flow (Adaptive Cards)
@@ -24,9 +24,9 @@ redemption_selectors:
   tenant_label: "Tenant"                      # optional — present on some portals
   expiry_label: "Expires"                     # optional — present on some portals
 
-# Where to navigate after redemption to capture SSO state.
-# All AAD-federated portals share a single storage state; signing into
-# login.microsoftonline.com once is sufficient.
+# Where to navigate after redemption to establish SSO state.
+# All AAD-federated portals share one signed-in browser session; signing
+# into login.microsoftonline.com once is sufficient.
 sso_anchor_url: "https://login.microsoftonline.com/"
 
 # Probe URL hit at each scene boundary to detect mid-run auth expiry.
