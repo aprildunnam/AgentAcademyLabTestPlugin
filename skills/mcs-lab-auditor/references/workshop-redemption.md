@@ -1,26 +1,36 @@
-# Workshop-code → test-account redemption
+# Workshop-code → test-account redemption (skillable portal)
 
 This document describes the Playwright flow the `/audit-account redeem` command runs to exchange a workshop code for a usable test account, and how the result is encrypted and cached on disk.
 
-The default flow assumes a Skillable-style "enter code → get credentials on confirmation page" portal. Other portals (e.g., ones that email credentials) require editing this file and `config/workshop.yml` accordingly.
+This flow is for `portal_kind: skillable` (`enter code → get credentials on confirmation page`). For `portal_kind: chatbot`, use `workshop-redemption-chatbot.md`.
 
 ## Inputs
 
 - `config/workshop.yml.workshop_portal_url` — the redemption portal URL.
-- `config/workshop.yml.redemption_selectors` — accessibility hints for the form and confirmation page.
+- `config/workshop.yml.redemption_selectors` — accessibility hints for the form and confirmation page (`portal_kind: skillable` only).
 - The workshop code, prompted from the user via the chat (never logged or echoed back beyond the first 4 chars).
 
 ## Flow
 
-### 1. Open the redemption page
+### 1. Resolve portal URL, then open the redemption page
+
+Read `config/workshop.yml.workshop_portal_url` first.
+
+If it's the placeholder `REPLACE_ME_ON_FIRST_RUN`, prompt via `AskUserQuestion`
+with one free-text option labeled `Workshop portal URL`, then validate the
+answer with regex `^https?://`.
+
+- If validation fails, re-ask with a clear error ("Please enter a full URL that
+  starts with http:// or https://").
+- If validation passes, write the value back to
+  `config/workshop.yml.workshop_portal_url` and continue.
+
+Use this resolved URL for navigation:
 
 ```
 _browser_navigate(url: <workshop_portal_url>)
 _browser_snapshot()
 ```
-
-If the URL is the placeholder `REPLACE_ME_ON_FIRST_RUN`, abort with a clear message:
-> "Edit `~/.claude/plugins/mcs-lab-auditor/config/workshop.yml` and set `workshop_portal_url` to your workshop event's redemption URL."
 
 ### 2. Enter the code
 
@@ -161,9 +171,8 @@ Then prints "Cleared cached test account. Run `/audit-account redeem` to set up 
 
 ## Adapting to a different workshop portal
 
-If your event uses a portal that differs from the Skillable-style flow:
+Set `config/workshop.yml.portal_kind` and dispatch accordingly:
 
-1. Update `workshop_portal_url` in `config/workshop.yml`.
-2. Adjust `redemption_selectors.*` to match the new portal's labels.
-3. If the new portal emails credentials instead of displaying them, replace §3–§4 above with a manual prompt: have the orchestrator print "Check your email; paste the issued username and password" and `AskUserQuestion` for each. Continue from §5.
-4. Document the new flow inline here so future runs work without re-deriving.
+1. `portal_kind: chatbot` → follow `workshop-redemption-chatbot.md`.
+2. `portal_kind: skillable` → follow this document.
+3. `portal_kind: email` → after submit, detect "check your email", then prompt via `AskUserQuestion` for username/password (and optional tenant), then continue from §5.

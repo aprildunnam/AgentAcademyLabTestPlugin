@@ -15,8 +15,8 @@ If a positional argument is provided, treat it as a `<run-id>` and show only tha
 
 ## Pre-flight context
 
-- audit history present: !`if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\audit-history.yml") { (Get-Item "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\audit-history.yml").Length.ToString() + " bytes" } else { "MISSING — no runs yet" }`
-- runs directory contents: !`if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\runs") { Get-ChildItem "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\runs" -Directory | Select-Object -Last 5 -ExpandProperty Name } else { "(no runs)" }`
+- audit history present: !`powershell -NoProfile -Command 'if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\audit-history.yml") { (Get-Item "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\audit-history.yml").Length.ToString() + " bytes" } else { "MISSING — no runs yet" }'`
+- runs directory contents: !`powershell -NoProfile -Command 'if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\runs") { Get-ChildItem "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\runs" -Directory | Select-Object -Last 5 -ExpandProperty Name } else { "(no runs)" }'`
 
 ## Your task
 

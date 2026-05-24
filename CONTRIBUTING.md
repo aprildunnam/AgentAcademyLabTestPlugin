@@ -74,6 +74,7 @@ Convention: keep `SKILL.md` files focused on the procedure (what to do, in what 
 1. Create `commands/<name>.md` with YAML frontmatter (`description`, optional `argument-hint`, optional `allowed-tools`).
 2. The command body should briefly orient Claude and then point at the skill that owns the work — most of the time, that's `~/.claude/plugins/mcs-lab-auditor/skills/mcs-lab-auditor/SKILL.md`.
 3. Restart Claude Code to register the new slash command.
+4. On Windows, command-file pre-flight `!` directives are still launched through a bash harness. Keep them bash-compatible, or explicitly wrap PowerShell probes as `powershell -NoProfile -Command '...'`, then smoke-test the command once from a fresh session before merging.
 
 ### Adapting to a non-Skillable workshop portal
 

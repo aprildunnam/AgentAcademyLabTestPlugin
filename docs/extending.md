@@ -6,27 +6,31 @@ For each extension, the rule of thumb: **change the reference doc first, then th
 
 ## Adapting to a different workshop portal
 
-The default workshop redemption flow (`references/workshop-redemption.md`) assumes a Skillable-style portal: enter a code in a single input, submit, see issued credentials on a confirmation page. Other shapes:
+The redemption flow is selected by `config/workshop.yml.portal_kind`:
+
+- `chatbot` → `references/workshop-redemption-chatbot.md`
+- `skillable` → `references/workshop-redemption.md`
+- `email` → manual credential collection after "check your email" confirmation
+
+The default bootcamp configuration is `portal_kind: chatbot` at `https://aka.ms/MCSWorkshopAgent/`.
 
 ### Portal emails credentials instead of displaying them
 
-1. Open `references/workshop-redemption.md`.
-2. Replace §3–§4 (wait for confirmation page → scrape credentials) with a manual prompt:
+1. Keep `portal_kind: email` in `config/workshop.yml`.
+2. After code submit, detect the email-confirmation message and prompt manually:
    ```
    3. Detect the "code accepted, check your email" confirmation.
    4. Use AskUserQuestion to prompt the user for the username, password, and (optionally) tenant from the received email.
    ```
-3. Update §5 (sign-in flow) to use the user-supplied credentials. The rest of the flow (DPAPI encryption, metadata file, MCP-session reuse) is unchanged.
-4. Document the new flow inline in `workshop-redemption.md` so the next maintainer doesn't re-derive it.
+3. Continue with the standard sign-in and credential-cache steps (shared MCP session, DPAPI encryption, metadata write).
 
 ### Portal uses multi-step redemption (e.g., select event, then enter code)
 
-1. Update the `redemption_selectors` section of `config/workshop.yml` to add the new step's selectors.
-2. Insert a new step between §1 (navigate) and §2 (enter code) in `workshop-redemption.md` that handles the prerequisite click/select.
+Set `portal_kind: chatbot` and adapt `references/workshop-redemption-chatbot.md` for your card sequence.
 
 ### Portal requires login to access the redemption form
 
-Document the pre-redemption login flow in `workshop-redemption.md` §1. The Playwright sequence is the same as the AAD sign-in flow — `_browser_type` username, `_browser_type` password, click submit — just against the workshop portal's identity provider instead of AAD.
+Document the pre-redemption login flow in the portal-kind-specific reference doc. The Playwright sequence is the same as the AAD sign-in flow — `_browser_type` username, `_browser_type` password, click submit — just against the workshop portal's identity provider instead of AAD.
 
 ## Adding a new slash command
 

@@ -28,17 +28,17 @@ Parse these flags:
 
 ## Pre-flight context
 
-- gh auth: !`gh auth status 2>&1 | Select-Object -First 5`
-- mcs-labs repo present: !`if (Test-Path "C:\Users\dewainr\mcs-labs\_data\lab-config.yml") { "yes" } else { "MISSING — abort" }`
-- bootcamp lab list source: !`Get-Content "C:\Users\dewainr\mcs-labs\_data\lab-config.yml" | Select-String -Pattern "bootcamp_lab_orders" -Context 0,15`
-- cached account meta: !`if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json") { Get-Content "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -Raw } else { "(no cached account)" }`
+- gh auth: !`powershell -NoProfile -Command 'gh auth status 2>&1 | Select-Object -First 5'`
+- mcs-labs repo present: !`powershell -NoProfile -Command 'if (Test-Path "C:\Users\dewainr\mcs-labs\_data\lab-config.yml") { "yes" } else { "MISSING — abort" }'`
+- bootcamp lab list source: !`powershell -NoProfile -Command 'Get-Content "C:\Users\dewainr\mcs-labs\_data\lab-config.yml" | Select-String -Pattern "bootcamp_lab_orders" -Context 0,15'`
+- cached account meta: !`powershell -NoProfile -Command 'if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json") { Get-Content "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -Raw } else { "(no cached account)" }'`
 
 ## Your task
 
 Invoke the `mcs-lab-auditor` skill following its full lifecycle:
 
 1. Pre-flight (read the configs, enumerate the lab list, check `gh` auth and `microsoft/mcs-labs` viewer permission).
-2. **Run-start interview** (Phase 1.5 in `SKILL.md`): walk the user through up to four `AskUserQuestion` calls — account, phase mix, scope, and (if scope == one lab) a two-step lab picker. Each question is skipped only when a CLI flag already provided the answer. The interview is **mandatory** for any question whose answer isn't on the command line — silent defaults have caused real audit runs to execute against the wrong tenant or to ship a doc-only audit when the user expected live coverage.
+2. **Run-start interview** (Phase 1.5 in `SKILL.md`): walk the user through up to four `AskUserQuestion` calls — account, phase mix, scope, and (if scope == one lab) a two-step lab picker. Each question is skipped only when a CLI flag already provided the answer. The interview is **mandatory** for any question whose answer isn't on the command line — silent defaults have caused real audit runs to execute against the wrong tenant or to ship a doc-only audit when the user expected live coverage. If Q1 chooses redemption (or no cached account exists), the redemption flow auto-prompts for `Workshop portal URL` when `workshop_portal_url` is still `REPLACE_ME_ON_FIRST_RUN`, validates it as a URL, persists it to `config/workshop.yml`, then continues.
 3. Plan execution order (Phase 1.7): fan out static analysis across one subagent per lab and topologically sort the interactive phase against `lab_dependencies`. Skip the static fan-out if the interview chose `phase_mix: interactive`; skip the interactive plan if `phase_mix: static`.
 4. **Interactive per-lab loop (runs when `phase_mix` is `interactive` or `both`)**: parse → execute steps in Playwright against the chosen account → judge each step → checkpoint per scene → file issue or log clean. Network/connection failures retry up to `network_retry_count` (default 3) with `network_retry_backoff_seconds` between attempts, then halt and ask the user via `AskUserQuestion` (retry / wait / skip lab / abort).
 5. Wrap-up: close the browser, print summary, save manifest.
