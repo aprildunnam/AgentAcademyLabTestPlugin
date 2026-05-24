@@ -6,6 +6,11 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+### Changed
+
+- **`lab-parser-spec.md` §1 — Front-matter field authority table.** Documents which front-matter fields have body-table counterparts that MUST match (`duration` ↔ Lab Details `Duration` column; `difficulty` ↔ `Level` column) and which look related but describe independent axes (`journeys` is a site-nav grouping from `_data/lab-config.yml`; `Persona` is a free-text Power Platform role label — they are not the same field). Static-analysis subagents now have an explicit list of cross-field mismatches to drop instead of flagging. Resolves a false-positive class observed in the `mcs-governance` static run where a `journeys: [business-user, developer]` vs `Persona: Maker / Admin` mismatch was flagged at 0.60 confidence (correctly skipped, but should not have surfaced at all).
+- The same section makes the agenda-is-authoritative rule for `duration` explicit: when front-matter `duration:` and the Lab Details `Duration` column disagree, align the front-matter to the body table, not the reverse.
+
 ### Added
 
 - **Phase 1.5 — Run-start interview** (expanded from the old account-only prompt) in `mcs-lab-auditor/SKILL.md`. The orchestrator now walks the user through up to four `AskUserQuestion` calls before any destructive work: (Q1) account — use cached / redeem new / abort; (Q2) phase mix — both / static-only / interactive-only; (Q3) scope — all labs / one lab; (Q4) one-lab picker — two-step group→lab navigation that fits inside `AskUserQuestion`'s 2–4-option limit. Each question is skipped only when a CLI flag already provided the answer. Interview outcomes are recorded under `manifest.yml.interview`.

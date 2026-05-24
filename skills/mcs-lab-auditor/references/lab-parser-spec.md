@@ -55,6 +55,25 @@ This document defines the grammar the primary skill uses to convert an mcs-labs 
 
 Strip everything between the first `---` line and the next `---` line at the start of the file. Parse as YAML into `front_matter`. Skip a second `---` line if present immediately after (some labs have a doubled front-matter separator).
 
+**Authoritative fields and what they describe.** Several front-matter
+fields look superficially related to body-table fields but actually
+describe different axes. Static-analysis subagents must not flag
+mismatches between these — they are independent by design:
+
+| Front-matter field | Describes | Body counterpart that is NOT the same field |
+|---|---|---|
+| `duration: <minutes>` | Front-matter copy of the lab's total time. The Lab Details body table's `Duration` column is the **authoritative** value (the agenda the bootcamp event published). When the two disagree, align front-matter to the body table, not the reverse. | Lab Details `Duration` column **is** the same field as `duration:` and **must match**. |
+| `journeys: [<id>, ...]` | Site-navigation grouping. Values are journey ids defined in `_data/lab-config.yml` under `lab_journeys` and `journey` (e.g. `quick-start`, `business-user`, `developer`, `autonomous-ai`). Drives which learning-path landing pages link to the lab. | Lab Details `Persona` column is a free-text Power Platform role label (e.g. `Maker`, `Maker / Admin`). **Not** the same taxonomy as `journeys` — every bootcamp lab pairs `journeys: [business-user, developer]`-style values with a `Maker`-style persona on purpose. Do not flag a "mismatch" between the two. |
+| `difficulty: <100|200|300>` | Numeric difficulty band, used by the site to badge labs. | Lab Details `Level` column **is** the same field — same number must appear in both. |
+| `lab_type`, `section`, `bootcamp_order`, `order` | Site-layout metadata only. No body-table counterpart. Don't cross-reference. |
+
+When the static phase finds a literal-string mismatch between two
+fields, it MUST consult this table before emitting an `unclear` or
+`broken` finding. If the two fields appear in the "Not the same field"
+column above, drop the finding entirely (don't even log it at
+parser_warning severity — the auditor's heuristic was misapplied, not
+the lab).
+
 ### 2. Section identification
 
 Walk h2 (`## …`) headings. Map them to context buckets:
