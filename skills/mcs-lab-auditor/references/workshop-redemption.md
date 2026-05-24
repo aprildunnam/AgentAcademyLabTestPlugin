@@ -93,9 +93,11 @@ If `username` or `password` is missing, abort with `reason: credentials_not_scra
 
 ### 5. Sign in to AAD with the captured credentials
 
-Follow the sign-in flow documented in `playwright-cookbook.md#sign-in-flow-run-start`. The point of this step is to (a) prove the credentials work, (b) handle any first-login password change requirement, and (c) capture cookie + localStorage state to `runtime/account/storage-state.json`.
+Follow the sign-in flow documented in `playwright-cookbook.md#sign-in-flow-run-start`. The point of this step is to (a) prove the credentials work, (b) handle any first-login password change requirement, and (c) establish a signed-in browser session.
 
-If the sign-in succeeds, the storage state is now valid for all federated portals.
+> Playwright MCP does **not** expose `context.storageState()`. In this plugin, auth continuity comes from reusing the same MCP browser session within the current conversation — no on-disk `runtime/account/storage-state.json` is created.
+
+If the sign-in succeeds, the current MCP browser session is now authenticated for all federated portals in this conversation.
 
 ### 6. Encrypt and cache
 
@@ -148,12 +150,11 @@ After driving sign-in, clear `$plain`, `$cred`, and any intermediate variables.
 
 ## Clearing the cache
 
-`/audit-account clear` removes all three files:
+`/audit-account clear` removes both account-cache files:
 
 ```powershell
 Remove-Item -Path 'runtime\account\credential.enc' -ErrorAction SilentlyContinue
 Remove-Item -Path 'runtime\account\account.meta.json' -ErrorAction SilentlyContinue
-Remove-Item -Path 'runtime\account\storage-state.json' -ErrorAction SilentlyContinue
 ```
 
 Then prints "Cleared cached test account. Run `/audit-account redeem` to set up a new one."
