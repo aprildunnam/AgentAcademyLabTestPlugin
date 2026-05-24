@@ -33,9 +33,9 @@ The first positional argument is the mode (default: `show` if no args).
 
 ## Pre-flight context
 
-- cached account meta: !`if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json") { Get-Content "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -Raw } else { "(no cached account)" }`
-- credential.enc present: !`if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\credential.enc") { "yes ($((Get-Item 'C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\credential.enc').Length) bytes)" } else { "no" }`
-- workshop portal configured: !`(Get-Content "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\config\workshop.yml" | Select-String "workshop_portal_url").Line`
+- cached account meta: !`powershell -NoProfile -Command 'if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json") { Get-Content "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -Raw } else { "(no cached account)" }'`
+- credential.enc present: !`powershell -NoProfile -Command 'if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\credential.enc") { $size = (Get-Item "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\credential.enc").Length; "yes ($size bytes)" } else { "no" }'`
+- workshop portal configured: !`powershell -NoProfile -Command '(Get-Content "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\config\workshop.yml" | Select-String "workshop_portal_url").Line'`
 
 ## Your task
 
