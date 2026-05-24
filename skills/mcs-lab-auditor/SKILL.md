@@ -38,7 +38,8 @@ This file is the orchestrator. It loads the reference files below as needed:
 
 - `references/lab-parser-spec.md` — how to convert a lab's markdown into a step tree.
 - `references/playwright-cookbook.md` — portal sign-in flow, scene-boundary auth probe, tool mapping per step kind, known quirks.
-- `references/workshop-redemption.md` — exchange a workshop code for a test account; DPAPI encryption flow.
+- `references/workshop-redemption.md` — Skillable-style workshop redemption flow.
+- `references/workshop-redemption-chatbot.md` — chatbot Adaptive Card workshop redemption flow.
 - `references/llm-judge-prompts.md` — the per-step judge, the second-pass critique, the action classifier.
 - `references/finding-schema.md` — finding record fields, outcome and severity definitions.
 - `references/audit-log-schema.md` — `audit-history.yml` entry shape.
@@ -117,11 +118,17 @@ When asking, use `AskUserQuestion`:
     account and prompts for a fresh workshop code.`
   - `Abort` — description: `Stop the run before any browser activity.`
 
-If the user picks "Redeem a new..." or no cache exists, follow
-`references/workshop-redemption.md` end-to-end (prompt for the code, open
-the portal, scrape credentials, sign in to AAD, capture
-`storage-state.json`, DPAPI-encrypt the blob, write `credential.enc` +
-`account.meta.json`).
+If the user picks "Redeem a new..." or no cache exists:
+
+1. Read `config/workshop.yml.portal_kind` (`chatbot | skillable | email`).
+2. Dispatch redemption flow:
+   - `chatbot` → follow `references/workshop-redemption-chatbot.md`.
+   - `skillable` (or missing) → follow `references/workshop-redemption.md`.
+   - `email` → submit code on the portal, detect "check your email", then use
+     `AskUserQuestion` to collect username/password (optional tenant), then continue.
+3. For all kinds, finish with the same AAD sign-in + caching path:
+   capture `storage-state.json`, DPAPI-encrypt `credential.enc`, and write
+   `account.meta.json`.
 
 The redemption flow is responsible for first-run portal setup too: if
 `config/workshop.yml.workshop_portal_url` is still
