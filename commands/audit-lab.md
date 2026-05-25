@@ -21,8 +21,8 @@ The first positional argument is the lab slug (e.g. `core-concepts-analytics-eva
 
 ## Pre-flight context
 
-- bootcamp lab slugs: !`powershell -NoProfile -Command 'Get-Content "C:\Users\dewainr\mcs-labs\_data\lab-config.yml" | Select-String -Pattern "bootcamp_lab_orders" -Context 0,15'`
-- cached account: !`powershell -NoProfile -Command 'if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json") { (Get-Content "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -Raw | ConvertFrom-Json).user_id } else { "(none)" }'`
+- bootcamp lab slugs: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode GrepContext -Path "C:\Users\dewainr\mcs-labs\_data\lab-config.yml" -Pattern "^bootcamp_lab_orders" -ContextAfter 15 -Fallback "MISSING - lab-config.yml not found"`
+- cached account: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode JsonField -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -JsonField user_id -Fallback "(none)"`
 
 ## Your task
 
