@@ -28,10 +28,10 @@ Parse these flags:
 
 ## Pre-flight context
 
-- gh auth: !`powershell -NoProfile -Command 'gh auth status 2>&1 | Select-Object -First 5'`
-- mcs-labs repo present: !`powershell -NoProfile -Command 'if (Test-Path "C:\Users\dewainr\mcs-labs\_data\lab-config.yml") { "yes" } else { "MISSING — abort" }'`
-- bootcamp lab list source: !`powershell -NoProfile -Command 'Get-Content "C:\Users\dewainr\mcs-labs\_data\lab-config.yml" | Select-String -Pattern "bootcamp_lab_orders" -Context 0,15'`
-- cached account meta: !`powershell -NoProfile -Command 'if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json") { Get-Content "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -Raw } else { "(no cached account)" }'`
+- gh auth: !`gh auth status 2>&1 | head -n 5`
+- mcs-labs repo present: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode Exists -Path "C:\Users\dewainr\mcs-labs\_data\lab-config.yml" -Fallback "MISSING - abort"`
+- bootcamp lab list source: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode GrepContext -Path "C:\Users\dewainr\mcs-labs\_data\lab-config.yml" -Pattern "^bootcamp_lab_orders" -ContextAfter 15 -Fallback "MISSING - lab-config.yml not found"`
+- cached account meta: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode Raw -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -Fallback "(no cached account)"`
 
 ## Your task
 

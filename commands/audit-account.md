@@ -33,9 +33,9 @@ The first positional argument is the mode (default: `show` if no args).
 
 ## Pre-flight context
 
-- cached account meta: !`powershell -NoProfile -Command 'if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json") { Get-Content "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -Raw } else { "(no cached account)" }'`
-- credential.enc present: !`powershell -NoProfile -Command 'if (Test-Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\credential.enc") { $size = (Get-Item "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\credential.enc").Length; "yes ($size bytes)" } else { "no" }'`
-- workshop portal configured: !`powershell -NoProfile -Command '(Get-Content "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\config\workshop.yml" | Select-String "workshop_portal_url").Line'`
+- cached account meta: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode Raw -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -Fallback "(no cached account)"`
+- credential.enc present: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode SizeBytes -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\credential.enc" -Fallback "no"`
+- workshop portal configured: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode GrepContext -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\config\workshop.yml" -Pattern "^workshop_portal_url" -ContextAfter 0 -Fallback "(workshop.yml not found)"`
 
 ## Your task
 

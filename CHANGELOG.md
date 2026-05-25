@@ -103,6 +103,7 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ### Fixed
 
+- **Slash command preflight aborted before the interview ran.** Every `/audit-*` command had `!`...`` preflight lines using inline PowerShell `if (...) { ... } else { ... }` (some wrapped in `powershell -NoProfile -Command '...'`, some bare). When Claude Code's slash-command preprocessor routed these through bash, the literal `{` and `}` characters were re-interpreted as brace expansion even inside single quotes, producing `bash: eval: line 1: syntax error near unexpected token '{'` and halting the entire slash command before Phase 1.5 could run. Replaced every `if/else` preflight with a single `scripts/Get-PathOrFallback.ps1` helper invoked via `pwsh -NoProfile -File` — no curly braces reach the shell parser. The helper has one mode per preflight shape: `Exists`, `Raw`, `JsonField`, `SizeBytes`, `BytesLabel`, `RecentDirs`, `GrepContext`. Applies to `/audit-lab`, `/audit-bootcamp`, `/audit-account`, and `/audit-report`.
 - **Duplicate-issue blind spot.** Before today, the dedup filter used `--label "lab-audit,lab:{slug}"` with comma-AND semantics; open issues missing the `lab:<slug>` label were invisible to it, so re-runs filed a second issue. The new loose-match + label-backfill flow closes the gap.
 - **Comment churn on re-runs.** Re-auditing a lab no longer re-posts findings that were already present in the existing issue or its comments — fingerprint dedup drops them before the `gh issue comment` call.
 
