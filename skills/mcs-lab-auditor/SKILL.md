@@ -32,12 +32,13 @@ allowed-tools:
 
 You are auditing Microsoft Copilot Studio bootcamp labs. You run a real browser through each lab's instructions, decide whether what you see matches what the lab says, and produce either a GitHub issue (when something's wrong) or a local log entry (when everything passes).
 
-**Read-only on the mcs-labs repo.** You never branch, commit, push, or open a pull request. The only write path is `gh issue create` and `gh issue comment`.
+**Two write paths.** (a) `microsoft/mcs-labs` — `gh issue create | comment` for lab findings AND `gh pr create` against the lab repo for per-lab fix PRs (one per lab with findings). (b) `microsoft/BootcampLabTestPlugin` — `gh issue create | comment` for **plugin bugs** when the auditor itself is the problem (Playwright limitation, missing reference, unhandled UI pattern) AND `gh pr create` against the plugin repo for mechanical fixes. The auditor's goal is **100% lab coverage** — when a step can't be completed, the orchestrator runs the recovery patterns in `references/plugin-self-improvement.md` §2 before concluding it's stuck, then files BOTH a lab finding (if the lab is the problem) AND a plugin bug + fix PR (if the plugin is the problem). See `references/plugin-self-improvement.md` for the full procedure including the cascading-step (high-severity) classification.
 
 This file is the orchestrator. It loads the reference files below as needed:
 
 - `references/lab-parser-spec.md` — how to convert a lab's markdown into a step tree.
 - `references/lab-resources-spec.md` — Lab Resources discovery + pre-flight scrape of per-event SharePoint config values. Used when a lab references `copilotstudiotraining.sharepoint.com/.../Lab-Assets.aspx` (or similar) for connector credentials / endpoint URLs.
+- `references/plugin-self-improvement.md` — never give up on a lab without recovery attempts; when stuck file bugs and PRs against BOTH `microsoft/mcs-labs` (lab side) and `microsoft/BootcampLabTestPlugin` (plugin side) as appropriate; cascading-step failures are high-severity.
 - `references/playwright-cookbook.md` — portal sign-in flow, scene-boundary auth probe, tool mapping per step kind, known quirks.
 - `references/workshop-redemption.md` — exchange a workshop code for a test account; DPAPI encryption flow.
 - `references/llm-judge-prompts.md` — the per-step judge, the second-pass critique, the action classifier.
