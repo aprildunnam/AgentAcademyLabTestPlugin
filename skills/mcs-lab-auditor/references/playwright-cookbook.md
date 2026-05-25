@@ -121,40 +121,44 @@ If the probe succeeds (`copilotstudio.microsoft.com/environments` or similar in 
 - **Publish modal** appears slowly. After clicking "Publish", wait up to 30s for the confirmation modal — the actual publish operation can be 10-20s.
 - **Generated topic regenerates** when you click "Generate". Lab screenshots from before regen may not match. This is `non_deterministic` territory.
 
-#### Custom Prompt tools (Prompt Builder) — the `(Replace this text)` pattern
+#### Custom Prompt tools (Prompt Builder) — placeholders are literal
 
-When a lab instructs the learner to create a **Custom Prompt tool** (Add a tool → New tool → Prompt) and the prompt body contains a placeholder like `(Replace this text)`, **the placeholder is literal — it must be selected and replaced by inserting a typed text-input variable chip via `Add content → Text`, not typed over with free-form text.** Skipping this pattern causes two real failures we've seen in audits:
+When a lab instructs the learner to create a **Custom Prompt tool** (Add a tool → New tool → Prompt) and the pasted instruction text contains a parenthetical placeholder like `(Replace this text)` or `(your variable here)`, **the placeholder is literal** — the lab expects the learner to select it and replace it with a typed text-input variable chip via the Prompt Builder's `Add content → Text` flow, not type over it with prose.
 
-1. **InputContentFiltered error [105]** — when boundary queries hit Azure OpenAI's content filter. The raw user query gets concatenated into the *system prompt*, which is stricter than the user-content channel. Symptoms: queries like "Who is the president?" or "How tall is the Empire State Building?" return error code 105 instead of a friendly chit-chat refusal.
-2. **Prompt fails to receive the user's actual message** — even when the filter doesn't fire, the model responds to whatever literal text was typed instead of the live `Activity.Text`.
+**The audit driver MUST follow this sequence on every Custom Prompt step**, regardless of whether the lab markdown describes it in detail. Typing over a placeholder with prose is the path of least resistance and produces silent failures.
 
-**Correct sequence** (audit this step-by-step against the live UI):
+Failure modes when the placeholder is replaced with prose instead of a chip:
 
-1. In Prompt Builder, after pasting the instruction text containing `(Replace this text)`:
-   - **Select** the literal string `(Replace this text)` in the contenteditable.
-   - Click **Add content → Text** in the prompt editor toolbar.
-   - Set **Name** = `Query` (or whatever the lab specifies).
-   - Set **Sample data** = realistic sample input (lab may provide).
-   - Save the prompt. The selection is replaced by a typed chip displayed inline (e.g. `[Query]`).
-2. After clicking **Save → Add and configure**, in the tool's **Inputs** section:
-   - For the `Query` row, set **Fill using** = `Custom value`.
+1. **InputContentFiltered error [105]** on boundary queries. The raw user query gets concatenated into the *system prompt*, which Azure OpenAI's content filter treats more strictly than the user-content channel. Symptoms: queries about public figures, geography, or controversial topics return error code 105 instead of a friendly refusal.
+2. **Prompt fails to receive the user's live message.** The model responds to whatever literal text was typed in, not the current `Activity.Text`.
+
+**Correct sequence** (against the live UI):
+
+1. In Prompt Builder, after pasting the instruction text that contains the placeholder:
+   - **Select** the literal placeholder string in the contenteditable (e.g. select `(Replace this text)`).
+   - Click **Add content → Text** in the prompt editor's "Add content" dropdown (not the editor toolbar's "Text" button — that inserts a `/` slash trigger).
+   - Set **Name** to whatever the lab specifies (commonly `Query`).
+   - Set **Sample data** to a realistic example (lab may provide one).
+   - The selection is replaced inline by a typed chip (e.g. `[Query]`).
+2. Save the prompt → **Add and configure**. In the tool's **Inputs** section:
+   - Set the variable row's **Fill using** to `Custom value`.
    - For **Value**, expand the variable picker and select **System → Activity.Text** (string).
 3. Save the tool.
 
-The runtime data path is: `user utterance → Activity.Text (system) → Custom value mapping → Query input variable → prompt's [Query] chip`. This is the only path that (a) avoids the system-prompt content filter and (b) delivers the user's live message to the model.
+The runtime data path is: `user utterance → System.Activity.Text → Custom value mapping → input variable → prompt's chip`. This is the only path that (a) avoids the system-prompt content filter and (b) delivers the user's live message to the model.
 
-**When the lab markdown omits these steps** (UC4 of `mcs-tools` did, as of audit run 2026-05-25T1545Z-7a2b), file a finding describing the missing instructions, with a suggested correction that inserts the Prompt-Builder `Add content → Text` step and the Inputs `System.Activity.Text` mapping.
+**Disposition rule for the judge:** A lab that describes this sequence in its markdown is *correct* — do not file a finding. A lab that introduces a Custom Prompt step but omits any of (placeholder → Add content → Text chip), (Inputs row → Custom value), or (Value → System.Activity.Text) *is* a content gap — file a finding with a suggested correction that adds the missing piece.
 
 #### Default Greeting topic intercepts orchestrator routing
 
-The default **Greeting** topic on every Copilot Studio agent fires on any utterance the orchestrator classifies as a greeting ("How are you?", "Hello", "Hi", etc.). When a lab asks the learner to test a tool with a greeting-style utterance to verify orchestrator routing, the Greeting topic short-circuits routing and the tool never executes — so the lab appears broken when it isn't.
+The default **Greeting** topic on every Copilot Studio agent fires on any utterance the orchestrator classifies as a greeting ("Hello", "Hi", "Hey", "Good morning", "How are you?", etc.). When a lab asks the learner to test a tool with a greeting-shaped utterance to verify orchestrator routing, the Greeting topic short-circuits routing and the tool never executes — so the lab appears broken when it isn't.
 
-Two fixes, both should be in the lab text:
+Two mitigations, either of which the lab text should describe before the test step:
 
-1. **Turn off the Greeting topic** on the Topics tab before testing. The toggle is on the topic row in the System topics list.
-2. **Use non-greeting test utterances** as alternates ("Tell me about cats", "The weather today.") so the learner can confirm routing even if they forget step 1.
+1. **Turn off the Greeting topic** on the Topics tab before testing. Select the topic, then toggle it Off in the topic editor — a banner reads "This topic has been turned off, and you won't be able to test it." once disabled.
+2. **Use non-greeting test utterances** ("Tell me about cats", "The weather today.") so routing succeeds even if the learner skips step 1.
 
-**When the lab markdown omits the "disable Greeting topic" step but the test utterances are greeting-shaped** (UC4 of `mcs-tools`, as of audit run 2026-05-25T1545Z-7a2b), file a finding.
+**Disposition rule for the judge:** Inspect every test-utterance the lab tells the learner to send to a tool that isn't supposed to route through Greeting. If any test utterance starts with a default Greeting trigger phrase (`Hello`, `Hi`, `Hey`, `Good morning`, `Good afternoon`) AND the lab does not include an explicit step to disable the Greeting topic before the test, file a finding with a suggested correction that adds the "Turn off the Default Greeting Topic" sub-section before the test step.
 
 ### M365 Copilot / Agent Builder
 
