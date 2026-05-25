@@ -6,7 +6,18 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-25
+
+### Fixed
+
+- **Cached plugin v0.2.0 was missing `scripts/Get-PathOrFallback.ps1`** so every `/audit-*` slash command failed at preflight on Windows with `'<path>\scripts\Get-PathOrFallback.ps1' is not recognized as the name of a script file`. The script was added in commit 58bda9819cc18290bf03f01b0c399247c3a123fb (PR #22) but was not part of the published v0.2.0 cache package. Resolves microsoft/BootcampLabTestPlugin#24.
+- **Version inconsistency** between `.claude-plugin/plugin.json` (`0.2.0`) and `.claude-plugin/marketplace.json` (`0.1.0`). Marketplace entry now matches the plugin entry going forward.
+
 ### Changed
+
+- Bump to `0.2.1` for the bundling fix above.
+
+
 
 - **`lab-parser-spec.md` §1 — Front-matter field authority table.** Documents which front-matter fields have body-table counterparts that MUST match (`duration` ↔ Lab Details `Duration` column; `difficulty` ↔ `Level` column) and which look related but describe independent axes (`journeys` is a site-nav grouping from `_data/lab-config.yml`; `Persona` is a free-text Power Platform role label — they are not the same field). Static-analysis subagents now have an explicit list of cross-field mismatches to drop instead of flagging. Resolves a false-positive class observed in the `mcs-governance` static run where a `journeys: [business-user, developer]` vs `Persona: Maker / Admin` mismatch was flagged at 0.60 confidence (correctly skipped, but should not have surfaced at all).
 - The same section makes the agenda-is-authoritative rule for `duration` explicit: when front-matter `duration:` and the Lab Details `Duration` column disagree, align the front-matter to the body table, not the reverse.
