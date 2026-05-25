@@ -109,6 +109,12 @@ Follow the sign-in flow documented in `playwright-cookbook.md#sign-in-flow-run-s
 
 If the sign-in succeeds, the current MCP browser session is now authenticated for all federated portals in this conversation.
 
+### 5.5. Dismiss the Copilot Studio first-run welcome modal
+
+Workshop-issued accounts are always fresh tenants, so the first navigation to `https://copilotstudio.microsoft.com/` after sign-in shows the **"Welcome to Microsoft Copilot Studio"** modal with a country/region dropdown and a Get Started button. Until it is dismissed, the scene-boundary auth probe and every lab step that touches Copilot Studio will be blocked behind it.
+
+Invoke the `Welcome-to-Copilot-Studio modal handler` documented in `playwright-cookbook.md` — it forces the dropdown to `United States` and clicks Get Started. The handler is idempotent (no-op if the modal isn't present), so it's safe to call once here even when the run will later call it again at the first scene boundary.
+
 ### 6. Encrypt and cache
 
 Persist the credential blob via Windows DPAPI (user-scoped):
