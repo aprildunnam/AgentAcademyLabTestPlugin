@@ -149,6 +149,30 @@ Later steps that reference `your <value>` or the literal value should record `va
 
 Stable, hierarchical, deterministic: `{usecase-id}.{scene-id}.step-{ordinal}`. Scene IDs are `scene-N` where N is the scene's position within the use case. Stable across runs of the parser as long as the lab content doesn't change.
 
+### 11. Lab Resources link detection
+
+Some labs reference a per-event SharePoint **Lab Resources** page that hosts configuration values (URLs, connector credentials, instance hostnames) the lab assumes the user can read at run time. Detect those references and surface them as lab-level metadata — they are NOT executable steps but the orchestrator's Phase 1.6 needs to know they exist.
+
+During the link walk, capture the first URL matching any of:
+
+- `copilotstudiotraining.sharepoint.com/sites/Workshop/SitePages/Lab-Assets.aspx`
+- `*.sharepoint.com/sites/*/SitePages/Lab*Assets.aspx`
+- Any link whose **link text** matches `/Lab Resources/i` or `/Lab Assets/i`
+
+Store on the parsed lab as:
+
+```json
+{
+  "lab_slug": "mcs-alm",
+  "lab_metadata": {
+    "lab_resources_url": "https://copilotstudiotraining.sharepoint.com/sites/Workshop/SitePages/Lab-Assets.aspx"
+  },
+  ...
+}
+```
+
+When unset (most labs), the orchestrator skips Phase 1.6. When set, Phase 1.6 (see `references/lab-resources-spec.md`) navigates there once and caches the parsed values to `runs/<run-id>/lab-resources.yml` for per-lab subagents to read.
+
 ## Important edge cases
 
 - **Doubled `---` markers** (line 13–15 of `core-concepts-analytics-evaluations.md`): a single front-matter block followed by a `---` horizontal rule. Tolerate by only consuming the first front-matter block.

@@ -37,6 +37,7 @@ You are auditing Microsoft Copilot Studio bootcamp labs. You run a real browser 
 This file is the orchestrator. It loads the reference files below as needed:
 
 - `references/lab-parser-spec.md` — how to convert a lab's markdown into a step tree.
+- `references/lab-resources-spec.md` — Lab Resources discovery + pre-flight scrape of per-event SharePoint config values. Used when a lab references `copilotstudiotraining.sharepoint.com/.../Lab-Assets.aspx` (or similar) for connector credentials / endpoint URLs.
 - `references/playwright-cookbook.md` — portal sign-in flow, scene-boundary auth probe, tool mapping per step kind, known quirks.
 - `references/workshop-redemption.md` — exchange a workshop code for a test account; DPAPI encryption flow.
 - `references/llm-judge-prompts.md` — the per-step judge, the second-pass critique, the action classifier.
@@ -133,6 +134,48 @@ Procedure:
 After Phase 1.5, the orchestrator has a valid signed-in browser context and a
 usable `account_user_id`. Whichever account was chosen must be recorded in
 the run manifest under `account.user_id` and `account.source: cached | redeemed`.
+
+### Phase 1.6 — Lab Resources discovery and pre-flight scrape (CONDITIONAL)
+
+After Phase 1.5 (so the browser is signed in) but before Phase 1.7, check
+whether any lab in the planned list references a per-event **Lab
+Resources** SharePoint page. The full procedure is in
+`references/lab-resources-spec.md`; the orchestrator-side summary:
+
+1. For each lab in the planned list, parse `_labs/<slug>.md` for external
+   URLs matching the Lab Resources pattern (see
+   `lab-resources-spec.md` §1). If found, record
+   `lab_metadata.lab_resources_url` in the parsed step tree.
+2. If **any** lab has a Lab Resources URL, perform a single pre-flight
+   scrape: navigate, capture page text via `browser_evaluate`, parse the
+   label-value table per `lab-resources-spec.md` §3, and write the result
+   to `runs/<run-id>/lab-resources.yml`.
+3. **Skip Phase 1.6 entirely** when `--dry-run` is set OR the run is
+   static-phase-only (no browser session exists in either case).
+4. Take a debug screenshot at `runs/<run-id>/lab-resources.png` (local-only,
+   never uploaded anywhere).
+5. If the scrape fails (page 401/403/404, parser miss, network error),
+   log the failure, set `lab_resources.status: unavailable` in the run
+   manifest, and continue. Labs that don't depend on Lab Resources are
+   unaffected; labs that do will fall back to user-prompt or
+   `cannot_verify` per `lab-resources-spec.md` §6.
+
+**Security — non-negotiable.** Lab Resources values include real credentials
+(passwords, connection secrets, API keys). The orchestrator and every
+downstream subagent MUST NOT include any scraped value verbatim in:
+issue bodies, PR descriptions, commit messages, `audit-history.yml`,
+`manifest.yml`, console output, judge prompts, transcripts. Reference
+values by key only — e.g. *"the password from
+lab_resources.labs.setup-for-success.servicenow.password"*, never the
+literal. The cache file `runs/<run-id>/lab-resources.yml` lives in the
+run directory and is excluded from any rendered finding artifact;
+`runtime/` is gitignored at the repo root. See `lab-resources-spec.md` §4
+for the full security contract.
+
+After Phase 1.6, the orchestrator has the lab-resources cache available
+under `runs/<run-id>/lab-resources.yml` (or knows it's `unavailable`).
+Per-lab interactive subagents read from it when a step's text references
+a Lab Resources value.
 
 ### Phase 1.7 — Plan execution order (fan-out vs serial)
 
