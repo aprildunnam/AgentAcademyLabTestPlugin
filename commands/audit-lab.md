@@ -11,7 +11,7 @@ You are auditing a single bootcamp lab.
 
 Arguments passed: `$ARGUMENTS`
 
-The first positional argument is the lab slug (e.g. `core-concepts-analytics-evaluations`). The slug is **optional** — when omitted, the orchestrator runs the lab picker (Phase 1.5 Q4 in `SKILL.md`) so the user can choose interactively. Flags:
+The first positional argument is the lab slug (e.g. `core-concepts-analytics-evaluations`). The slug is **optional** — when omitted, the orchestrator runs the lab picker (Phase 1.5 Q4 in `SKILL.md`) against the **full all-labs catalog** (`lab_metadata.*`), not constrained to any one event. Flags:
 - `--dry-run` — parse the lab into `steps.json` only. No browser activity, no issue, no audit-history entry.
 - `--no-issue` — execute the lab (interactive UI phase still runs) but never file a GitHub issue.
 - `--force-issue` — file an issue even if the lab is in `non_deterministic_lab_slugs`.
@@ -21,17 +21,17 @@ The first positional argument is the lab slug (e.g. `core-concepts-analytics-eva
 
 ## Pre-flight context
 
-- bootcamp lab slugs: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode GrepContext -Path "C:\Users\dewainr\mcs-labs\_data\lab-config.yml" -Pattern "^bootcamp_lab_orders" -ContextAfter 15 -Fallback "MISSING - lab-config.yml not found"`
+- all-labs catalog (id → title): !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode GrepContext -Path "C:\Users\dewainr\mcs-labs\_data\lab-config.yml" -Pattern "^lab_metadata:" -ContextAfter 20 -Fallback "MISSING - lab-config.yml not found"`
 - cached account: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode JsonField -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -JsonField user_id -Fallback "(none)"`
 
 ## Your task
 
 Invoke the `mcs-lab-auditor` skill for the given (or interactively-picked) slug:
 
-1. **Slug resolution**: If a slug was passed positionally, validate it exists in `_data/lab-config.yml` `lab_orders.event.bootcamp` AND `_labs/<slug>.md` exists. Abort with a clear message if either is missing. If no slug was passed, defer to the Phase 1.5 Q4 lab picker.
+1. **Slug resolution**: If a slug was passed positionally, validate it exists in `_data/lab-config.yml.lab_metadata.*.id` (the full all-labs catalog) AND `_labs/<slug>.md` exists. Abort with a clear message if either is missing. If no slug was passed, defer to the Phase 1.5 Q4 lab picker, which uses the full all-labs catalog as its picker source (not constrained to any event).
 2. Pre-flight (configs, `gh` auth).
 3. **Run-start interview** (Phase 1.5 in `SKILL.md`): asks the account question (Q1, governed by `account_prompt_mode`) and the phase-mix question (Q2, unless `--static-only`/`--interactive-only` was passed). The scope question (Q3) is auto-answered (scope = single lab from arg 1, or Q4 picker if no arg). Mandatory unless a CLI flag short-circuits a specific question. Even on `--static-only` the account prompt may run if you want the static pass recorded against a known account; it's safe to skip otherwise. If Q1 goes through redemption (or no cache exists) and `workshop_portal_url` is still `REPLACE_ME_ON_FIRST_RUN`, the redemption flow must auto-prompt for `Workshop portal URL`, validate URL format, persist it to `config/workshop.yml`, and then continue.
 4. Single-lab loop: parse → **execute steps in Playwright against the chosen account** (when `phase_mix` includes interactive) → judge → file-or-log. Connection-class failures during execution follow the network-retry policy in `judge-config.yml.execution.network_retry_count` (default 3) before halting and asking the user.
 5. Print summary: status, issue URL (if any), run-id, and which phase(s) actually ran.
 
-Follow `~/.claude/plugins/mcs-lab-auditor/skills/mcs-lab-auditor/SKILL.md` for the procedure. The single-lab path is the same as the full-bootcamp path, just with a list of one and the scope question short-circuited.
+Follow `~/.claude/plugins/mcs-lab-auditor/skills/mcs-lab-auditor/SKILL.md` for the procedure. The single-lab path is the same as the full-event path, just with `scope: one`, `event: null`, and a scope_labs list of length 1. Cross-lab consistency findings still surface in single-lab runs — the fan-in compares this lab's fingerprints against the most recent prior-run fingerprints for every sibling lab in the catalog. Labs that have never been audited contribute nothing.

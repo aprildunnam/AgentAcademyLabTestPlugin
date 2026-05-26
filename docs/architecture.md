@@ -28,15 +28,16 @@ flowchart LR
 
 ### Key boundaries
 
-- **Source-of-truth boundary**: `_data/lab-config.yml` → `lab_orders.event.bootcamp` enumerates labs at runtime. The slug list is never hard-coded in this plugin.
-- **Write boundary** (two narrow paths only):
+- **Source-of-truth boundary**: `_data/lab-config.yml` provides both the **event catalog** (`event_configs.<event-key>.config_key` → `<event_key>_lab_orders`) and the **all-labs catalog** (`lab_metadata.<id>`). The run's scope is one of: (a) all labs in a chosen event, (b) a CSV subset of an event's labs, or (c) a single lab from the all-labs catalog. The slug list is never hard-coded in this plugin.
+- **Write boundary** (three narrow paths total):
   1. **Issues API** — `gh issue create | comment | edit`. Always on. Comments on existing open issues with finding-fingerprint dedup; never creates a duplicate open issue for the same lab.
-  2. **Open PR append** — `git push` of one screenshots-only commit onto an already-open fix-PR branch. **On by default**, suppress with `--no-update-screenshots`. Same-author, mergeable, unprotected-branch guardrails enforced in `mcs-lab-pr-appender`. Never creates a new branch or new PR.
+  2. **Fix-PR creation** — `gh pr create` on a per-slug branch `dewain/fix-<slug>-content-audit`. Fires whenever the run produces findings; appends commits to an already-open PR if one exists.
+  3. **Open PR screenshot append** — `git push` of one screenshots-only commit onto an already-open fix-PR branch. **On by default**, suppress with `--no-update-screenshots`. Same-author, mergeable, unprotected-branch guardrails enforced in `mcs-lab-pr-appender`. Never creates a new branch or new PR.
 - **Secret boundary**: workshop credentials live only in `runtime/account/credential.enc` (DPAPI-encrypted) and in memory for the duration of one sign-in dispatch. See [`security.md`](security.md).
 
 ## Run lifecycle
 
-The full lifecycle of one `/audit-bootcamp` invocation, end-to-end:
+The full lifecycle of one event audit invocation (`/audit-bootcamp`, `/audit-event`, or `/audit-lab` with a single slug), end-to-end. Phase numbers correspond to `skills/mcs-lab-auditor/SKILL.md`:
 
 ```mermaid
 sequenceDiagram
@@ -55,10 +56,12 @@ sequenceDiagram
     participant MCSRepo as mcs-labs working tree
     participant GH as GitHub Issues / PRs
 
-    User->>CC: /audit-bootcamp
+    User->>CC: /audit-event (or /audit-bootcamp / /audit-lab)
     CC->>Skill: load skill + command
     Skill->>Cfg: read workshop.yml, judge-config.yml
-    Skill->>Labs: read lab-config.yml → bootcamp slugs
+    Skill->>Labs: read lab-config.yml → event_configs + lab_metadata
+    Skill->>User: interview (Q1 account / Q2 phase mix / Q3 scope / Q3a event / Q4 lab)
+    User-->>Skill: answers
     Skill->>GH: gh auth status; gh repo view (permission check)
     Skill->>Acct: read account.meta.json (if cached)
     alt cached account
@@ -128,6 +131,26 @@ sequenceDiagram
     Skill->>PW: browser_close
     Skill->>User: summary (counts, run-id, issue URLs)
 ```
+
+## Cross-lab consistency fan-in (Phase 1.7 step 1a)
+
+After every per-lab static subagent has emitted its `findings-static.json` and `scene-fingerprints.json`, the orchestrator runs a single fan-in pass that groups scenes by shape hash and diffs identifier tokens across sibling labs. This catches the case where two labs verify the same UI surface but have drifted in surface wording — e.g. one says `Address 1: State/Province` and another says `Address1: State or Providence`.
+
+```mermaid
+flowchart LR
+    L1[lab #1 static subagent] --> SF1[scene-fingerprints.json]
+    L2[lab #2 static subagent] --> SF2[scene-fingerprints.json]
+    LN[lab #N static subagent] --> SFN[scene-fingerprints.json]
+    SF1 & SF2 & SFN --> Group[group by shape_hash]
+    Group --> Cluster{shared scene<br/>cluster?}
+    Cluster -->|size 1| Drop[drop, unique scene]
+    Cluster -->|size 2+| Diff[diff identifier tokens<br/>across labs in cluster]
+    Diff --> Canon[pick canonical form<br/>by vote count]
+    Canon --> Findings[emit drift finding<br/>flags.cross_lab_drift: true<br/>severity: low<br/>confidence: 0.85 or 0.65]
+    Findings --> Static[append into each<br/>divergent lab's<br/>findings-static.json]
+```
+
+For single-lab runs, the fan-in reads the most recent prior-run `scene-fingerprints.json` for every other lab in `lab_metadata.*.id` (full all-labs catalog). Labs that have never been audited contribute nothing — the issue body explicitly documents the discovery limit. Full algorithm in `skills/mcs-lab-auditor/references/cross-lab-consistency.md`.
 
 ## Per-step data flow
 

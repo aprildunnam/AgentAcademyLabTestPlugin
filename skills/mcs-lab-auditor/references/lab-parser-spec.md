@@ -211,3 +211,23 @@ After parsing, run these sanity checks:
 - Every `variables_used` entry references a variable set earlier in the same lab (warn if not — likely a lab-typo finding).
 
 Failed validation → emit a `parser_warning` finding (severity: low) and continue with best-effort execution.
+
+## Scene-fingerprint sidecar (for cross-lab consistency)
+
+After producing `steps.json`, the per-lab static subagent ALSO writes a second small sidecar file:
+
+`runs/<run-id>/labs/<slug>/scene-fingerprints.json`
+
+This is the input to the Phase 1.7 step 1a cross-lab consistency fan-in (see `cross-lab-consistency.md` for the schema and the fan-in algorithm). The parser must emit it on every static-phase run; subsequent runs read it for both same-run and cross-run lookups.
+
+For each scene in `steps.json.use_cases[].scenes[]`, emit one entry containing:
+
+- `scene_id` — same id as `steps.json`.
+- `scene_heading` — the scene's `heading` field.
+- `step_count` — number of executable steps in the scene.
+- `shape_text` — pipe-joined `<step_kind>|<primary_target>` for each step, lowercased and trimmed. Primary target is the first noun-phrase the parser extracted as the step's action target (the same field used for the LLM-judge dispatch table — see `playwright-cookbook.md#tool-mapping`). Two scenes with identical `shape_text` describe the same UI surface even if their prose differs.
+- `shape_hash` — first 12 hex chars of `SHA-256(shape_text)`.
+- `identifier_tokens` — the set of noun-phrase identifiers extracted from this scene's text: control labels (matched via the same `**bold**` rule used by step parsing), column names (substrings matching the `[A-Z][\w]*(?:\s+\w+)*\s*[:/]\s*[\w\s/]+` pattern, e.g. `Address 1: State/Province`), table names (proper-cased nouns in code spans or after "the X table"), agent names (after "named **<name>**" or "agent named X"), schema names (after "Schema name:" in Advanced Settings instructions). Preserve original casing.
+- `raw_excerpts` — map from each identifier token to the list of 1-indexed line numbers in `_labs/<slug>.md` where the token appears (used by the cross-lab finding's `evidence.cross_lab_divergent_lines`).
+
+The sidecar is best-effort: a scene with `step_count == 0` or no extractable identifiers contributes an empty `identifier_tokens` array and is ignored by the fan-in pass. Don't fail the parse over a sparse scene.
