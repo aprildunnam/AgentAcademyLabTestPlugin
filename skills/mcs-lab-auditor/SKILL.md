@@ -62,20 +62,31 @@ Read whichever you need before doing the corresponding step. Don't try to keep a
 
 ### Phase 1 — Pre-flight (no browser yet)
 
-1. **Resolve the plugin directory**. It is `C:\Users\dewainr\.claude\plugins\mcs-lab-auditor`. The mcs-labs repo is `C:\Users\dewainr\mcs-labs`. Both are fixed paths on this machine.
+1. **Orchestrator-is-Opus assertion (MANDATORY).** The mcs-lab-auditor orchestrator REQUIRES Opus. The plugin halts at this step if the Claude Code session model is not Opus. Detection: the system env line `You are powered by the model named Opus 4.7` (or any future `Opus X.Y`). Lower-tier orchestration silently degrades the entire audit's reliability — Sonnet and Haiku struggle with recovery patterns, dialog disambiguation, and the long-form per-lab state tracking. Sub-agents (per-UC, per-step judge, critique, static fan-out, issue-filer, fix-PR filer, PR appender) CAN run on lower-tier models — that's the Q5 model-preset question. The orchestrator itself cannot.
 
-2. **Load configs**:
+   On non-Opus orchestrator, halt with:
+   ```
+   ERROR: mcs-lab-auditor requires the orchestrator to run on Opus.
+   Current session model: <detected model>
+   Switch to Opus (e.g. /model in Claude Code) and re-run the /audit-* command.
+   Lower-tier sub-agents are still supported — see Phase 1.5 Q5 model-preset.
+   ```
+   Do NOT proceed past Phase 1 step 1 on a non-Opus session.
+
+2. **Resolve the plugin directory**. It is `C:\Users\dewainr\.claude\plugins\mcs-lab-auditor`. The mcs-labs repo is `C:\Users\dewainr\mcs-labs`. Both are fixed paths on this machine.
+
+3. **Load configs**:
    - `config/workshop.yml`
    - `config/judge-config.yml`
 
-3. **Check `gh` auth**:
+4. **Check `gh` auth**:
    ```
    gh auth status
    gh repo view microsoft/mcs-labs --json viewerPermission
    ```
    If either fails, halt with a clear message before doing anything else.
 
-4. **Enumerate the lab catalog AND the active event's lab list**:
+5. **Enumerate the lab catalog AND the active event's lab list**:
    - Read `C:\Users\dewainr\mcs-labs\_data\lab-config.yml`.
    - From `event_configs`, build a map `{event_key → { title, description, config_key, slugs[] }}` for every event defined in the file. `slugs[]` is the ordered list read from the matching `<config_key>` top-level entry (e.g. `bootcamp_lab_orders`, `agent_buildathon_1month_lab_orders`, `mcs_in_a_day_v2_lab_orders`, etc.). Skip the `legacy_lab_orders` table.
    - From `lab_metadata`, build the **all-labs catalog**: `{slug → { id, title, section, difficulty, duration }}`. This is the picker source for single-lab scope (Phase 1.5 Q4) and the comparison surface for single-lab cross-lab consistency runs.
@@ -85,9 +96,9 @@ Read whichever you need before doing the corresponding step. Don't try to keep a
      - `/audit-lab <slug>` → event is informational only (the run audits a single slug regardless); use the first event whose `slugs[]` contains the slug for display purposes, or `none` if the slug is event-less.
    - For the active scope (whole event, `--labs csv` subset, or single slug), confirm `_labs/<slug>.md` exists for every chosen slug. If not, record `status: skipped, reason: lab_file_missing` and continue with the next slug — never abort the whole run because one lab is missing.
 
-5. **Run-start account prompt** (see Phase 1.5 below). On `--dry-run`, skip this — `--dry-run` only exercises the parser and writes `steps.json` per lab.
+6. **Run-start account prompt** (see Phase 1.5 below). On `--dry-run`, skip this — `--dry-run` only exercises the parser and writes `steps.json` per lab.
 
-6. **Create the run directory**:
+7. **Create the run directory**:
    ```
    $run_id = (Get-Date -Format "yyyy-MM-ddTHHmmZ") + "-" + (-join ((1..4) | % { '{0:x}' -f (Get-Random -Maximum 16) }))
    $run_dir = "runtime/runs/$run_id"
@@ -103,7 +114,7 @@ question is **skipped only when a CLI flag has already provided the answer**
 silent defaults have caused real audit runs to execute against the wrong
 tenant or to ship a doc-only sweep when the user expected a live audit.
 
-The four interview questions, in order:
+The interview questions, in order (Q1, Q2, Q2a model preset, Q3 scope, Q3a event, Q4 lab):
 
 #### Q1. Account — which test account?
 
@@ -174,6 +185,27 @@ Record the chosen mix as `execution.phase_mix: static | interactive | both`
 in the run manifest. If "static only" or "interactive only", also set
 `execution.skipped_interactive: true` or `execution.skipped_static: true`
 respectively, with `reason: cli_flag` or `reason: interview`.
+
+#### Q2a. Model preset — Optimized per function, or All Opus?
+
+Skip this question when ANY of:
+- `--model-preset <key>` CLI flag was passed (`optimized` | `opus` | `custom`).
+- `judge-config.yml.execution.model.preset` is set to a non-`prompt` value (i.e. the config has an explicit default, e.g. set by a previous run).
+- `--resume <run-id>` was passed (preset is inherited from the prior manifest).
+
+The orchestrator is always Opus (asserted in Phase 1 step 1). This question only chooses the model for **sub-agents** spawned by the orchestrator: per-UC subagents, the per-step LLM judge, the critique pass, static fan-out subagents, the cross-lab consistency fan-in, the lab parser subagent, and the issue-filer / fix-PR filer / PR appender sub-skills.
+
+When asking, use `AskUserQuestion`:
+
+- Question: `Which model preset for sub-agents?`
+- Options:
+  - `[Recommended] Optimized per function` — description: `Each sub-agent uses the cheapest model that handles its job well. Per-UC subagents and the LLM judge on Sonnet 4.6; static fan-out and issue/PR filers on Haiku 4.5. Approx $50 per bootcamp event run. ~85% completion rate.`
+  - `All Opus` — description: `Every sub-agent and judge call runs on Opus 4.7. Maximum reliability, ~$140 per bootcamp event run, ~90% completion rate. Use when finding quality matters more than spend.`
+  - `Custom (edit config)` — description: `Halt before redemption so you can edit config/judge-config.yml.execution.model.* per-function overrides, then re-run /audit-*. No subagents spawn this run.`
+
+Record the chosen preset as `execution.model.preset: optimized | opus | custom` in the run manifest. The resolved per-function model assignments (see `judge-config.yml.execution.model`) are also frozen into the manifest so a `--resume` produces the same assignments.
+
+On `Custom`, the orchestrator writes the current resolved assignments back to `judge-config.yml.execution.model.*` as comments (so the user can see the defaults next to their overrides), prints a one-line summary of which keys are configurable, and halts.
 
 #### Q3. Scope — an event or a single lab?
 
@@ -252,18 +284,35 @@ Append all interview answers to the run manifest before Phase 1.7 starts:
 interview:
   account_choice: cached | redeemed | aborted
   phase_mix: static | interactive | both
+  model_preset: optimized | opus | custom   # Q2a; see execution.model.resolved below for per-function assignments
   scope: event | one             # "event" → audit the chosen event's lab list; "one" → audit a single slug from the all-labs catalog
   event: <event-key|null>        # null when scope == one (single-lab runs have no driving event)
   scope_labs: [<slug>, ...]      # the final list driving Phase 1.7 (always 1+ entries)
   skipped_questions:              # questions short-circuited by CLI flags or by the entry-point command
     - { question: "phase_mix", reason: "cli_flag: --static-only" }
+    - { question: "model_preset", reason: "cli_flag: --model-preset optimized" }
     - { question: "event_picker", reason: "command: /audit-bootcamp" }
+
+execution:
+  model:
+    preset: optimized | opus | custom
+    resolved:                            # per-function frozen assignments for this run
+      uc_subagent:        sonnet | opus | haiku
+      judge:              sonnet | opus | haiku
+      critique:           sonnet | opus | haiku
+      static_subagent:    sonnet | opus | haiku
+      cross_lab:          sonnet | opus | haiku
+      lab_parser:         sonnet | opus | haiku
+      issue_filer:        sonnet | opus | haiku
+      fix_pr_filer:       sonnet | opus | haiku
+      pr_appender:        sonnet | opus | haiku
 ```
 
 After the interview, the orchestrator has:
 - A valid signed-in browser context (or `phase_mix: static` so none is needed).
 - A confirmed `account_user_id`.
 - An explicit `phase_mix`.
+- An explicit `model_preset` plus the frozen per-function `execution.model.resolved` map. **Every Agent / subagent spawn from here on MUST pass the resolved model via the tool's `model` parameter.**
 - An explicit lab list for Phase 1.7's plan.
 
 Record the account itself under `account.user_id` and `account.source:
@@ -334,19 +383,28 @@ reason: <flag|config>`.
 
 1. **Static phase** is always fully fanned out. Spawn one background
    subagent per lab in the planned list (capped at
-   `execution.static_fanout_concurrency`). Each subagent does the
-   markdown-only checks: parser-spec validation, image-ref resolution,
-   external-URL link-check via `WebFetch`, TOC-anchor sanity, prereq
-   sanity, self-consistency between the Use Cases Covered table and the
-   real scene headings. Subagents write their findings as
-   `runs/<run-id>/labs/<slug>/findings-static.json` AND a sidecar
-   `runs/<run-id>/labs/<slug>/scene-fingerprints.json` (shape hash,
-   identifier tokens, raw-excerpt line numbers — see
+   `execution.static_fanout_concurrency`). **Pass `model:
+   <execution.model.resolved.static_subagent>`** on each `Agent` tool
+   call (typically `haiku` under the `optimized` preset). Each subagent
+   does the markdown-only checks: parser-spec validation, image-ref
+   resolution, external-URL link-check via `WebFetch`, TOC-anchor
+   sanity, prereq sanity, self-consistency between the Use Cases
+   Covered table and the real scene headings. Subagents write their
+   findings as `runs/<run-id>/labs/<slug>/findings-static.json` AND a
+   sidecar `runs/<run-id>/labs/<slug>/scene-fingerprints.json` (shape
+   hash, identifier tokens, raw-excerpt line numbers — see
    `references/cross-lab-consistency.md` for the schema). No browser,
    no tenant state, no GitHub writes.
 
+   The lab-parser pass that produces `steps.json` for each lab spawns a
+   separate subagent with `model:
+   <execution.model.resolved.lab_parser>` (typically `sonnet` — the
+   parser benefits from a stronger model than the static checks).
+
 1a. **Cross-lab consistency fan-in.** After every per-lab static
-    subagent in step 1 has returned, run a single fan-in pass that reads
+    subagent in step 1 has returned, run a single fan-in pass with
+    `model: <execution.model.resolved.cross_lab>` (typically `sonnet`)
+    that reads
     every `scene-fingerprints.json` in scope, groups scenes by shape
     hash, and emits drift findings for divergent identifier tokens (e.g.
     `Address 1: State/Province` in one lab vs `Address1: State or
@@ -477,11 +535,17 @@ topological order from Phase 1.7):
      subagent if auth failed.
    - **Spawn a per-UC subagent** (background or foreground depending on
      orchestrator preference — see "Spawning" below for the prompt
-     shape). Pass the subagent: the UC's `uc-<N>-steps.json` path, the
+     shape). Pass `model: <manifest.interview.execution.model.resolved.uc_subagent>`
+     on the `Agent` tool call so the subagent runs on the model selected
+     by Phase 1.5 Q2a (e.g. `sonnet` under `optimized`, `opus` under
+     `opus`). Pass the subagent: the UC's `uc-<N>-steps.json` path, the
      paths of all prior `uc-*-state.yml` files in this lab dir, the
-     run-id, the lab slug, the lab-level transcript path, and the
+     run-id, the lab slug, the lab-level transcript path, the
      allowed-tools list scoped to `mcp__plugin_playwright_playwright__*`
-     + `Read` + `Write` + the per-step judge invocation.
+     + `Read` + `Write` + the per-step judge invocation, AND the
+     resolved `judge` + `critique` model values from the manifest so the
+     subagent's internal per-step judge call also runs on the right
+     model.
    - **Wait for the subagent to return.** Its summary tells the
      orchestrator: status (complete/error/partial), findings counts by
      severity, the UC-state file path. The orchestrator does NOT need
@@ -507,11 +571,13 @@ topological order from Phase 1.7):
      judge-config.yml.confidence.min_to_include_in_issue` AND the lab is
      not in `non_deterministic_lab_slugs` (or `--force-issue` was
      passed):
-     1. Invoke `mcs-lab-issue-filer` (sub-skill) — files (or comments on)
+     1. Invoke `mcs-lab-issue-filer` (sub-skill) with `model:
+        <execution.model.resolved.issue_filer>` — files (or comments on)
         the GitHub issue and returns the issue number.
      2. **Then** invoke `mcs-lab-fix-pr-filer` (sub-skill) with that issue
-        number — applies the findings' `suggested_correction` diffs to the
-        lab markdown, copies any `proposed_screenshot_replacement` images
+        number and `model: <execution.model.resolved.fix_pr_filer>` —
+        applies the findings' `suggested_correction` diffs to the lab
+        markdown, copies any `proposed_screenshot_replacement` images
         into `labs/<slug>/images/`, commits on branch
         `dewain/fix-<slug>-content-audit` (creating the branch from `main`
         if needed), pushes, and opens a PR titled
@@ -519,6 +585,9 @@ topological order from Phase 1.7):
         `Closes #<issue-number>`.
      3. If an open PR already exists on that branch, append commits to it
         rather than opening a duplicate.
+     4. If screenshots were refreshed and an open fix-PR already exists
+        for the slug, invoke `mcs-lab-pr-appender` (sub-skill) with
+        `model: <execution.model.resolved.pr_appender>`.
    - Otherwise: append a clean entry to `runs/<run-id>/clean-labs.yml`.
    - Either way: append the per-lab summary entry to
      `runtime/audit-history.yml` (`references/audit-log-schema.md`).

@@ -71,6 +71,40 @@ execution:
   fanout_concurrency: 1            # interactive UI passes per training account
   static_fanout_concurrency: 11    # background subagents for static analysis
 
+  # --- Model preset and per-function assignments ---
+  # The orchestrator is REQUIRED to run on Opus (Phase 1 asserts this). This
+  # block controls only the sub-agents the orchestrator spawns: per-UC
+  # subagents, per-step LLM judge, critique pass, static fan-out, cross-lab
+  # consistency, lab parser, and the issue-filer / fix-PR filer / PR appender
+  # sub-skills.
+  #
+  # `preset` resolves the per-function assignments:
+  #
+  # - `prompt` (factory default): the Phase 1.5 Q2a interview asks the user
+  #   to pick `optimized` or `opus` (or `custom`). Use this on first install;
+  #   the resolved selection is frozen into manifest.yml.interview.model_preset.
+  # - `optimized`: each function uses the per-function default below
+  #   (sonnet for UI reasoning + judge, haiku for filers + static fan-out).
+  #   ~$50 per bootcamp event run, ~85% completion.
+  # - `opus`: every per-function key is forced to opus. ~$140 per bootcamp,
+  #   ~90% completion. Maximum reliability.
+  # - `custom`: read each per-function key below as the literal value (don't
+  #   apply preset rules). Use this when you want to mix-and-match.
+  model:
+    preset: prompt    # prompt | optimized | opus | custom
+
+    # Per-function defaults (used when preset = optimized or custom).
+    # Valid values: opus | sonnet | haiku
+    uc_subagent:        sonnet     # Playwright loop subagents (per Use Case)
+    judge:              sonnet     # per-step LLM judge (snapshot+screenshot → verdict)
+    critique:           sonnet     # second-opinion critique on broken/unclear findings
+    static_subagent:    haiku      # per-lab static analysis (markdown, links, images)
+    cross_lab:          sonnet     # cross-lab consistency fan-in (identifier-token similarity)
+    lab_parser:         sonnet     # markdown → step tree
+    issue_filer:        haiku      # gh issue create + render template
+    fix_pr_filer:       haiku      # apply suggested_correction diffs + git ops
+    pr_appender:        haiku      # screenshot-only commit push to existing PR branch
+
 # --- Lab dependency graph ---
 # Some bootcamp labs build on prior labs' artifacts (agents, topics, knowledge
 # sources, evaluations created in the training tenant). Running them out of

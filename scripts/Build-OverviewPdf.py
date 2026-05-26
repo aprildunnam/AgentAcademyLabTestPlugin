@@ -879,8 +879,34 @@ def build_story(styles):
         ["consistency.cross_lab_similarity_threshold", "0.85", "Threshold for near-match drift detection."],
         ["issues.pr_append.enabled_by_default", "true", "Screenshot-refresh commits onto open fix-PRs."],
         ["non_deterministic_lab_slugs", "[agent-builder-m365, mcs-multi-agent]", "Labs that default to log-only (no issue) unless --force-issue."],
+        ["execution.model.preset", "prompt", "prompt | optimized | opus | custom. 'prompt' asks the Phase 1.5 Q2a model question."],
+        ["execution.model.uc_subagent", "sonnet", "Per-UC subagent model (Playwright loop)."],
+        ["execution.model.judge", "sonnet", "Per-step LLM judge."],
+        ["execution.model.critique", "sonnet", "Second-opinion critique pass."],
+        ["execution.model.static_subagent", "haiku", "Per-lab static-phase fan-out subagent."],
+        ["execution.model.cross_lab", "sonnet", "Cross-lab consistency fan-in."],
+        ["execution.model.lab_parser", "sonnet", "Markdown -> step tree."],
+        ["execution.model.issue_filer", "haiku", "Render issue body + gh issue create."],
+        ["execution.model.fix_pr_filer", "haiku", "Apply suggested_correction diffs + open PR."],
+        ["execution.model.pr_appender", "haiku", "Screenshot-only commit to open fix-PR branch."],
     ]
-    story.append(header_table(cfg_rows, [2.2 * inch, 1.4 * inch, 2.6 * inch]))
+    story.append(header_table(cfg_rows, [2.4 * inch, 1.1 * inch, 2.5 * inch]))
+
+    story.append(P(styles, "h3", "Model preset (Phase 1.5 Q2a)"))
+    story.append(P(styles, "body",
+        "The orchestrator is always Opus (asserted at Phase 1 step 1). The "
+        "<font face='Courier'>execution.model.preset</font> key controls sub-agent model selection:"
+    ))
+    story.extend(bullets(styles, [
+        "<b>prompt</b> (factory default) - Phase 1.5 Q2a asks the user which preset to use this run.",
+        "<b>optimized</b> - each per-function key above is used as-is. Sonnet for UI reasoning + judge, Haiku for filers + static fan-out.",
+        "<b>opus</b> - every per-function key is forced to opus.",
+        "<b>custom</b> - read each per-function key literally (no preset rule). Use to mix-and-match.",
+    ]))
+    story.append(P(styles, "body",
+        "Override per run with <font face='Courier'>--model-preset optimized|opus|custom</font> on any "
+        "<font face='Courier'>/audit-*</font> command."
+    ))
 
     # ==================== 6. Troubleshooting ====================
     story.append(PageBreak())
@@ -1015,7 +1041,7 @@ def build_story(styles):
     story.extend(bullets(styles, [
         "<b>--static-only</b> - skips Phase 2 entirely. Cuts ~95% of input tokens. Useful for doc-only sweeps where you just want spelling, link, image-ref, and cross-lab drift findings. Trade-off: misses live UI drift.",
         "<b>critique.enabled: false</b> in <font face='Courier'>config/judge-config.yml</font> - cuts ~10-15%. Raises false positives slightly; the issue body's &quot;low confidence&quot; markers compensate.",
-        "<b>Smaller judge model</b> - the judge call dominates spend, so dropping the judge from Opus to Sonnet (while keeping the orchestrator on Opus) yields the best $-per-coverage trade. Configure via the model field in the judge prompt (see <font face='Courier'>references/llm-judge-prompts.md</font>).",
+        "<b>--model-preset optimized</b> (Phase 1.5 Q2a default) - the judge call dominates spend, so dropping the judge from Opus to Sonnet while keeping the orchestrator on Opus yields the best $-per-coverage trade. The <font face='Courier'>optimized</font> preset also drops the static fan-out + issue/PR filers to Haiku (they're text-only). One CLI flag swap; per-function overrides live in <font face='Courier'>config/judge-config.yml.execution.model.*</font>.",
         "<b>--labs csv</b> - cap scope to the labs you actually care about. Cost scales linearly with step count.",
         "<b>Reuse the cached account</b> - <font face='Courier'>account_prompt_mode: only_if_expired</font> avoids re-running redemption (~20k tokens). Accept the safety trade-off documented in Phase 1.5.",
         "<b>Resume rather than restart</b> - <font face='Courier'>/audit-event --resume &lt;run-id&gt;</font> skips finished UCs and replays their state files instead of re-judging.",

@@ -1,6 +1,6 @@
 ---
 description: Audit a single mcs-labs bootcamp lab end-to-end; file one GitHub issue with findings if any, or log a clean pass locally.
-argument-hint: "[<lab-slug>] [--no-issue] [--force-issue] [--dry-run] [--static-only] [--interactive-only] [--account-prompt <mode>]"
+argument-hint: "[<lab-slug>] [--no-issue] [--force-issue] [--dry-run] [--static-only] [--interactive-only] [--account-prompt <mode>] [--model-preset <optimized|opus|custom>]"
 ---
 
 # /audit-lab
@@ -18,6 +18,7 @@ The first positional argument is the lab slug (e.g. `core-concepts-analytics-eva
 - `--static-only` — skip the interactive UI phase; do static checks only. The interview skips the phase-mix question (Q2). Default (no flag) is to ask interactively.
 - `--interactive-only` — skip the static fan-out; assumes a prior run produced `findings-static.json`. The interview skips the phase-mix question (Q2).
 - `--account-prompt <always|only_if_expired|only_if_missing>` — override `judge-config.yml.execution.account_prompt_mode` for this run.
+- `--model-preset <optimized|opus|custom>` — choose the sub-agent model preset without interactive Q2a. Orchestrator is always Opus.
 
 ## Pre-flight context
 
