@@ -9,7 +9,12 @@ This document describes the Copilot Studio chatbot redemption flow used by the M
 
 ## Inputs
 
-All inputs to this flow come from `config/workshop.yml`. The plugin issues exactly **one** `AskUserQuestion` call during redemption — the workshop code prompt (skipped when a valid cached account already exists in `runtime/account/`):
+All inputs to this flow come from `config/workshop.yml`. The plugin issues **at most one** `AskUserQuestion` call during redemption — the workshop code prompt — and even that is skipped when one of these is true:
+
+- The user picked `Use cached: <user_id>` in Phase 1.5 Q1 (no redemption happens; we just sign in with the existing cached credentials).
+- The user picked `Redeem a new user from the cached workshop code` in Phase 1.5 Q1 — the code comes from DPAPI-decrypting `runtime/account/workshop_code.enc` instead of asking the user.
+
+If the user picked `Redeem a new workshop code` (or there is no cache and no `workshop_code.enc`), the workshop code prompt fires once.
 
 - `workshop_portal_url` — chatbot URL.
 - `workshop_code_required` — boolean. Default `true` — the workshop code is required unless using a cached user account. Set to `false` only if your event's chatbot genuinely does not gate on a code.
@@ -32,7 +37,8 @@ These come from the chatbot's success card — the plugin parses them, no user i
 ## Persisted outputs
 
 - `runtime/account/credential.enc` — DPAPI-encrypted **new** password (after the first-login change), NOT the temp password.
-- `runtime/account/account.meta.json` — non-secret metadata: `user_id`, `tenant_hint`, `cached_at`, `expires_at`, `run_id`, `signed_in_at`, `password_changed_on_first_login: true`, and `workshop_code_hint` (the first 4 chars of the workshop code — never more).
+- `runtime/account/workshop_code.enc` — DPAPI-encrypted **full** workshop code. Required so the user can later choose `Redeem a new user from the cached workshop code` in Phase 1.5 Q1 without retyping the code. DPAPI keys are bound to the current Windows user, so this file is only readable by the same operator on the same machine — never echoed to console output, audit-history, issue bodies, or any other surface.
+- `runtime/account/account.meta.json` — non-secret metadata: `user_id`, `tenant_hint`, `cached_at`, `expires_at`, `run_id`, `signed_in_at`, `password_changed_on_first_login: true`, and `workshop_code_hint` (the first 4 chars of the workshop code — never more — for human-readable identification of which event the cache came from).
 
 ## Outputs
 
@@ -52,14 +58,21 @@ The aka.ms link redirects to `https://microsoft.github.io/mcs-labs/`. The Lab As
 
 ### Card 1 — Submit the workshop code
 
-The chat opens with a "Workshop Pass Code" Adaptive Card. **This is the first required step.** The plugin prompts the user for the workshop code via `AskUserQuestion` (only if there is no valid cached account to reuse), then fills the text input and clicks `Submit`.
+The chat opens with a "Workshop Pass Code" Adaptive Card. **This is the first required step.** The workshop code comes from one of two sources depending on which Phase 1.5 Q1 option the user picked:
+
+1. **`Redeem a new user from the cached workshop code`** — Decrypt `runtime/account/workshop_code.enc` via DPAPI; no `AskUserQuestion` needed.
+2. **`Redeem a new workshop code`** (or no cache) — Prompt the user via `AskUserQuestion`. The user types the code via the auto-provided "Other" free-text path.
 
 ```text
-# Prompt — skipped when a cached account is available and still valid.
-$workshopCode = AskUserQuestion(
-  question: "What is the workshop code?",
-  options: ["Cancel — use cached account", "Abort the run"]
-).other_text   # the user types the code via the "Other" free-text path
+# Resolve the workshop code
+if ($interview.account_choice == 'redeem_with_cached_code') {
+  $workshopCode = DPAPI_decrypt('runtime/account/workshop_code.enc')
+} else {
+  $workshopCode = AskUserQuestion(
+    question: "What is the workshop code?",
+    options: ["Cancel — use cached account", "Abort the run"]
+  ).other_text
+}
 
 _browser_wait_for(text: "Workshop Pass Code", time: 30)
 _browser_evaluate(function: (code) => {
@@ -83,6 +96,8 @@ _browser_evaluate(function: () => {
 After submitting, the chat usually transitions to an "Agent Training Assistant" greeting card. This is normal — credentials are NOT issued at this step; the code gates the rest of the flow but does not itself produce the user. Continue to Card 2.
 
 Save the first 4 chars of the workshop code to `account.meta.json.workshop_code_hint` so audits can correlate runs back to the same event without echoing the secret.
+
+DPAPI-encrypt the full workshop code to `runtime/account/workshop_code.enc` at the end of the redemption flow (after credentials are successfully scraped) so a future Phase 1.5 Q1 can offer `Redeem a new user from the cached workshop code`. Skip this write if the code came from the cached file in the first place — the existing file is already valid.
 
 ### Card 2 — Click "Get a User Account"
 

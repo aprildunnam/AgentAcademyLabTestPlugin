@@ -107,49 +107,45 @@ The four interview questions, in order:
 
 #### Q1. Account — which test account?
 
+**This question is asked every run unless `account_prompt_mode` says otherwise.** The plugin never silently chooses between "cached" and "redeem new" — the user picks.
+
 Governed by `judge-config.yml.execution.account_prompt_mode`:
 
-- `always` (default): always ask, even if cache is valid.
+- `always` (default): always ask, even if cache is valid. Forces the user to opt in.
 - `only_if_expired`: skip only if cached `expires_at` is in the future.
-- `only_if_missing`: skip only if no cached account exists at all.
+- `only_if_missing`: skip only if no cached account exists at all. **Not recommended.**
 
-When asking, use `AskUserQuestion`:
+When asking, use `AskUserQuestion`. The options shown are **conditional on cache state**:
 
-- Question: `Use the cached test account?`
-- Options:
-  - `[Recommended] Use cached: <user_id>` — description: `Cached
-    <relative-time> ago. Expires <expires_at or "unknown">.` (Show only if
-    a cache exists.)
-  - `Redeem a new workshop code` — description: `Discards the cached
-    account and prompts for a fresh workshop code.`
-  - `Abort` — description: `Stop the run before any browser activity.`
+| Cache state                                                          | Options shown                                                                                                                                                                  |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| No cache (`runtime/account/account.meta.json` missing)               | `Redeem a new workshop code` (will prompt for the code), `Abort the run`                                                                                                       |
+| Cache present but `workshop_code.enc` missing (legacy cache)         | `[Recommended] Use cached: <user_id>`, `Redeem a new workshop code`, `Abort the run`                                                                                            |
+| Cache present AND `workshop_code.enc` present (full cache)           | `[Recommended] Use cached: <user_id>`, `Redeem a new user from the cached workshop code` (no code prompt), `Redeem a new workshop code` (prompt for a different code), `Abort` |
 
-If the user picks "Redeem a new..." or no cache exists:
+Option semantics:
+
+- **`Use cached: <user_id>`** — Reuse the existing DPAPI-cached credentials. **No workshop code prompt** — the user already exists, there is no need to redeem again. Description: `Cached <relative-time> ago. Expires <expires_at or "unknown">.`
+- **`Redeem a new user from the cached workshop code`** — Only shown when `workshop_code.enc` (DPAPI-encrypted full code) is present. Decrypts the cached code, prompts for nothing, runs the redemption flow with the cached code. Description: `Issues a fresh workshop user from the same code (hint: <workshop_code_hint>...) without re-asking for it.`
+- **`Redeem a new workshop code`** — Discards the cached code (if any) and prompts the user for a fresh code via `AskUserQuestion`. Description: `Prompts for a new workshop code. Use this when the cached code is exhausted or you're switching events.`
+- **`Abort the run`** — Description: `Stop the run before any browser activity.`
+
+If the user picks one of the two redemption options:
 
 1. Read `config/workshop.yml.portal_kind` (`chatbot | skillable | email`).
-2. **Workshop code prompt (single user input during redemption).** When
-   `workshop_code_required: true` (the default — a workshop code is required
-   unless using a cached account), prompt the user via `AskUserQuestion`:
-   - Question: `What is the workshop code?`
-   - Options: `Cancel — use cached account`, `Abort the run`. The user
-     types the actual code via the auto-provided "Other" free-text path.
-   - Save the first 4 chars to `account.meta.json.workshop_code_hint` for
-     future audit correlation. Never log the full code anywhere.
-3. Dispatch the portal-specific redemption flow. Each flow consumes the
-   workshop code (if required) and the deterministic config values from
-   `config/workshop.yml.chatbot_account_request_form` and
-   `config/workshop.yml.account_new_password_pattern` — **no further
-   `AskUserQuestion` calls during redemption**:
-   - `chatbot` → follow `references/workshop-redemption-chatbot.md` (Cards
-     1–5 + AAD sign-in + first-login password change).
+2. **Determine where the workshop code comes from**:
+   - If the user picked `Redeem a new user from the cached workshop code`, decrypt `runtime/account/workshop_code.enc` via DPAPI. No `AskUserQuestion` prompt is needed.
+   - Otherwise, prompt the user via `AskUserQuestion`:
+     - Question: `What is the workshop code?`
+     - Options: `Cancel — use cached account` (if cache exists), `Abort the run`. The user types the actual code via the auto-provided "Other" free-text path.
+3. Dispatch the portal-specific redemption flow. Each flow consumes the workshop code (if required by `workshop_code_required: true`) and the deterministic config values from `config/workshop.yml.chatbot_account_request_form` and `config/workshop.yml.account_new_password_pattern` — **no further `AskUserQuestion` calls during redemption**:
+   - `chatbot` → follow `references/workshop-redemption-chatbot.md` (Cards 1–5 + AAD sign-in + first-login password change).
    - `skillable` (or missing) → follow `references/workshop-redemption.md`.
-   - `email` → submit code on the portal, detect "check your email", then
-     use `AskUserQuestion` to collect username/password (optional tenant),
-     then continue.
+   - `email` → submit code on the portal, detect "check your email", then use `AskUserQuestion` to collect username/password (optional tenant), then continue.
 4. For all kinds, finish with the same AAD sign-in + caching path:
-   keep the MCP browser session authenticated, DPAPI-encrypt the NEW
-   password (after the first-login change) into `credential.enc`, and
-   write `account.meta.json` with `password_changed_on_first_login: true`.
+   - DPAPI-encrypt the **new** password (after the first-login change) into `runtime/account/credential.enc`.
+   - DPAPI-encrypt the **full workshop code** into `runtime/account/workshop_code.enc` so the user can later choose `Redeem a new user from the cached workshop code` without retyping it.
+   - Write `runtime/account/account.meta.json` with `user_id`, `tenant_hint`, `workshop_code_hint` (first 4 chars only), `cached_at`, `expires_at`, `run_id`, `signed_in_at`, `password_changed_on_first_login: true`.
 
 The redemption flow is responsible for first-run portal setup too: if
 `config/workshop.yml.workshop_portal_url` is still
