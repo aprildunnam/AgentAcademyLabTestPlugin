@@ -1,6 +1,6 @@
 ---
 description: Shortcut for `/audit-event --event bootcamp`. Audits every lab in the Architecture Bootcamp event end-to-end.
-argument-hint: "[--resume <run-id>] [--labs slug1,slug2,...] [--no-issue] [--force-issue]"
+argument-hint: "[--resume <run-id>] [--labs slug1,slug2,...] [--no-issue] [--force-issue] [--model-preset <optimized|opus|custom>]"
 ---
 
 # /audit-bootcamp
@@ -27,6 +27,7 @@ Parse these flags:
 - `--static-only` — opt out of the interactive UI phase for this run. Static analysis (markdown, links, images, structure) still runs for every lab. The interview skips the phase-mix question (Q2). The default (no flag) is to ask interactively. Use `--static-only` only when you want a doc-only sweep; the resulting findings will not catch UI drift in the live product.
 - `--interactive-only` — opt out of the static analysis fan-out for this run. Assumes a previous run produced `findings-static.json` for each in-scope lab and merges them at lab completion. The interview skips the phase-mix question (Q2). Useful for re-verifying a previously-audited lab after a product release.
 - `--account-prompt <always|only_if_expired|only_if_missing>` — override `judge-config.yml.execution.account_prompt_mode` for this run. Default is whatever the config says (ships as `always`). Controls only the account question (Q1); the other interview questions are governed by their own flags.
+- `--model-preset <optimized|opus|custom>` — choose the sub-agent model preset without interactive Q2a. Orchestrator is always Opus.
 
 ## Pre-flight context
 

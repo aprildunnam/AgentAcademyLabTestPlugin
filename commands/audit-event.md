@@ -1,6 +1,6 @@
 ---
 description: Audit every lab in a workshop event end-to-end (bootcamp, buildathon, MCS-in-a-Day, etc.); file one GitHub issue per lab with findings.
-argument-hint: "[--event <key>] [--resume <run-id>] [--labs slug1,slug2,...] [--no-issue] [--force-issue] [--static-only] [--interactive-only] [--no-update-screenshots] [--account-prompt <mode>]"
+argument-hint: "[--event <key>] [--resume <run-id>] [--labs slug1,slug2,...] [--no-issue] [--force-issue] [--static-only] [--interactive-only] [--no-update-screenshots] [--account-prompt <mode>] [--model-preset <optimized|opus|custom>]"
 ---
 
 # /audit-event
@@ -23,6 +23,7 @@ Parse these flags:
 - `--interactive-only` — opt out of the static analysis fan-out for this run. Assumes a previous run produced `findings-static.json` for each in-scope lab and merges them at lab completion. The interview skips Q2.
 - `--no-update-screenshots` (alias `--no-append-to-pr`) — opt out of the **default-on** screenshot refresh onto any open fix-PR. Screenshot files only; same-author only; mergeable PRs only; never creates a new branch or PR.
 - `--account-prompt <always|only_if_expired|only_if_missing>` — override `judge-config.yml.execution.account_prompt_mode` for this run. Controls only Q1.
+- `--model-preset <optimized|opus|custom>` — choose the sub-agent model preset without interactive Q2a. The orchestrator is always Opus (asserted in Phase 1). `optimized` is the recommended default (~$50 per bootcamp run, ~85% completion). `opus` forces every sub-agent to Opus (~$140, ~90% completion). `custom` halts the run so you can edit per-function overrides in `config/judge-config.yml.execution.model.*`.
 
 ## Pre-flight context
 
