@@ -179,8 +179,24 @@ Two mitigations, either of which the lab text should describe before the test st
 - Tenant-specific URL — the lab must supply it via a step. Workshop accounts get tenant-scoped SharePoint at `<workshopId>.sharepoint.com`.
 - "Create site" wizard has a multi-step flow with selector text that varies by tenant template. Lean on visible-text targeting (`Communication site` button), not CSS.
 
+## Screenshot freshness — UI drift findings imply screenshot drift
+
+When a lab finding describes UI drift in the live product — a control renamed, a button moved, a dialog re-organized, a setting label changed — the **screenshot(s) referenced near the affected step are almost certainly also stale**. A lab fix PR that only rewrites the markdown but leaves the old screenshot in place puts the next reader into the same confusion the audit just discovered: the body text and the picture say different things.
+
+**Standing rule for any audit that produces a lab fix PR for UI drift:**
+
+1. Identify every image-ref (`![...](images/...)`) in the same section as the relabeled instruction or moved control. Most labs put the screenshot one or two paragraphs after the instruction it depicts; check the surrounding scene.
+2. Take a fresh screenshot of the new UI state — same control, same surrounding context, same approximate framing as the existing image.
+3. Save it over the existing PNG at `labs/<slug>/images/<file>.png` so the existing markdown reference resolves to the updated picture without further edits. Same filename, new content.
+4. Include the screenshot replacement in the same PR as the markdown fix — not a follow-up PR, not "TODO refresh image later." If the PR ships markdown-only when the image is also stale, a learner running the lab next will hit the same drift again.
+
+The audit driver SHOULD take the screenshot during the audit run when it detects the drift (so the lab fix PR can ship a complete change in one commit), but if the screenshot wasn't captured at audit time, capture it explicitly before opening the fix PR.
+
+The only exception: when the maintainer's fix-PR description explicitly defers the image refresh ("Refresh `images/foo.png` is tracked separately in #N"), the markdown-only PR can ship without the image — but the deferral must be called out in the PR body's Test plan so it isn't silently forgotten.
+
 ## Anti-patterns
 
 - **Do not use raw CSS or XPath selectors.** Always go through `_browser_snapshot` and target by ref. The DOM in M365/Power Platform changes between releases; visible text is more stable.
 - **Do not skip the snapshot before a click.** The snapshot ref must come from a snapshot taken in the same step; using a stale ref will throw.
 - **Do not click "Cancel" or "Discard" if a step seems wrong.** Halt the lab as `error` instead — destructive actions can corrupt prior steps' state.
+- **Do not ship a UI-drift lab fix without refreshing the affected screenshots.** See the "Screenshot freshness" section above. Markdown-only fixes leave the screenshot saying the old wording; the next learner hits the same confusion.

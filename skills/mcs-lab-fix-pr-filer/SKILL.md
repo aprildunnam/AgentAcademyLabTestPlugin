@@ -91,6 +91,20 @@ For each finding with non-null `proposed_screenshot_replacement`:
 
 Track `screenshots_replaced` count for the commit message.
 
+### 4a. Detect missing screenshot replacements for UI-drift findings
+
+Before moving on to step 5, scan applied findings for the case where the audit caught **UI drift** (a renamed control, moved button, re-organized dialog, changed label) but the finding does NOT have a `proposed_screenshot_replacement` populated. This is exactly the case where the lab's screenshot will be stale even after the markdown fix lands — the body text says the new label, the picture still shows the old one. See `mcs-lab-auditor/references/playwright-cookbook.md` → "Screenshot freshness" for the standing rule.
+
+For each such finding, before committing:
+
+1. Identify any image-ref in the same scene as the relabeled instruction line. Most labs put `![...](images/foo.png)` one or two paragraphs after the instruction it depicts. Look for image references within the `_labs/<slug>.md` section being edited.
+2. If an image-ref exists within the affected scene and the file at `labs/<slug>/images/<file>.png` shows the **old** UI state (i.e. the same surface the audit just observed has been relabeled), the screenshot is stale.
+3. The audit driver should already have captured a fresh screenshot for this surface during the run — look for it in `runs/<run-id>/labs/<slug>/screenshots/`. If found, copy it over `labs/<slug>/images/<file>.png`.
+4. If no fresh screenshot was captured (the driver missed the image-ref → instruction mapping during the run), open a separate audit-loop iteration to capture one before proceeding. Do not skip — record `{finding_id, screenshot_refresh: pending_capture, image_path}` in `pr-apply-log.json` and request the screenshot from the orchestrator before commit.
+5. If the maintainer's fix PR explicitly defers the image refresh (e.g. an explicit "deferred to follow-up" annotation in the finding), record the deferral in the PR body's Test plan under an unchecked checkbox: `- [ ] Refresh \`images/<file>.png\` to show the current UI`. Never silently ship the markdown-only fix.
+
+Track `screenshots_implied_stale` and `screenshots_refreshed_from_audit_run` counts for the commit message and PR body. If `screenshots_implied_stale > screenshots_refreshed_from_audit_run + screenshots_deferred`, the gap is a process failure — log it loudly so the orchestrator can flag it on the next run.
+
 ### 5. Sanity check
 
 ```bash
