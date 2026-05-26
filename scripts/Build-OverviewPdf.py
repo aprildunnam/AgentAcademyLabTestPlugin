@@ -443,11 +443,12 @@ def build_story(styles):
         ["1", "Overview", "what the plugin does, top-level entry points"],
         ["2", "Why a CUA cannot replace this", "interview, correction loop, verdicts, static checks, PR authoring"],
         ["3", "Architecture", "boundaries, components, run lifecycle, cross-lab consistency"],
-        ["4", "Installation", "prerequisites, step-by-step, first run"],
+        ["4", "Installation", "prerequisites, step-by-step, first run, Claude Code + Copilot CLI"],
         ["5", "Configuration", "workshop.yml + judge-config.yml keys"],
         ["6", "Troubleshooting", "common failure modes"],
         ["7", "Known limitations", "what this plugin will not do"],
-        ["8", "Read next", "where to find the operational rulebooks"],
+        ["8", "Projected token spend", "per-step / per-lab / per-event estimates + cost knobs"],
+        ["9", "Read next", "where to find the operational rulebooks"],
     ]
     toc_styled = []
     for n, title, hint in toc_rows:
@@ -887,8 +888,134 @@ def build_story(styles):
         "Cross-lab consistency in single-lab runs is discovery-limited - it can only diff against previously-audited siblings on disk.",
     ]))
 
-    # ==================== 8. Read next ====================
-    story.extend(section_opener(styles, 8, "Read next", eyebrow="Operational references"))
+    # ==================== 8. Projected token spend ====================
+    story.append(PageBreak())
+    story.extend(section_opener(styles, 8, "Projected token spend", eyebrow="What it costs to run"))
+    story.append(P(styles, "lede",
+        "These are field estimates calibrated against the bootcamp runs done during the "
+        "May 2026 audit cycle. Token spend is dominated by the per-step LLM judge call - "
+        "every other line item rounds to noise next to it."
+    ))
+
+    story.append(P(styles, "h2", "Method"))
+    story.append(P(styles, "body",
+        "Measured one representative bootcamp lab end-to-end "
+        "(<font face='Courier'>core-concepts-agent-knowledge-tools</font>): 77 executable steps after the "
+        "parser-spec pass, across 4 use cases and 16 scenes. The 11-lab bootcamp totals "
+        "~720 judge-relevant steps. Other events are scaled by their step counts."
+    ))
+
+    story.append(P(styles, "h2", "Per-step token budget"))
+    story.append(P(styles, "body",
+        "Each step's judge call assembles a structured prompt around the parsed instruction "
+        "plus the live UI evidence. Typical breakdown:"
+    ))
+    perstep_rows = [
+        ["Input segment", "Tokens (avg)", "Notes"],
+        ["Step instruction (raw_markdown + hints + sub-bullets)", "~800", "Bounded by parser output, ~109 chars per step measured."],
+        ["CTX_VARS from prior UCs", "~500", "Agent names, schema names, knowledge URLs created upstream."],
+        ["Before-snapshot (accessibility tree)", "~2,000", "Copilot Studio dialogs are dense; range 1.5-3k."],
+        ["After-snapshot", "~2,000", "Same shape as before-snapshot."],
+        ["Screenshot (vision)", "~1,500", "Token-equivalent for the page image."],
+        ["Console + failed-network excerpts", "~300", "Usually small; large on broken steps."],
+        ["Judge prompt scaffolding + JSON contract", "~600", "Stable across runs; benefits most from prompt cache."],
+        ["TOTAL input per step", "~7,700", "Range observed: 6.5k - 9.5k."],
+        ["TOTAL output per step", "~300", "Most steps pass (short verdict); findings add 200-400."],
+    ]
+    story.append(header_table(perstep_rows, [2.6 * inch, 1.0 * inch, 2.6 * inch]))
+
+    story.append(callout(styles, "Critique pass",
+        "Default-on. Only fires for non-pass verdicts (~10-20% of steps), so the realistic "
+        "overhead is ~12% added input and ~10% added output across the run - not 100%. "
+        "Disable in <font face='Courier'>config/judge-config.yml</font> with <font face='Courier'>critique.enabled: false</font> if "
+        "you're cost-sensitive and willing to accept a higher false-positive rate.",
+        kind="info",
+    ))
+
+    story.append(P(styles, "h2", "Per-lab estimate"))
+    perlab_rows = [
+        ["Lab", "Steps (parsed)", "Input tokens (M)", "Output tokens (k)"],
+        ["agent-builder-m365", "~50", "0.50", "25"],
+        ["core-concepts-agent-knowledge-tools (measured)", "77", "0.76", "35"],
+        ["core-concepts-variables-agents-channels", "~60", "0.59", "28"],
+        ["core-concepts-analytics-evaluations", "~60", "0.59", "28"],
+        ["mcs-alm", "~40", "0.40", "20"],
+        ["component-collections", "~45", "0.45", "22"],
+        ["mcs-tools (largest)", "~135", "1.36", "55"],
+        ["mcs-orchestration", "~80", "0.79", "36"],
+        ["mcs-governance", "~85", "0.84", "38"],
+        ["mcs-multi-agent", "~75", "0.74", "34"],
+        ["autonomous-account-news", "~40", "0.40", "20"],
+        ["Bootcamp total (11 labs)", "~720", "~7.4 M", "~330 k"],
+    ]
+    story.append(header_table(perlab_rows, [2.6 * inch, 1.0 * inch, 1.3 * inch, 1.3 * inch]))
+    story.append(P(styles, "body",
+        "Includes: per-step judge calls + critique overhead + parser pass + static-phase fan-out "
+        "+ cross-lab consistency + UC handoff state files + per-lab issue and PR rendering + "
+        "orchestrator coordination. Excludes: account redemption (one-time ~20k), interview "
+        "(~5k), and Claude Code's own prompt-cache reuse (which materially lowers the realized "
+        "cost - see &quot;Prompt cache effect&quot; below)."
+    ))
+
+    story.append(P(styles, "h2", "Per-event estimate"))
+    perevent_rows = [
+        ["Event", "Labs", "Input tokens", "Output tokens"],
+        ["bootcamp", "11", "~7.4 M", "~330 k"],
+        ["agent-buildathon-1month", "8", "~5.4 M", "~250 k"],
+        ["azure-ai-workshop", "5", "~3.4 M", "~150 k"],
+        ["mcs-in-a-day", "5", "~3.0 M", "~135 k"],
+        ["mcs-in-a-day-v2", "4", "~2.5 M", "~115 k"],
+        ["agent-buildathon-1day", "2", "~1.0 M", "~45 k"],
+    ]
+    story.append(header_table(perevent_rows, [2.2 * inch, 0.7 * inch, 1.6 * inch, 1.4 * inch]))
+
+    story.append(P(styles, "h2", "USD ranges (without prompt caching)"))
+    story.append(P(styles, "body",
+        "Multiplied through with model pricing as of late 2025. Prompt caching can cut "
+        "realized input cost 50-90% on repeated reads of stable content (schema files, "
+        "judge templates, parser spec) - see the next subsection."
+    ))
+    cost_rows = [
+        ["Model", "$/Mtok in", "$/Mtok out", "Per medium lab", "Per bootcamp event"],
+        ["Opus 4.7", "$15", "$75", "~$13-18", "~$140"],
+        ["Sonnet 4.6", "$3", "$15", "~$3-4", "~$28"],
+        ["Haiku 4.5", "$1", "$5", "~$1", "~$9"],
+        ["Mixed (Opus orch + Sonnet judge)", "-", "-", "~$5", "~$50"],
+    ]
+    story.append(header_table(cost_rows, [2.4 * inch, 0.8 * inch, 0.8 * inch, 1.1 * inch, 1.1 * inch]))
+    story.append(callout(styles, "Prompt cache effect",
+        "The Anthropic prompt cache has a 5-minute TTL. Within a single audit run, "
+        "the parser spec, finding schema, judge template, and lab-config catalog are "
+        "read repeatedly across every per-UC subagent and every per-step judge call. "
+        "Empirically the cache hit rate for those segments lands in the 70-90% range, "
+        "which trims realized input cost on Opus from ~$110 to roughly $30-60 for a "
+        "full bootcamp run. The exact realized cost depends on how many subagents "
+        "spawn in parallel (each one pays the cold cache once) and how much the "
+        "browser session lingers on the same page between steps.",
+        kind="info",
+    ))
+
+    story.append(P(styles, "h2", "Knobs to reduce spend"))
+    story.extend(bullets(styles, [
+        "<b>--static-only</b> - skips Phase 2 entirely. Cuts ~95% of input tokens. Useful for doc-only sweeps where you just want spelling, link, image-ref, and cross-lab drift findings. Trade-off: misses live UI drift.",
+        "<b>critique.enabled: false</b> in <font face='Courier'>config/judge-config.yml</font> - cuts ~10-15%. Raises false positives slightly; the issue body's &quot;low confidence&quot; markers compensate.",
+        "<b>Smaller judge model</b> - the judge call dominates spend, so dropping the judge from Opus to Sonnet (while keeping the orchestrator on Opus) yields the best $-per-coverage trade. Configure via the model field in the judge prompt (see <font face='Courier'>references/llm-judge-prompts.md</font>).",
+        "<b>--labs csv</b> - cap scope to the labs you actually care about. Cost scales linearly with step count.",
+        "<b>Reuse the cached account</b> - <font face='Courier'>account_prompt_mode: only_if_expired</font> avoids re-running redemption (~20k tokens). Accept the safety trade-off documented in Phase 1.5.",
+        "<b>Resume rather than restart</b> - <font face='Courier'>/audit-event --resume &lt;run-id&gt;</font> skips finished UCs and replays their state files instead of re-judging.",
+    ]))
+
+    story.append(callout(styles, "Bottom line",
+        "Plan ~$30-$60 per full bootcamp audit run on Opus 4.7 with prompt caching, or "
+        "~$5-$12 per single-lab run. Sonnet-as-judge with Opus orchestrator drops those "
+        "to ~$10-$15 and ~$2-$3 respectively. Static-only sweeps are effectively free "
+        "(under $1 across all 11 labs). Token spend is dominated by per-step judge calls "
+        "- the static and orchestrator phases are rounding error.",
+        kind="good",
+    ))
+
+    # ==================== 9. Read next ====================
+    story.extend(section_opener(styles, 9, "Read next", eyebrow="Operational references"))
     refs = [
         ("skills/mcs-lab-auditor/SKILL.md", "Full orchestrator procedure."),
         ("skills/mcs-lab-auditor/references/cross-lab-consistency.md", "Cross-lab drift algorithm + finding format."),
