@@ -127,14 +127,29 @@ When asking, use `AskUserQuestion`:
 If the user picks "Redeem a new..." or no cache exists:
 
 1. Read `config/workshop.yml.portal_kind` (`chatbot | skillable | email`).
-2. Dispatch redemption flow:
-   - `chatbot` → follow `references/workshop-redemption-chatbot.md`.
+2. **Workshop code prompt (single user input during redemption).** When
+   `workshop_code_required: true` (the default — a workshop code is required
+   unless using a cached account), prompt the user via `AskUserQuestion`:
+   - Question: `What is the workshop code?`
+   - Options: `Cancel — use cached account`, `Abort the run`. The user
+     types the actual code via the auto-provided "Other" free-text path.
+   - Save the first 4 chars to `account.meta.json.workshop_code_hint` for
+     future audit correlation. Never log the full code anywhere.
+3. Dispatch the portal-specific redemption flow. Each flow consumes the
+   workshop code (if required) and the deterministic config values from
+   `config/workshop.yml.chatbot_account_request_form` and
+   `config/workshop.yml.account_new_password_pattern` — **no further
+   `AskUserQuestion` calls during redemption**:
+   - `chatbot` → follow `references/workshop-redemption-chatbot.md` (Cards
+     1–5 + AAD sign-in + first-login password change).
    - `skillable` (or missing) → follow `references/workshop-redemption.md`.
-   - `email` → submit code on the portal, detect "check your email", then use
-     `AskUserQuestion` to collect username/password (optional tenant), then continue.
-3. For all kinds, finish with the same AAD sign-in + caching path:
-   keep the MCP browser session authenticated, DPAPI-encrypt
-   `credential.enc`, and write `account.meta.json`.
+   - `email` → submit code on the portal, detect "check your email", then
+     use `AskUserQuestion` to collect username/password (optional tenant),
+     then continue.
+4. For all kinds, finish with the same AAD sign-in + caching path:
+   keep the MCP browser session authenticated, DPAPI-encrypt the NEW
+   password (after the first-login change) into `credential.enc`, and
+   write `account.meta.json` with `password_changed_on_first_login: true`.
 
 The redemption flow is responsible for first-run portal setup too: if
 `config/workshop.yml.workshop_portal_url` is still
