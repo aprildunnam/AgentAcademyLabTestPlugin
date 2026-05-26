@@ -56,7 +56,11 @@ Test-Path C:\Users\dewainr\mcs-labs\_data\lab-config.yml   # should print True
 
 ## Step 3 — Install the plugin
 
-Clone this repo into your Claude Code user-plugins directory:
+The plugin is a directory of markdown commands, skills, references, and YAML config — no compiled artifacts. Both **Claude Code** and **GitHub Copilot CLI** auto-discover plugins from their respective user-plugins directories; install via `git clone` into the right place.
+
+### Option A — Claude Code (primary, fully tested)
+
+Clone into the Claude Code user-plugins directory:
 
 ```powershell
 git clone https://github.com/microsoft/BootcampLabTestPlugin "$env:USERPROFILE\.claude\plugins\mcs-lab-auditor"
@@ -68,15 +72,42 @@ Confirm the install layout:
 Get-ChildItem "$env:USERPROFILE\.claude\plugins\mcs-lab-auditor" | Select-Object Name
 # expected: .claude-plugin, .gitignore, CHANGELOG.md, CODE_OF_CONDUCT.md,
 #           CONTRIBUTING.md, LICENSE, README.md, SECURITY.md, commands,
-#           config, docs, runtime, skills
+#           config, docs, runtime, scripts, skills
 ```
 
-## Step 4 — Restart Claude Code
+### Option B — GitHub Copilot CLI
 
-Plugins are discovered at session start. Close Claude Code completely and reopen it. After it's back up, type `/` in the prompt and look for:
+The plugin uses the same skill-discovery model as Claude Code (one `Skill`/`skill` tool, plugins auto-discovered from a known directory), so the install pattern is the same — clone into the Copilot CLI plugins directory. The exact directory depends on your Copilot CLI version and platform; find it with `copilot --help` (look for the *plugins* or *extensions* section) or by checking `copilot config get plugins.path` if your version supports it. Then:
 
-- `/audit-bootcamp`
-- `/audit-lab`
+```powershell
+# Example - confirm $copilotPluginsPath against `copilot --help` output first
+git clone https://github.com/microsoft/BootcampLabTestPlugin (Join-Path $copilotPluginsPath "mcs-lab-auditor")
+```
+
+Caveats for Copilot CLI:
+
+- The plugin currently hard-codes a few Windows-specific paths (`C:\Users\dewainr\mcs-labs`, `$env:USERPROFILE\.claude\plugins\mcs-lab-auditor` in the command-file `!` interpolations). Adjust these to use a Copilot-CLI-relative path or to read from an environment variable if you're running outside Claude Code. See [`docs/extending.md`](extending.md#pointing-at-a-different-machine).
+- Workshop-portal redemption uses Playwright via the Claude Code Playwright MCP plugin. If your Copilot CLI session doesn't have an MCP server providing equivalent `mcp__plugin_playwright_playwright__*` tools, the interactive phase won't run — use `--static-only` for doc-audit sweeps and fall back to Claude Code when you need the interactive phase.
+- DPAPI credential storage is Windows-only regardless of which runtime invokes the skill.
+
+### Both at once
+
+Symlink or hardlink the second directory at the first so the plugin lives in one place but both runtimes see it:
+
+```powershell
+# Run as elevated PowerShell if creating a directory symlink
+New-Item -ItemType SymbolicLink `
+  -Path (Join-Path $copilotPluginsPath "mcs-lab-auditor") `
+  -Target "$env:USERPROFILE\.claude\plugins\mcs-lab-auditor"
+```
+
+## Step 4 — Restart your runtime
+
+Plugins are discovered at session start. Close Claude Code (or end your Copilot CLI session) completely and reopen. After it's back up, type `/` in the prompt and look for:
+
+- `/audit-event` (generic — picks the workshop event interactively)
+- `/audit-bootcamp` (shortcut for `/audit-event --event bootcamp`)
+- `/audit-lab` (single lab — with or without a slug)
 - `/audit-report`
 - `/audit-account`
 
@@ -183,21 +214,24 @@ This drives the browser through the entire lab. Expect 5–10 minutes. The plugi
 - Append a clean-pass entry to `runtime/audit-history.yml` and print a success summary; or
 - File a single GitHub issue against `microsoft/mcs-labs` (one issue total for all findings in this lab), with the URL printed in the summary.
 
-## Step 9 — Full bootcamp sweep (when ready)
+## Step 9 — Full event sweep (when ready)
 
-Once one single-lab run looks correct end-to-end:
+Once one single-lab run looks correct end-to-end, you can audit a whole event. The Architecture Bootcamp is the default — but any event in `_data/lab-config.yml.event_configs` works:
 
 ```text
-/audit-bootcamp
+/audit-bootcamp                              # shortcut: event = bootcamp
+/audit-event --event agent-buildathon-1month # any other event by key
+/audit-event                                 # generic — interview picks the event
 ```
 
-Expect 3–8 hours for the full 11 labs. The plugin checkpoints at every scene boundary; if it dies mid-run, you can resume:
+Expect 3–8 hours for the bootcamp's 11 labs (other events vary by lab count). The plugin checkpoints at every scene boundary; if it dies mid-run, you can resume:
 
 ```text
 /audit-bootcamp --resume <run-id>
+/audit-event --resume <run-id>     # if the run was a non-bootcamp event
 ```
 
-(The `<run-id>` is printed at the start of each run and recorded in `runtime/runs/<run-id>/manifest.yml`.)
+(The `<run-id>` is printed at the start of each run and recorded in `runtime/runs/<run-id>/manifest.yml`. Resume inherits the prior run's `event`, `phase_mix`, and `scope_labs`.)
 
 ---
 

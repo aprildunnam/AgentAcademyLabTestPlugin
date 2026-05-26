@@ -35,7 +35,16 @@ suggested_correction:
 flags:
   non_deterministic: <bool>
   parser_warning: <bool>         # true for findings emitted by the parser, not the judge
+  cross_lab_drift: <bool>        # true for findings emitted by the cross-lab consistency fan-in (see cross-lab-consistency.md)
   critique_pass_survived: <bool> # set after critique judge pass; if false, finding is downgraded
+```
+
+Additional evidence fields exist for cross-lab drift findings:
+
+```yaml
+evidence:
+  cross_lab_canonical_from: [<lab-slug>, ...]   # which sibling labs agree on the canonical form
+  cross_lab_divergent_lines: [L<n>, L<n>, ...]   # line numbers in the divergent lab where the token appears
 ```
 
 ## Outcomes
@@ -82,3 +91,15 @@ Parser warnings (validation failures, lab typos detected at parse time) use:
 - `evidence` populated with line numbers (`line_number: 175`) instead of screenshots.
 
 These still go into the per-lab issue, but are visually separated in the issue body under a "Static analysis" heading.
+
+## Cross-lab drift findings
+
+Cross-lab drift findings are emitted by the static-fan-in pass described in `cross-lab-consistency.md`. They use:
+
+- `outcome: broken`
+- `severity: low` always — divergent text is a polish issue, not a blocker.
+- `confidence: 0.85` by default, `0.65` when the underlying shape match is borderline (similarity 0.85–0.90).
+- `flags.parser_warning: true` AND `flags.cross_lab_drift: true`.
+- `evidence.cross_lab_canonical_from` + `evidence.cross_lab_divergent_lines` populated; no screenshot.
+
+Issue bodies render cross-lab drift findings under a dedicated "Cross-lab consistency" section, separate from the regular "Static analysis" section, so maintainers can see at a glance whether the issue is a per-lab drift fix or a true UI-versus-lab mismatch.

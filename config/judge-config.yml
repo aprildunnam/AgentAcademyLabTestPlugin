@@ -150,5 +150,19 @@ existing_state:
   check_open_prs: true          # required for pr_append to fire
   cache_file: "existing-state.yml"   # written under runs/<run-id>/
 
+# --- Cross-lab consistency check (Phase 1.7 step 1a) ---
+# After per-lab static fan-out completes, an extra fan-in pass groups scenes
+# by shape hash across the lab set and flags identifier-token drift between
+# sibling labs (e.g. "Address 1: State/Province" vs "Address1: State or
+# Providence" in two labs that verify the same Account columns). Findings
+# are severity `low` and tagged with `flags.cross_lab_drift: true`. Full
+# algorithm in `skills/mcs-lab-auditor/references/cross-lab-consistency.md`.
+consistency:
+  cross_lab_enabled: true                  # off → skip the fan-in pass entirely
+  cross_lab_similarity_threshold: 0.85     # SequenceMatcher.ratio() threshold for "near-match drift"
+  cross_lab_borderline_floor: 0.85         # findings between this and `cross_lab_high_confidence_floor` get confidence 0.65
+  cross_lab_high_confidence_floor: 0.90    # findings at or above this get confidence 0.85
+  cross_lab_min_cluster_size: 2            # shapes shared by fewer labs are ignored (single-lab clusters always are)
+
 # --- Plugin version (written into manifest.yml and issue bodies) ---
 plugin_version: "0.1.0"

@@ -1,6 +1,8 @@
 # BootcampLabTestPlugin (`mcs-lab-auditor`)
 
-A Claude Code plugin that audits every lab in the [`microsoft/mcs-labs`](https://github.com/microsoft/mcs-labs) **bootcamp event** end-to-end. It drives the live product UI with Playwright, has an LLM judge compare observed behavior to each written instruction, and files **one GitHub issue per lab** against `microsoft/mcs-labs` whenever steps are broken or unclear. Clean labs produce a local-only entry in an audit-history log — no GitHub activity at all when nothing's wrong.
+A Claude Code plugin that audits labs in the [`microsoft/mcs-labs`](https://github.com/microsoft/mcs-labs) repository end-to-end. It drives the live product UI with Playwright, has an LLM judge compare observed behavior to each written instruction, and files **one GitHub issue per lab** (plus a matching fix-PR) against `microsoft/mcs-labs` whenever steps are broken or unclear. Clean labs produce a local-only entry in an audit-history log — no GitHub activity at all when nothing's wrong.
+
+The auditor is **event-aware**: any workshop entry defined in `_data/lab-config.yml.event_configs` (bootcamp, buildathons, MCS-in-a-Day variants, the Azure AI workshop, anything added in the future) is a valid scope. Single labs can also be audited individually against the full `lab_metadata` catalog — independent of any event.
 
 **The plugin writes to the mcs-labs repo through two narrow paths.** (a) `gh issue create | comment | edit` for issues + label hygiene (always on). (b) A screenshots-only commit appended to an **already-open** fix-PR for a lab when one exists, the PR is authored by the current user, and the PR is mergeable — this is on by default and can be suppressed with `--no-update-screenshots` / `--no-append-to-pr` (CLI) or `issues.pr_append.enabled_by_default: false` (config). The plugin never opens new pull requests and never creates new branches. See `skills/mcs-lab-pr-appender/SKILL.md`.
 
@@ -14,30 +16,40 @@ A Claude Code plugin that audits every lab in the [`microsoft/mcs-labs`](https:/
 
 | Command | Purpose |
 |---|---|
-| `/audit-bootcamp [--resume <id>] [--labs csv] [--no-issue]` | Audit every lab listed in `_data/lab-config.yml` → `lab_orders.event.bootcamp`. |
-| `/audit-lab <slug> [--no-issue] [--dry-run]` | Audit a single lab. `--dry-run` exercises only the markdown parser. |
+| `/audit-event [--event <key>] [--resume <id>] [--labs csv] [--no-issue]` | Audit every lab in a workshop event. With `--event <key>`, the event is pinned; without it, the run-start interview asks. Generic over all events defined in `_data/lab-config.yml.event_configs`. |
+| `/audit-bootcamp [--resume <id>] [--labs csv] [--no-issue]` | Shortcut for `/audit-event --event bootcamp`. Audits every lab listed in `_data/lab-config.yml.bootcamp_lab_orders`. |
+| `/audit-lab [<slug>] [--no-issue] [--dry-run]` | Audit a single lab. With `<slug>`, the slug pins scope. Without, the run-start interview picks one from the **full all-labs catalog** (`lab_metadata.*`). `--dry-run` exercises only the markdown parser. |
 | `/audit-report [<run-id>]` | Print a local summary of recent audit runs. |
 | `/audit-account [show\|redeem\|clear]` | Manage the DPAPI-cached workshop-issued test account. |
 
 ## How it works
 
-1. **Run-start account prompt.** Each `/audit-*` command first checks for a cached test account (`runtime/account/account.meta.json`). If found, prompts to reuse it (showing the cached `user_id`) or redeem a fresh workshop code via the workshop portal. Issued credentials are encrypted with Windows DPAPI (current-user scope) at `runtime/account/credential.enc`.
-2. **Lab parsing.** Each lab's markdown is split into use cases (`### Use Case #N`), scenes (`####`), and numbered steps. Alert blocks (`> [!IMPORTANT]`, `> [!TIP]`, etc.) attach to the preceding step as hints. Image references attach as semantic visual hints. Non-deterministic markers (`may differ`, `may vary`) are flagged.
-3. **Step execution.** Each step is dispatched to the Playwright MCP using an action classifier (`navigate | click | type | select | wait | inspect`). Accessibility snapshots are captured before and after each step.
-4. **Step judging.** An LLM judge inspects the snapshots + screenshot and returns a structured JSON verdict (`pass | broken | unclear | non_deterministic | transient | cannot_verify`) with confidence and a suggested correction. An optional second-pass critique judge filters out false positives.
-5. **Issue or log.** If any findings clear the confidence threshold, one GitHub issue is filed per lab (or a comment added to an existing open issue for the same lab via label-based de-duplication). Otherwise, a clean entry is appended to `runtime/audit-history.yml`.
+1. **Run-start interview.** Every `/audit-*` command first runs an interactive interview (`AskUserQuestion`): which account, which phase mix (static / interactive / both), which scope (event or single lab), which event (if scope = event), or which lab (if scope = one). Each question is skipped only when a CLI flag or entry-point command already provides the answer — silent defaults aren't allowed because they have caused real audit runs against the wrong tenant.
+2. **Lab parsing.** Each lab's markdown is split into use cases (`### Use Case #N`), scenes (`####`), and numbered steps. Alert blocks (`> [!IMPORTANT]`, `> [!TIP]`, etc.) attach to the preceding step as hints. Image references attach as semantic visual hints. Non-deterministic markers (`may differ`, `may vary`) are flagged. The parser also emits a `scene-fingerprints.json` sidecar per lab feeding the cross-lab consistency pass below.
+3. **Static fan-out + cross-lab consistency.** Each lab gets a background static subagent (markdown checks, link checks, image-ref resolution, prereq sanity). After all per-lab subagents return, a single fan-in pass groups scenes by shape hash across the lab set and flags identifier-token drift between sibling labs (e.g. `Address 1: State/Province` vs `Address1: State or Providence` in two labs that verify the same UI surface). Findings are severity `low` and tagged `flags.cross_lab_drift: true`.
+4. **Interactive step execution.** Each step is dispatched to the Playwright MCP using an action classifier (`navigate | click | type | select | wait | inspect`). Accessibility snapshots are captured before and after each step. Labs are sliced into per-Use-Case subagents so the orchestrator's context doesn't overflow on 50-step labs.
+5. **Step judging.** An LLM judge inspects the snapshots + screenshot and returns a structured JSON verdict (`pass | broken | unclear | non_deterministic | transient | cannot_verify`) with confidence and a suggested correction. An optional second-pass critique judge filters out false positives.
+6. **Issue + fix-PR, or log.** If any findings clear the confidence threshold, one GitHub issue is filed per lab (or a comment added to the existing open issue), and a matching fix-PR is opened on `dewain/fix-<slug>-content-audit` applying the `suggested_correction` diffs and any refreshed screenshots. Otherwise, a clean entry is appended to `runtime/audit-history.yml`.
 
 ## Installation
 
-Quick path:
+The plugin works in both **Claude Code** and **GitHub Copilot CLI** (same skill-discovery model). Pick whichever runtime(s) you want and clone into the matching plugins directory.
+
+Claude Code (primary, fully tested):
 
 ```powershell
 git clone https://github.com/microsoft/BootcampLabTestPlugin "$env:USERPROFILE\.claude\plugins\mcs-lab-auditor"
 ```
 
-…then restart Claude Code. The four `/audit-*` commands should appear.
+GitHub Copilot CLI (find the plugins directory via `copilot --help` or `copilot config get plugins.path`):
 
-For the full setup including prerequisite checks, workshop portal configuration, hard-coded path adjustments (if your `mcs-labs` clone isn't at `C:\Users\dewainr\mcs-labs`), test-account caching, and a smoke-test sequence: see [`docs/installation.md`](docs/installation.md).
+```powershell
+git clone https://github.com/microsoft/BootcampLabTestPlugin (Join-Path $copilotPluginsPath "mcs-lab-auditor")
+```
+
+…then restart your runtime. The five `/audit-*` commands should appear.
+
+For the full setup — including prerequisite checks, workshop portal configuration, Copilot CLI caveats, hard-coded path adjustments (if your `mcs-labs` clone isn't at `C:\Users\dewainr\mcs-labs`), test-account caching, and a smoke-test sequence — see [`docs/installation.md`](docs/installation.md). For a single-document overview-plus-architecture-plus-install reference, see [`docs/mcs-lab-auditor-overview-and-architecture.pdf`](docs/mcs-lab-auditor-overview-and-architecture.pdf).
 
 ## Prerequisites
 
@@ -54,6 +66,8 @@ For the full setup including prerequisite checks, workshop portal configuration,
 2. /audit-lab core-concepts-analytics-evaluations --dry-run   # smoke-test the parser, no browser
 3. /audit-lab core-concepts-analytics-evaluations   # full single-lab run
 4. /audit-bootcamp                                  # full bootcamp sweep once you trust the single-lab path
+5. /audit-event --event agent-buildathon-1month     # any other event by key
+6. /audit-event                                     # generic — interview picks the event
 ```
 
 ## Configuration

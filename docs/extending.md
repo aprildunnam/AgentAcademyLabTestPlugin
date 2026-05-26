@@ -91,13 +91,23 @@ Several files reference the hard-coded path. Bulk-replace `C:\Users\dewainr\mcs-
 
 This change is bounded (one config key, four file edits) but touches enough places that it's worth doing as a single PR rather than ad-hoc per machine. Open an issue if you want to tackle it.
 
-### Pointing at a different bootcamp event list
+### Adding or auditing a different workshop event
 
-The plugin reads `_data/lab-config.yml` → `lab_orders.event.bootcamp`. If you want to audit a different event (e.g., `lab_orders.event.mcs-in-a-day`):
+As of v0.3.0, event scope is **first-class**. Every workshop entry in `_data/lab-config.yml.event_configs` (bootcamp, buildathons, MCS-in-a-Day variants, the Azure AI workshop, anything added in the future) is a valid `/audit-event --event <key>` target. No plugin edits needed when a new event is added on the mcs-labs side — `event_configs` is read dynamically at run start.
 
-1. Add a `--event` flag to `audit-bootcamp.md` and `audit-lab.md`.
-2. In `SKILL.md` Phase 1.4 (enumerate the lab list), read `lab_orders.event.<event>` instead of hardcoding `bootcamp`.
-3. Update `audit-history.yml` to record `bootcamp_event: <event>` rather than always `bootcamp`.
+What still needs editing if a brand-new event has a structural quirk:
+
+1. **Different lab-dependency chains** — add a chain to `config/judge-config.yml.lab_dependencies` if the new event's labs share tenant state in a non-bootcamp pattern.
+2. **Custom workshop portal** — if the new event uses a different portal kind (Skillable vs chatbot vs email), set `config/workshop.yml.portal_kind` accordingly and follow `references/workshop-redemption*.md`.
+3. **Custom event grouping in the Q3a picker** — the picker's top 3 options come from the most-used events in `runtime/audit-history.yml`; you can also hand-curate the recommended option by editing the option labels in `SKILL.md` Phase 1.5 Q3a.
+
+Auditing a brand-new event with no plugin changes:
+
+```text
+/audit-event --event <new-event-key>
+```
+
+The skill enumerates `event_configs.<new-event-key>.config_key` to get the slug list and proceeds.
 
 ## Adding a new finding outcome
 

@@ -52,8 +52,9 @@ Read whichever you need before doing the corresponding step. Don't try to keep a
 
 | Command | What this skill does |
 |---|---|
-| `/audit-bootcamp [--resume <id>] [--labs csv] [--no-issue]` | Audit every bootcamp lab. |
-| `/audit-lab <slug> [--no-issue] [--dry-run]` | Audit a single lab. |
+| `/audit-event [--event <key>] [--resume <id>] [--labs csv] [--no-issue]` | Audit every lab in a workshop event. With `--event <key>` the event is pinned; without it, Phase 1.5 Q3a picks one. Generic over all events defined in `lab-config.yml.event_configs`. |
+| `/audit-bootcamp [--resume <id>] [--labs csv] [--no-issue]` | Shortcut for `/audit-event --event bootcamp`. Audits every bootcamp lab. Skips Q3 and Q3a in the interview. |
+| `/audit-lab [<slug>] [--no-issue] [--dry-run]` | Audit a single lab. With `<slug>`, the slug pins scope. Without, Phase 1.5 Q4 picks one from the **full all-labs catalog** (`lab_metadata.*`), not constrained to any event. |
 | `/audit-report [<run-id>]` | Summarize `audit-history.yml`. No browser activity. |
 | `/audit-account [show\|redeem\|clear]` | Manage the cached test account. |
 
@@ -74,12 +75,15 @@ Read whichever you need before doing the corresponding step. Don't try to keep a
    ```
    If either fails, halt with a clear message before doing anything else.
 
-4. **Enumerate the lab list**:
+4. **Enumerate the lab catalog AND the active event's lab list**:
    - Read `C:\Users\dewainr\mcs-labs\_data\lab-config.yml`.
-   - Take the ordered list at `lab_orders.event.bootcamp` (key `bootcamp_lab_orders`).
-   - For `/audit-bootcamp`, use the whole list (or the `--labs csv` subset, intersected).
-   - For `/audit-lab`, use exactly the one slug given.
-   - For each slug, confirm `_labs/<slug>.md` exists. If not, record `status: skipped, reason: lab_file_missing` and continue with the next slug — never abort the whole run because one lab is missing.
+   - From `event_configs`, build a map `{event_key → { title, description, config_key, slugs[] }}` for every event defined in the file. `slugs[]` is the ordered list read from the matching `<config_key>` top-level entry (e.g. `bootcamp_lab_orders`, `agent_buildathon_1month_lab_orders`, `mcs_in_a_day_v2_lab_orders`, etc.). Skip the `legacy_lab_orders` table.
+   - From `lab_metadata`, build the **all-labs catalog**: `{slug → { id, title, section, difficulty, duration }}`. This is the picker source for single-lab scope (Phase 1.5 Q4) and the comparison surface for single-lab cross-lab consistency runs.
+   - Determine which event drives the active run:
+     - `/audit-bootcamp` → event = `bootcamp` (pinned).
+     - `/audit-event` → event = the value of `--event <key>` if passed; otherwise resolved by Phase 1.5 Q3a (event picker).
+     - `/audit-lab <slug>` → event is informational only (the run audits a single slug regardless); use the first event whose `slugs[]` contains the slug for display purposes, or `none` if the slug is event-less.
+   - For the active scope (whole event, `--labs csv` subset, or single slug), confirm `_labs/<slug>.md` exists for every chosen slug. If not, record `status: skipped, reason: lab_file_missing` and continue with the next slug — never abort the whole run because one lab is missing.
 
 5. **Run-start account prompt** (see Phase 1.5 below). On `--dry-run`, skip this — `--dry-run` only exercises the parser and writes `steps.json` per lab.
 
@@ -171,63 +175,74 @@ in the run manifest. If "static only" or "interactive only", also set
 `execution.skipped_interactive: true` or `execution.skipped_static: true`
 respectively, with `reason: cli_flag` or `reason: interview`.
 
-#### Q3. Scope — all labs or a single one?
+#### Q3. Scope — an event or a single lab?
 
 Skip this question when ANY of:
-- `--labs <csv>` CLI flag was passed (scope = csv).
-- The entry point is `/audit-lab <slug>` (slug already names the scope).
+- `--labs <csv>` CLI flag was passed (scope = csv → event is the one whose `slugs[]` is a superset of the csv, or `multi` if the csv crosses events).
+- The entry point is `/audit-lab <slug>` (slug already names the scope; scope = `one` immediately).
+- The entry point is `/audit-bootcamp` (scope is implicitly `event=bootcamp` and the question is skipped).
+- The entry point is `/audit-event --event <key>` (scope is `event=<key>` and the question is skipped — but Q3a still runs if no `--event` was passed).
 - `--resume <run-id>` was passed (scope is inherited from the prior manifest).
 
 When asking, use `AskUserQuestion`:
 
-- Question: `Which labs should this run audit?`
+- Question: `What should this run audit?`
 - Options:
-  - `[Recommended] All <N> bootcamp labs` — description: `Run the entire
-    bootcamp event lab list in order, respecting lab_dependencies.`
-  - `Just one lab` — description: `Pick a single lab. Follow-up question
-    will list the choices.`
+  - `[Recommended] A whole event (all its labs)` — description: `Audit every lab in a workshop event in order, respecting lab_dependencies. Follow-up question picks which event.`
+  - `Just one lab` — description: `Pick a single lab from the full mcs-labs catalog. Follow-up question lists choices.`
+
+#### Q3a. Event picker (only if Q3 = "A whole event")
+
+`AskUserQuestion` supports 2–4 options, and the mcs-labs catalog defines 6 events (and growing). Show the most commonly-audited 3 events directly plus an `Other` escape hatch that accepts a free-text event key validated against `event_configs.*`.
+
+Read the option set dynamically from `event_configs` at interview time. The first three options below are the typical defaults; if `event_configs` differs (e.g. an event was added or removed), regenerate the list using these rules:
+
+1. The most-used event in `runtime/audit-history.yml` over the last 30 days is the first option, marked `[Recommended]`.
+2. The two next-most-used events fill the second and third slots.
+3. `Other event (type the key)` is always option 4 — picks any of the remaining events via "Other" free-text. Validate the typed key against the keys of `event_configs`; if invalid, re-ask Q3a with a `(invalid event key: <typed>)` prefix on the question.
+
+For the typical case as of this writing:
+
+- Question: `Which event?`
+- Options:
+  - `[Recommended] Architecture Bootcamp (11 labs)` — description: `bootcamp — Intensive hands-on bootcamp covering progressive AI assistants, core concepts, governance, tools, multi-agent architectures, and autonomous agents.`
+  - `Agent Build-A-Thon, 1 month (8 labs)` — description: `agent-buildathon-1month — Comprehensive month-long agent development program covering declarative agents, autonomous AI, and enterprise deployment patterns.`
+  - `MCS in a Day V2 (4 labs)` — description: `mcs-in-a-day-v2 — Updated full-day workshop covering progressive AI assistants and core Copilot Studio concepts.`
+  - `Other event (type the key)` — description: `Free-text entry. Valid keys: bootcamp, agent-buildathon-1day, agent-buildathon-1month, azure-ai-workshop, mcs-in-a-day, mcs-in-a-day-v2.`
+
+Render each title and description directly from `event_configs.<key>.title` and `event_configs.<key>.description` — never hardcode them in the option labels, so adding a new event only requires a `lab-config.yml` edit.
+
+Once the event is resolved, `scope_labs` is the `slugs[]` from `event_configs.<event>.config_key`.
 
 #### Q4. One-lab picker (only if Q3 = "Just one lab")
 
-Because `AskUserQuestion` supports only 2–4 options per question and the
-bootcamp has 11 labs, ask in two steps:
+The picker source for a single-lab scope is **the full all-labs catalog** (`lab_metadata.*`), NOT one event's `slugs[]`. The user has every lab in the mcs-labs repo to choose from — including specialized, optional, and external labs that no single event includes.
 
-**Q4a — Group**. Use `AskUserQuestion`:
+Because `AskUserQuestion` supports only 2–4 options per question and the catalog has 60+ labs, ask in two steps grouped by `lab_metadata.<id>.section`:
 
-- Question: `Which group is the lab in?`
+**Q4a — Section**. Use `AskUserQuestion`:
+
+- Question: `Which section is the lab in?`
 - Options:
-  - `Foundations (#1-#4)` — description: `agent-builder-m365,
-    core-concepts-* trio.`
-  - `Platform (#5-#7)` — description: `mcs-alm, component-collections,
-    mcs-tools.`
-  - `Advanced (#8-#11)` — description: `mcs-orchestration, mcs-governance,
-    mcs-multi-agent, autonomous-account-news.`
+  - `[Recommended] Core (essential foundations)` — description: `Build Intelligent Agents, Master Variables, Monitor Performance, etc. ~12 labs.`
+  - `Intermediate (practical applications)` — description: `Setup for Success, Ask Me Anything, BYOM, MCS Governance, etc. ~10 labs.`
+  - `Advanced & specialized (autonomous + dev)` — description: `Multi-Agent, Account News, Orchestration, MCP Connectors, Pipelines, etc. ~15 labs.`
+  - `Other (type the slug)` — description: `Free-text entry. Use this for optional/external labs or when you already know the slug.`
 
-**Q4b — Lab in the chosen group**. Render the group's labs as the
-`AskUserQuestion` options, with the lab's title as the description:
+Map sections from `lab_metadata.<id>.section`:
+- "Core" = labs where `section: core`.
+- "Intermediate" = labs where `section: intermediate`.
+- "Advanced & specialized" = labs where `section ∈ {advanced, specialized, optional, external}` (consolidated to keep the question to 4 options).
 
-- Foundations group:
-  1. `agent-builder-m365` — `Build Progressive AI Assistants with Agent
-     Builder in Microsoft 365`
-  2. `core-concepts-agent-knowledge-tools` — title from front-matter
-  3. `core-concepts-variables-agents-channels` — title from front-matter
-  4. `core-concepts-analytics-evaluations` — title from front-matter
-- Platform group:
-  1. `mcs-alm` — title from front-matter
-  2. `component-collections` — title from front-matter
-  3. `mcs-tools` — title from front-matter
-- Advanced group:
-  1. `mcs-orchestration` — title from front-matter
-  2. `mcs-governance` — title from front-matter
-  3. `mcs-multi-agent` — title from front-matter
-  4. `autonomous-account-news` — title from front-matter
+**Q4b — Lab in the chosen section**. Render the section's labs as the `AskUserQuestion` options, with the lab's title (from `lab_metadata.<id>.title` or the front-matter as fallback) as the description.
 
-Read the title from the front-matter `title:` field of each
-`_labs/<slug>.md` at interview time so renamed labs don't drift.
+When a section has more than 4 labs (most do), paginate by listing the first 3 entries plus an explicit `More labs in <section> (type the slug)` option as the 4th. The "Other" free-text response is validated against `lab_metadata.*.id` — if the typed slug isn't in the catalog, re-ask Q4a with `(invalid lab slug: <typed>)` prefix.
 
-If `AskUserQuestion`'s auto-provided "Other" is selected, accept the
-free-text response as a slug and validate it exists in the bootcamp lab
-list. If the typed slug isn't in the list, re-ask Q4a.
+The 3-shown-per-section choice is intentional: most users navigate to a known section, then either see their target in the first 3 or type the slug. Re-asking with full pagination via numeric prefixes was rejected as more clicks than typing.
+
+For "Other (type the slug)" at Q4a, skip Q4b entirely — the free-text response is the chosen slug. Validate it against `lab_metadata.*.id`; if invalid, re-ask Q4a with the validation prefix.
+
+Read the title from `lab_metadata.<id>.title` (the source of truth in `lab-config.yml`) with the front-matter `title:` of `_labs/<slug>.md` as a fallback if `lab_metadata` is unavailable at interview time.
 
 #### Recording the interview outcome
 
@@ -237,10 +252,12 @@ Append all interview answers to the run manifest before Phase 1.7 starts:
 interview:
   account_choice: cached | redeemed | aborted
   phase_mix: static | interactive | both
-  scope: all | one
-  scope_labs: [<slug>, ...]      # the final list driving Phase 1.7
-  skipped_questions:              # questions short-circuited by CLI flags
+  scope: event | one             # "event" → audit the chosen event's lab list; "one" → audit a single slug from the all-labs catalog
+  event: <event-key|null>        # null when scope == one (single-lab runs have no driving event)
+  scope_labs: [<slug>, ...]      # the final list driving Phase 1.7 (always 1+ entries)
+  skipped_questions:              # questions short-circuited by CLI flags or by the entry-point command
     - { question: "phase_mix", reason: "cli_flag: --static-only" }
+    - { question: "event_picker", reason: "command: /audit-bootcamp" }
 ```
 
 After the interview, the orchestrator has:
@@ -322,8 +339,34 @@ reason: <flag|config>`.
    external-URL link-check via `WebFetch`, TOC-anchor sanity, prereq
    sanity, self-consistency between the Use Cases Covered table and the
    real scene headings. Subagents write their findings as
-   `runs/<run-id>/labs/<slug>/findings-static.json`. No browser, no
-   tenant state, no GitHub writes.
+   `runs/<run-id>/labs/<slug>/findings-static.json` AND a sidecar
+   `runs/<run-id>/labs/<slug>/scene-fingerprints.json` (shape hash,
+   identifier tokens, raw-excerpt line numbers — see
+   `references/cross-lab-consistency.md` for the schema). No browser,
+   no tenant state, no GitHub writes.
+
+1a. **Cross-lab consistency fan-in.** After every per-lab static
+    subagent in step 1 has returned, run a single fan-in pass that reads
+    every `scene-fingerprints.json` in scope, groups scenes by shape
+    hash, and emits drift findings for divergent identifier tokens (e.g.
+    `Address 1: State/Province` in one lab vs `Address1: State or
+    Providence` in a sibling). Full algorithm in
+    `references/cross-lab-consistency.md`. Output:
+    `runs/<run-id>/cross-lab-consistency.json` (summary) plus
+    per-lab drift findings appended to each affected lab's
+    `findings-static.json` (flags: `parser_warning: true`,
+    `cross_lab_drift: true`, severity always `low`).
+
+    For a single-lab run (`scope_labs` size 1), the fan-in reads the
+    most recent prior-run `scene-fingerprints.json` for every other lab
+    in `lab_metadata.*.id` (the full all-labs catalog). Labs that have
+    never been audited contribute nothing — the issue body documents
+    this discovery limit.
+
+    Skip when `--dry-run` is set, OR when `--static-only` AND scope size
+    1 AND no prior runs on disk, OR when
+    `judge-config.yml.consistency.cross_lab_enabled: false`. Record
+    `consistency.cross_lab_status` in the run manifest either way.
 
 2. **Interactive phase** (REQUIRED by default — see the callout above)
    topologically sorts the planned labs against `lab_dependencies`. Each

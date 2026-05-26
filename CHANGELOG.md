@@ -6,6 +6,24 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+### Added
+
+- **`/audit-event` slash command** — generic event-audit entry point. Accepts `--event <key>` to pin one of the events defined in `_data/lab-config.yml.event_configs` (`bootcamp`, `agent-buildathon-1day`, `agent-buildathon-1month`, `azure-ai-workshop`, `mcs-in-a-day`, `mcs-in-a-day-v2`, and anything added later). Without `--event`, the Phase 1.5 run-start interview asks Q3a (event picker) to select interactively. Replaces the implicit "bootcamp is the only event" assumption that previously lived in Phase 1.4.
+- **Phase 1.5 Q3a — Event picker.** New interactive question between Q3 (scope) and Q4 (one-lab picker). Reads `event_configs` dynamically and offers the 3 most-used events plus an "Other (type the key)" free-text escape valve. Validates typed event keys against `event_configs.*`.
+- **Phase 1.5 Q4 picker now ranges over the full all-labs catalog**, not just the bootcamp event's `slugs[]`. Picker source is `lab_metadata.*.id`. Two-step grouping is by `section` (Core / Intermediate / Advanced & specialized / Other free-text), preserving the existing `AskUserQuestion` 2-step pattern. Section labels and member counts are computed at interview time from `lab_metadata`.
+- **`/audit-bootcamp` clarified as a thin shortcut** for `/audit-event --event bootcamp` — Q3 and Q3a auto-skip; Q4 only fires if the user explicitly elected single-lab scope. Existing behavior preserved; no breaking change for users still on `/audit-bootcamp`.
+- **Cross-lab consistency check (Phase 1.7 step 1a).** New static-phase fan-in pass that groups scenes across labs by shape hash and emits drift findings for divergent identifier tokens (e.g. `Address 1: State/Province` vs `Address1: State or Providence` in sibling labs). Findings are severity `low` and tagged `flags.cross_lab_drift: true`. Algorithm documented in `skills/mcs-lab-auditor/references/cross-lab-consistency.md`. Motivated by the live discovery between `mcs-multi-agent` UC3 and `mcs-orchestration` UC1 during the 2026-05-26 audit cycle.
+- **`scene-fingerprints.json` sidecar per lab static run.** Emitted alongside `findings-static.json`. Contains scene-by-scene shape hash + identifier tokens + line numbers, feeding both same-run and cross-run cross-lab comparisons.
+- **`consistency.*` config block in `config/judge-config.yml`.** New keys: `cross_lab_enabled` (default `true`), `cross_lab_similarity_threshold` (`0.85`), `cross_lab_borderline_floor`, `cross_lab_high_confidence_floor`, `cross_lab_min_cluster_size`.
+- **`flags.cross_lab_drift` registered in `finding-schema.md`.** Rendered under a dedicated "Cross-lab consistency" section in issue bodies (separate from the regular "Static analysis" section).
+- **`docs/mcs-lab-auditor-overview-and-architecture.pdf`** — single-document overview, architecture deep-dive, and full installation guide. Includes a comparison to generic Computer-Use Agent (CUA) approaches and why this plugin's structured pipeline produces outcomes a pure CUA cannot.
+
+### Changed
+
+- **Phase 1.4 enumeration** now reads `event_configs` (events map) AND `lab_metadata` (all-labs catalog) instead of hardcoding `bootcamp_lab_orders`. The active event is resolved from the entry-point command and CLI flags (`/audit-bootcamp` → `bootcamp`, `/audit-event --event <key>` → `<key>`, `/audit-event` without `--event` → Q3a picker, `/audit-lab` → no driving event).
+- **`manifest.yml.interview`** now records `event: <event-key|null>` alongside `scope: event|one` and `scope_labs[]`. Resume runs inherit the prior event for the relevant interview short-circuits.
+- **README, `docs/architecture.md`, `docs/installation.md`, `docs/extending.md`** updated to reflect the event-aware entry points and the cross-lab consistency pass. The architecture doc has a new "Cross-lab consistency fan-in" section with a Mermaid diagram.
+
 ## [0.2.1] - 2026-05-25
 
 ### Fixed

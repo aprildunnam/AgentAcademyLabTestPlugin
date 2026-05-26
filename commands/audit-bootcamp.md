@@ -1,11 +1,11 @@
 ---
-description: Audit every lab in the mcs-labs bootcamp event end-to-end; file one GitHub issue per lab with findings, log clean labs locally.
+description: Shortcut for `/audit-event --event bootcamp`. Audits every lab in the Architecture Bootcamp event end-to-end.
 argument-hint: "[--resume <run-id>] [--labs slug1,slug2,...] [--no-issue] [--force-issue]"
 ---
 
 # /audit-bootcamp
 
-You are starting a full bootcamp audit run.
+You are starting a full bootcamp audit run. This is a thin shortcut for `/audit-event --event bootcamp` — the event is pinned to `bootcamp` and Phase 1.5 Q3 (scope) and Q3a (event picker) are both skipped. For any other event, use `/audit-event` directly.
 
 ## Arguments
 
@@ -14,8 +14,10 @@ Arguments passed: `$ARGUMENTS`
 Every flag below is **optional**. Any answer the user doesn't provide via a
 flag is collected interactively at run-start (see Phase 1.5 — Run-start
 interview in `SKILL.md`). Running `/audit-bootcamp` with no flags is the
-expected default — the orchestrator will walk the user through account,
-phase mix, and scope before doing anything destructive.
+expected default for the bootcamp event — the orchestrator will walk the user
+through account and phase mix before doing anything destructive. Scope is
+pinned to the bootcamp event so the scope and event-picker questions don't
+fire.
 
 Parse these flags:
 - `--resume <run-id>` — resume a previously interrupted run; skip labs already marked `done`/`issue_filed`/`skipped`. Inherits the prior run's `phase_mix` and `scope_labs`, so the scope question (Q3) is not re-asked.
@@ -35,17 +37,17 @@ Parse these flags:
 
 ## Your task
 
-Invoke the `mcs-lab-auditor` skill following its full lifecycle:
+Set `event = bootcamp` and invoke the `mcs-lab-auditor` skill following its full lifecycle, exactly as `/audit-event --event bootcamp` would:
 
-1. Pre-flight (read the configs, enumerate the lab list, check `gh` auth and `microsoft/mcs-labs` viewer permission).
-2. **Run-start interview** (Phase 1.5 in `SKILL.md`): walk the user through up to four `AskUserQuestion` calls — account, phase mix, scope, and (if scope == one lab) a two-step lab picker. Each question is skipped only when a CLI flag already provided the answer. The interview is **mandatory** for any question whose answer isn't on the command line — silent defaults have caused real audit runs to execute against the wrong tenant or to ship a doc-only audit when the user expected live coverage. If Q1 chooses redemption (or no cached account exists), the redemption flow auto-prompts for `Workshop portal URL` when `workshop_portal_url` is still `REPLACE_ME_ON_FIRST_RUN`, validates it as a URL, persists it to `config/workshop.yml`, then continues.
-3. Plan execution order (Phase 1.7): fan out static analysis across one subagent per lab and topologically sort the interactive phase against `lab_dependencies`. Skip the static fan-out if the interview chose `phase_mix: interactive`; skip the interactive plan if `phase_mix: static`.
+1. Pre-flight (read the configs, build the events map from `event_configs`, pin the active event to `bootcamp`, build the lab list from `bootcamp_lab_orders`, check `gh` auth and `microsoft/mcs-labs` viewer permission).
+2. **Run-start interview** (Phase 1.5 in `SKILL.md`): walk the user through up to four `AskUserQuestion` calls — account (Q1), phase mix (Q2), and (if Q3-skip wasn't already triggered by the bootcamp pin) Q3/Q4. **Q3 and Q3a are auto-skipped** for this command because `event=bootcamp` is pinned. Q4 only fires if `--labs` is missing and the user explicitly asks for a single lab via Q3 — which this command skips, so Q4 also doesn't fire. Each remaining question is skipped only when a CLI flag already provided the answer. If Q1 chooses redemption (or no cached account exists), the redemption flow auto-prompts for `Workshop portal URL` when `workshop_portal_url` is still `REPLACE_ME_ON_FIRST_RUN`, validates it as a URL, persists it to `config/workshop.yml`, then continues.
+3. Plan execution order (Phase 1.7): fan out static analysis across one subagent per lab, run the cross-lab consistency fan-in pass (Phase 1.7 step 1a), then topologically sort the interactive phase against `lab_dependencies`. Skip the static fan-out if the interview chose `phase_mix: interactive`; skip the interactive plan if `phase_mix: static`.
 4. **Interactive per-lab loop (runs when `phase_mix` is `interactive` or `both`)**: parse → execute steps in Playwright against the chosen account → judge each step → checkpoint per scene → file issue or log clean. Network/connection failures retry up to `network_retry_count` (default 3) with `network_retry_backoff_seconds` between attempts, then halt and ask the user via `AskUserQuestion` (retry / wait / skip lab / abort).
 5. Wrap-up: close the browser, print summary, save manifest.
 
 Read `~/.claude/plugins/mcs-lab-auditor/skills/mcs-lab-auditor/SKILL.md` for the full procedure and refer to the `references/` files as needed. **Do not silently default any interview question.** If the user wants a doc-only sweep or a single-lab run, that should be their explicit choice (via flag or via the interview), not the orchestrator's silent decision.
 
-If `--resume` is provided, the interview inherits the prior run's `phase_mix` and `scope_labs` from `manifest.yml`. The account question (Q1) is still shown unless `account_prompt_mode` permits skipping AND the cached `expires_at` is still in the future. A resume after the cache expired always re-prompts for the account.
+If `--resume` is provided, the interview inherits the prior run's `event`, `phase_mix`, and `scope_labs` from `manifest.yml`. The account question (Q1) is still shown unless `account_prompt_mode` permits skipping AND the cached `expires_at` is still in the future. A resume after the cache expired always re-prompts for the account. A resume of a run whose `event` is anything other than `bootcamp` should be invoked via `/audit-event --resume <id>` instead — this command refuses to resume a non-bootcamp run.
 
 If `--dry-run` is in the arguments, treat it as a per-lab dry-run for every lab (parse only, no browser activity). The interview still runs but the lab picker is informational only.
 
