@@ -144,8 +144,8 @@ def build_styles():
         ),
         "callout_label": ParagraphStyle(
             "callout_label", parent=base["Normal"], fontName="Helvetica-Bold",
-            fontSize=9.5, leading=12, textColor=Theme.info_border,
-            spaceAfter=2,
+            fontSize=10, leading=13, textColor=Theme.info_border,
+            spaceBefore=2, spaceAfter=4,
         ),
         "warn": ParagraphStyle(
             "warn", parent=base["BodyText"], fontName="Helvetica",
@@ -361,6 +361,7 @@ def callout(styles, label, text, kind="info"):
         "good": ("good", "good_label", label or "Why this matters"),
     }[kind]
     return KeepTogether([
+        Spacer(1, 0.08 * inch),
         Paragraph(label_text.upper(), styles[label_key]),
         Paragraph(text, styles[body_key]),
     ])
@@ -377,17 +378,32 @@ def section_opener(styles, number, title, eyebrow=None):
     return parts
 
 
+_TABLE_HEADER_STYLE = ParagraphStyle(
+    "tbl_header", fontName="Helvetica-Bold", fontSize=9.5, leading=12,
+    textColor=Theme.white, alignment=TA_LEFT,
+)
+_TABLE_CELL_STYLE = ParagraphStyle(
+    "tbl_cell", fontName="Helvetica", fontSize=9.2, leading=12.5,
+    textColor=Theme.body, alignment=TA_LEFT,
+)
+
+
+def _wrap_cell(value, style):
+    """Convert a cell value into a Paragraph so it word-wraps. Already-flowable values pass through."""
+    if hasattr(value, "wrap"):
+        return value
+    return Paragraph(str(value), style)
+
+
 def header_table(rows, col_widths, header_color=None):
     header_color = header_color or Theme.ink
-    tbl = Table(rows, colWidths=col_widths, hAlign="LEFT", repeatRows=1)
+    wrapped_rows = []
+    for i, row in enumerate(rows):
+        style = _TABLE_HEADER_STYLE if i == 0 else _TABLE_CELL_STYLE
+        wrapped_rows.append([_wrap_cell(c, style) for c in row])
+    tbl = Table(wrapped_rows, colWidths=col_widths, hAlign="LEFT", repeatRows=1, splitByRow=1)
     tbl.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), header_color),
-        ("TEXTCOLOR", (0, 0), (-1, 0), Theme.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 10),
-        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 1), (-1, -1), 9.5),
-        ("TEXTCOLOR", (0, 1), (-1, -1), Theme.body),
         ("ALIGN", (0, 0), (-1, -1), "LEFT"),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [Theme.white, Theme.panel_soft]),
@@ -919,10 +935,10 @@ def build_story(styles):
         ["Screenshot (vision)", "~1,500", "Token-equivalent for the page image."],
         ["Console + failed-network excerpts", "~300", "Usually small; large on broken steps."],
         ["Judge prompt scaffolding + JSON contract", "~600", "Stable across runs; benefits most from prompt cache."],
-        ["TOTAL input per step", "~7,700", "Range observed: 6.5k - 9.5k."],
-        ["TOTAL output per step", "~300", "Most steps pass (short verdict); findings add 200-400."],
+        ["<b>TOTAL input per step</b>", "<b>~7,700</b>", "Range observed: 6.5k - 9.5k."],
+        ["<b>TOTAL output per step</b>", "<b>~300</b>", "Most steps pass (short verdict); findings add 200-400."],
     ]
-    story.append(header_table(perstep_rows, [2.6 * inch, 1.0 * inch, 2.6 * inch]))
+    story.append(header_table(perstep_rows, [2.8 * inch, 0.9 * inch, 2.6 * inch]))
 
     story.append(callout(styles, "Critique pass",
         "Default-on. Only fires for non-pass verdicts (~10-20% of steps), so the realistic "
@@ -976,13 +992,13 @@ def build_story(styles):
         "judge templates, parser spec) - see the next subsection."
     ))
     cost_rows = [
-        ["Model", "$/Mtok in", "$/Mtok out", "Per medium lab", "Per bootcamp event"],
+        ["Model", "$ / Mtok in", "$ / Mtok out", "Per medium lab", "Per bootcamp event"],
         ["Opus 4.7", "$15", "$75", "~$13-18", "~$140"],
         ["Sonnet 4.6", "$3", "$15", "~$3-4", "~$28"],
         ["Haiku 4.5", "$1", "$5", "~$1", "~$9"],
         ["Mixed (Opus orch + Sonnet judge)", "-", "-", "~$5", "~$50"],
     ]
-    story.append(header_table(cost_rows, [2.4 * inch, 0.8 * inch, 0.8 * inch, 1.1 * inch, 1.1 * inch]))
+    story.append(header_table(cost_rows, [2.3 * inch, 0.9 * inch, 0.95 * inch, 1.05 * inch, 1.1 * inch]))
     story.append(callout(styles, "Prompt cache effect",
         "The Anthropic prompt cache has a 5-minute TTL. Within a single audit run, "
         "the parser spec, finding schema, judge template, and lab-config catalog are "
