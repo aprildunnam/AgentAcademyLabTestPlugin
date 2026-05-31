@@ -10,7 +10,22 @@ The auditor is **event-aware**: any workshop entry defined in `_data/lab-config.
 
 ## Status
 
-`v0.1.0` — initial scaffold. Slash commands, skills, schemas, and configuration are in place. End-to-end exercise against a live workshop tenant is the next step (see "Getting started").
+`v0.2.1` — field-tested. The plugin has completed multiple full audit cycles against live workshop tenants. In the May 2026 audit cycle alone, it raised **24 issues** across 11 bootcamp labs and generated **19 merged fix PRs** against `microsoft/mcs-labs`. See [Real-world impact](#real-world-impact) below.
+
+## Real-world impact
+
+The auditor has been exercised end-to-end against the full Architecture Bootcamp (11 labs, ~720 steps). Here's what it found and fixed:
+
+| Category | Examples |
+|---|---|
+| **UI drift** | Copilot Studio renamed "Use general knowledge" to "Allow ungrounded responses"; "Create blank agent" now opens a name-required modal instead of a Details section with an Edit button; left-nav "..." menu replaced by "Explore Power Platform" flyout |
+| **Screenshot refresh** | Outdated screenshots replaced across multiple labs to match current portal UI (agent builder, analytics, ALM, component collections) |
+| **Clarity & wording** | Ambiguous "Select SharePoint" instruction clarified (two SharePoint surfaces exist in the dialog); analytics prerequisite rewritten to emphasize publish-first requirement |
+| **Spelling & typos** | Double-space typos (`change  the Name`), "State or Providence" → "State/Province" |
+| **Cross-lab consistency** | Sibling labs verifying the same Account Data Lookup Agent used different field labels — caught by the automated cross-lab drift check |
+| **Missing steps** | Greeting-topic disable step missing before testing in mcs-tools; missing prereq guidance for analytics |
+
+All findings: [microsoft/mcs-labs issues (lab-audit label)](https://github.com/microsoft/mcs-labs/issues?q=label%3Alab-audit). For context, a full bootcamp review by a vendor typically costs **$10,000–$15,000**; the auditor runs a full sweep for ~$30–$60 in token spend.
 
 ## Commands
 
@@ -84,6 +99,8 @@ For the full setup — including prerequisite checks, workshop portal configurat
 commands/                                 # slash command entry points
 skills/mcs-lab-auditor/                   # primary orchestration skill + references/
 skills/mcs-lab-issue-filer/               # sub-skill: findings → gh issue create
+skills/mcs-lab-fix-pr-filer/              # sub-skill: apply correction diffs → fix-PR
+skills/mcs-lab-pr-appender/               # sub-skill: screenshots-only commit → open PR
 config/                                   # workshop.yml, judge-config.yml
 runtime/                                  # gitignored — accounts, audit log, per-run artifacts
 ```

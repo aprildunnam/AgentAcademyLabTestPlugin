@@ -18,6 +18,7 @@ This means **most "code" in this repo is prose**: the precision of the instructi
 .claude-plugin/plugin.json                 # plugin manifest
 commands/                                  # slash command entry points
   audit-bootcamp.md
+  audit-event.md
   audit-lab.md
   audit-report.md
   audit-account.md
@@ -29,14 +30,23 @@ skills/
       llm-judge-prompts.md                 # judge / critique / classifier templates
       playwright-cookbook.md               # portal quirks, sign-in flow
       workshop-redemption.md               # workshop-code → cached account flow
+      workshop-redemption-chatbot.md       # chatbot-style portal variant
       finding-schema.md                    # finding record fields, severity rubric
       audit-log-schema.md                  # local audit-history.yml schema
+      cross-lab-consistency.md             # cross-lab drift algorithm + finding format
+      pr-append-flow.md                    # screenshot-refresh carve-out guardrails
   mcs-lab-issue-filer/                     # sub-skill: findings → gh issue create
+    SKILL.md
+  mcs-lab-fix-pr-filer/                    # sub-skill: apply correction diffs → fix-PR
+    SKILL.md
+  mcs-lab-pr-appender/                     # sub-skill: screenshots-only commit → open PR
     SKILL.md
 config/
   workshop.yml                             # workshop portal URL + selectors
   judge-config.yml                         # confidence thresholds, retries, dedupe behavior
 docs/                                      # architecture, design decisions, security, troubleshooting, extending
+scripts/
+  Get-PathOrFallback.ps1                   # cross-shell preflight helper
 runtime/                                   # gitignored — accounts, audit log, per-run artifacts
 ```
 
