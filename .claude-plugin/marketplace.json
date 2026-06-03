@@ -10,7 +10,7 @@
     {
       "name": "mcs-lab-auditor",
       "description": "Drive Playwright through every lab in the mcs-labs bootcamp event, compare actual UI behavior to written instructions, and file one GitHub issue per lab when steps are broken or unclear. Clean labs produce local log entries only.",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "source": "./"
     }
   ]

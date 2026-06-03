@@ -6,6 +6,8 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-03
+
 ### Added
 
 - **`issues.pr_append.pr_match_head_prefix` config key** (default `dewain/fix-{slug}-content-audit`) — the head-ref **prefix** the fix-PR filer uses to find an existing open PR for a slug regardless of its run-id suffix. Documented in `docs/extending.md`.
@@ -192,5 +194,7 @@ Initial scaffold. The plugin is structurally complete: every file referenced by 
 - Single workshop-portal flow assumed (Skillable-style).
 - Screenshots aren't attached inline to issues (`gh` CLI limitation); they're referenced by local path in the issue body.
 
-[Unreleased]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.1.0...v0.2.1
 [0.1.0]: https://github.com/microsoft/BootcampLabTestPlugin/releases/tag/v0.1.0

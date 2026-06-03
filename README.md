@@ -10,7 +10,7 @@ The auditor is **event-aware**: any workshop entry defined in `_data/lab-config.
 
 ## Status
 
-`v0.2.1` — field-tested. The plugin has completed multiple full audit cycles against live workshop tenants. In the May 2026 audit cycle alone, it raised **24 issues** across 11 bootcamp labs and generated **19 merged fix PRs** against `microsoft/mcs-labs`. See [Real-world impact](#real-world-impact) below.
+`v0.3.0` — field-tested. The plugin has completed multiple full audit cycles against live workshop tenants. In the May 2026 audit cycle alone, it raised **24 issues** across 11 bootcamp labs and generated **19 merged fix PRs** against `microsoft/mcs-labs`. See [Real-world impact](#real-world-impact) below.
 
 ## Real-world impact
 
