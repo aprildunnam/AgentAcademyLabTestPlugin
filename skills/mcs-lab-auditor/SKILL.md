@@ -589,16 +589,22 @@ topological order from Phase 1.7):
         number and `model: <execution.model.resolved.fix_pr_filer>` —
         applies the findings' `suggested_correction` diffs to the lab
         markdown, copies any `proposed_screenshot_replacement` images
-        into `labs/<slug>/images/`, commits on branch
-        `dewain/fix-<slug>-content-audit` (creating the branch from `main`
-        if needed), pushes, and opens a PR titled
-        `<slug>: fix audit findings from #<issue-number>` with body
-        `Closes #<issue-number>`.
-     3. If an open PR already exists on that branch, append commits to it
-        rather than opening a duplicate.
-     4. If screenshots were refreshed and an open fix-PR already exists
+        into `labs/<slug>/images/`, and ships them as a PR. **PR dedup is
+        scoped to OPEN PRs only:**
+        - If an **open** fix-PR for the slug already exists (same author,
+          mergeable — resolved from Phase 1.4 `existing-state.yml` or a
+          head-prefix `gh pr list` query), the run's commit is **appended**
+          to that PR — no duplicate is opened.
+        - Otherwise (no open PR — including when prior PRs were merged or
+          closed), a **new** PR is opened on a run-unique branch
+          `dewain/fix-<slug>-content-audit-<run-id>` from `main`, titled
+          `<slug>: fix audit findings from #<issue-number>` with body
+          `Closes #<issue-number>`. A merged/closed prior PR never blocks a
+          new one — each run with fresh findings gets its own PR.
+     3. If screenshots were refreshed and an open fix-PR already exists
         for the slug, invoke `mcs-lab-pr-appender` (sub-skill) with
-        `model: <execution.model.resolved.pr_appender>`.
+        `model: <execution.model.resolved.pr_appender>` for the
+        screenshots-only refresh path.
    - Otherwise: append a clean entry to `runs/<run-id>/clean-labs.yml`.
    - Either way: append the per-lab summary entry to
      `runtime/audit-history.yml` (`references/audit-log-schema.md`).

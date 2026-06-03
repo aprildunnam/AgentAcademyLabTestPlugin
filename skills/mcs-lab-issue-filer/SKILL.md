@@ -241,7 +241,7 @@ Capture the comment URL. Save as `issue_url`. Set `issue_action: commented`.
 If the orchestrator's existing-state probe resolved an `open_pr` for this slug, append (as a separate comment for clarity):
 
 ```markdown
-> Open fix PR for this lab: #{pr_number} (branch `{branch}`). If a screenshot update was applied in this run, it has been pushed onto that branch — see the PR commits.
+> Open fix PR for this lab: #{pr_number} (branch `{branch}`). This run's fixes (markdown corrections and/or refreshed screenshots) have been appended to that open PR rather than opening a duplicate — see the PR commits.
 ```
 
 #### 6e. Label hygiene (best-effort)
