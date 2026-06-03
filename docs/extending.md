@@ -137,7 +137,8 @@ Most behavior changes can be made via `config/judge-config.yml` alone:
 | Disable loose-title dedup query | Set `issues.dedupe_loose_title_match: false`. Only safe once every open audit issue has the `lab:<slug>` label. |
 | Disable per-slug label backfill | Set `issues.backfill_per_slug_label: false`. |
 | Disable open-PR screenshot append by default | Set `issues.pr_append.enabled_by_default: false`. On by default; this flips the plugin to pure read-only behavior unless the per-run flag explicitly re-enables it. |
-| Change the PR branch pattern the probe matches against | Set `issues.pr_append.pr_branch_pattern` (default `dewain/fix-{slug}-content-audit`). |
+| Change the branch name newly-opened fix-PRs are created on | Set `issues.pr_append.pr_branch_pattern` (default `dewain/fix-{slug}-content-audit-{run_id}`). Keep the `{run_id}` token so each new PR's branch is unique and can't collide with a merged PR's leftover branch. |
+| Change the head-ref prefix used to find an existing open PR to append to | Set `issues.pr_append.pr_match_head_prefix` (default `dewain/fix-{slug}-content-audit`). Must remain a prefix of `pr_branch_pattern`. |
 | Disable the Phase 1.4 existing-state probe | Set `existing_state.check_open_issues: false` and `existing_state.check_open_prs: false`. The filer will fall back to its inline dedup queries. Not recommended — costs extra `gh` calls per lab. |
 
 No code changes needed — config tweaks take effect on the next invocation.

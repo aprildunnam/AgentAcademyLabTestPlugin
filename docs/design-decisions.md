@@ -8,14 +8,14 @@ When proposing a change to the plugin's shape, check whether your change affects
 
 ## ADR-001 — Plugin scope: GitHub issues, not pull requests
 
-**Status:** Accepted.
+**Status:** Superseded in part — see ADR-014 (screenshots carve-out) and ADR-015 (fix-PR per run). The plugin now also opens/append fix-PRs; issues remain the primary, always-on path.
 
 **Context.** The plugin needs to surface lab problems back to the maintainers of `microsoft/mcs-labs`. The two obvious paths are (a) opening a PR with proposed edits to `_labs/<slug>.md` for each finding, or (b) filing a GitHub issue with suggested corrections in the body, leaving application to a human.
 
 **Decision.** File **GitHub issues**. One issue per lab with findings. Suggested corrections appear in the issue body as `diff`-style blocks but are never applied as edits.
 
 **Consequences.**
-- The plugin writes to `microsoft/mcs-labs` through **two narrow paths only**: the Issues API (always on) and a screenshots-only commit appended to an already-open fix-PR (default on; opt out per-run with `--no-update-screenshots`). It never creates a new branch or new PR. See ADR-014 for the carve-out's design.
+- The plugin writes to `microsoft/mcs-labs` through **three narrow paths**: the Issues API (always on); a fix-PR per audit run that applies the suggested corrections — opened on a run-unique branch, or appended to the lab's existing open fix-PR (ADR-015); and a screenshots-only commit appended to an already-open fix-PR (default on; opt out per-run with `--no-update-screenshots`, ADR-014). It never force-pushes and never opens a second *open* PR for a lab that already has one.
 - CODEOWNERS, branch protection, and signed-commit policies are irrelevant to the plugin's operation.
 - Maintainers triage findings and decide which corrections to apply; false positives are filtered by humans rather than amplified into bad commits.
 - Re-audits comment on existing issues (de-duplication via label combo) rather than opening duplicates.
@@ -287,7 +287,7 @@ The historical `on_duplicate: "create_anyway"` config value is **deprecated** an
 No new branches. No new PRs. No edits to markdown or any non-image file. No `Co-Authored-By: Claude` trailer. No force-push.
 
 **Consequences.**
-- Re-audits keep screenshots and prose edits together on one PR per lab.
+- Re-audits keep screenshots and prose edits together on the lab's open PR (when one is open) rather than splitting them across a new PR + a fresh issue.
 - The "default read-only" safety property still holds for everything outside the screenshot scope.
 - Each new guardrail is explicit and enumerated in `references/pr-append-flow.md` so a future contributor can't quietly broaden the carve-out without amending the docs.
 
@@ -295,6 +295,34 @@ No new branches. No new PRs. No edits to markdown or any non-image file. No `Co-
 - **Open a separate "screenshot refresh" PR.** Rejected — produces clutter and contradicts the user's standing rule that we don't open new PRs for the same lab.
 - **File screenshot drift as a separate issue.** Rejected — it's mechanical, not editorial; the value of an issue is the human discussion, which screenshot drift doesn't need.
 - **Strictly opt-in append (positive flag required).** Considered initially and shipped in the first cut; revised to default-on at the user's request once the guardrails (same-author, mergeable, screenshots-only, no force-push) were confirmed sufficient to make accidental damage unlikely. The `--no-update-screenshots` opt-out preserves the read-only behavior for users who want it.
+
+---
+
+## ADR-015 — Fix-PR per audit run; PR dedup scoped to OPEN PRs only
+
+**Status:** Accepted (v0.3 addition).
+
+**Context.** ADR-014 and the original `mcs-lab-fix-pr-filer` design keyed everything to a single, fixed per-slug branch `dewain/fix-{slug}-content-audit` and an explicit "one PR per lab, never open a new PR" rule. That rule is wrong once time passes: prior fix-PRs get **merged**. A later audit run that finds new problems must be able to open a **new** PR — reusing the same fixed branch name as a just-merged PR is fragile (leftover local/remote branches, wrong base, confusing history), and "never open a new PR" would mean new findings have nowhere to land except the issue thread.
+
+The user's standing rule (`feedback_fresh_branch_per_pr`) is the opposite: never commit to a branch whose PR is merged/closed; always open a fresh branch + new PR. The only thing dedup should prevent is **two open PRs for the same lab at once**.
+
+**Decision.** Make the fix-PR filer's disposition **open-PR-scoped**:
+
+1. Find whether an *open* fix-PR for the slug exists — via the Phase 1.4 `existing-state.yml.labs[<slug>].open_pr` probe, or a direct `gh pr list --state open --search "head:<prefix>"` query (head-ref **prefix** match, so it finds the PR regardless of its run-id suffix), with a title-match fallback.
+2. **If an open PR exists** and it's authored by the current `gh` user and mergeable → `gh pr checkout` it and **append** this run's commit. Never open a second open PR. If the author/mergeable guardrail fails, abort the PR step (soft failure) rather than opening a competitor.
+3. **If no open PR exists** (none ever, or all prior ones merged/closed) → open a **new** PR on a **run-unique** branch `dewain/fix-{slug}-content-audit-{run_id}`. The `{run_id}` suffix guarantees the branch can't collide with a merged PR's leftover branch, so no stale-branch rename/delete dance is needed.
+
+Two config keys replace the single fixed pattern: `issues.pr_append.pr_branch_pattern` (now `dewain/fix-{slug}-content-audit-{run_id}`, the **create** name) and `issues.pr_append.pr_match_head_prefix` (`dewain/fix-{slug}-content-audit`, the **match** prefix).
+
+**Consequences.**
+- Each audit run with fresh findings produces its own reviewable PR; a merged PR from a prior cycle never silently swallows or blocks new fixes.
+- At most one *open* fix-PR per lab at a time — re-audits of a still-open PR append rather than duplicate.
+- The screenshots-only appender (ADR-014) is unchanged; it remains the lighter path for refreshing images on an already-open PR.
+
+**Alternatives considered.**
+- **Keep the fixed per-slug branch, delete the stale branch before re-creating.** Rejected — fragile around leftover branches and races; a run-unique name sidesteps the whole class of problems.
+- **Always open a new PR even when one is open.** Rejected — produces competing open PRs for one lab and undoes the dedup property the user wants.
+- **Leave the open PR untouched and only comment on the issue.** Rejected — splits a run's fixes away from the open PR the maintainer is already reviewing.
 
 ---
 

@@ -172,7 +172,15 @@ issues:
   # skills/mcs-lab-auditor/references/pr-append-flow.md.
   pr_append:
     enabled_by_default: true                    # screenshot updates are part of every run by default
-    pr_branch_pattern: "dewain/fix-{slug}-content-audit"   # used as a fallback match if the title query misses
+    # Branch the fix-PR filer CREATES when no open PR exists for the slug. The
+    # `{run_id}` token makes every newly-opened PR's branch unique, so a run
+    # never collides with a leftover branch from a merged/closed prior PR.
+    pr_branch_pattern: "dewain/fix-{slug}-content-audit-{run_id}"
+    # Head-ref PREFIX used to find an existing OPEN fix-PR for a slug, regardless
+    # of the run-id suffix the branch was created with. This is how dedup finds
+    # the open PR to append to (and the appender's fallback match if the title
+    # query misses). Must stay a prefix of `pr_branch_pattern`.
+    pr_match_head_prefix: "dewain/fix-{slug}-content-audit"
     scope: "screenshots_only"                   # "screenshots_only" — no other value supported yet
     require_same_author: true                   # current `gh` user must match PR author
     require_mergeable: true                     # `mergeable: MERGEABLE` required

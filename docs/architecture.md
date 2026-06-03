@@ -20,9 +20,11 @@ flowchart LR
     PW -->|navigates| Portals[(Copilot Studio<br/>M365 Copilot<br/>Power Platform<br/>Azure portal<br/>SharePoint)]
     Skill -->|writes| Runtime[(runtime/<br/>account/, runs/,<br/>audit-history.yml)]
     Skill -->|invokes| IssueSkill[mcs-lab-issue-filer SKILL]
+    Skill -->|invokes when<br/>findings exist| PRFilerSkill[mcs-lab-fix-pr-filer SKILL]
     Skill -->|invokes when<br/>open fix-PR exists| PRSkill[mcs-lab-pr-appender SKILL]
     IssueSkill -->|gh issue create<br/>gh issue comment<br/>gh issue edit| GH[(microsoft/mcs-labs<br/>Issues API)]
-    PRSkill -->|git push to existing<br/>open fix-PR branch<br/>screenshots only| MCSRepo[(microsoft/mcs-labs<br/>working tree<br/>+ open PR branch)]
+    PRFilerSkill -->|new PR on run-unique branch<br/>OR append to open PR<br/>markdown + screenshots| MCSRepo[(microsoft/mcs-labs<br/>working tree<br/>+ open PR branch)]
+    PRSkill -->|git push to existing<br/>open fix-PR branch<br/>screenshots only| MCSRepo
     Workshop[(Workshop portal<br/>Skillable-style)] -.->|workshop code<br/>→ credentials| PW
 ```
 
@@ -31,7 +33,7 @@ flowchart LR
 - **Source-of-truth boundary**: `_data/lab-config.yml` provides both the **event catalog** (`event_configs.<event-key>.config_key` → `<event_key>_lab_orders`) and the **all-labs catalog** (`lab_metadata.<id>`). The run's scope is one of: (a) all labs in a chosen event, (b) a CSV subset of an event's labs, or (c) a single lab from the all-labs catalog. The slug list is never hard-coded in this plugin.
 - **Write boundary** (three narrow paths total):
   1. **Issues API** — `gh issue create | comment | edit`. Always on. Comments on existing open issues with finding-fingerprint dedup; never creates a duplicate open issue for the same lab.
-  2. **Fix-PR creation** — `gh pr create` on a per-slug branch `dewain/fix-<slug>-content-audit`. Fires whenever the run produces findings; appends commits to an already-open PR if one exists.
+  2. **Fix-PR per run** — applies the run's `suggested_correction` diffs + screenshot replacements. If an **open** fix-PR for the lab exists (same-author, mergeable), the commit is **appended** to it; otherwise `gh pr create` opens a **new** PR on a run-unique branch `dewain/fix-<slug>-content-audit-<run-id>`. Dedup is OPEN-PR-scoped — a merged/closed prior PR never blocks a new one. Enforced in `mcs-lab-fix-pr-filer` (ADR-015).
   3. **Open PR screenshot append** — `git push` of one screenshots-only commit onto an already-open fix-PR branch. **On by default**, suppress with `--no-update-screenshots`. Same-author, mergeable, unprotected-branch guardrails enforced in `mcs-lab-pr-appender`. Never creates a new branch or new PR.
 - **Secret boundary**: workshop credentials live only in `runtime/account/credential.enc` (DPAPI-encrypted) and in memory for the duration of one sign-in dispatch. See [`security.md`](security.md).
 
@@ -52,6 +54,7 @@ sequenceDiagram
     participant PW as Playwright MCP
     participant Portals as MS portals (Copilot Studio, M365, ...)
     participant Filer as mcs-lab-issue-filer
+    participant PRFiler as mcs-lab-fix-pr-filer
     participant PRAppender as mcs-lab-pr-appender
     participant MCSRepo as mcs-labs working tree
     participant GH as GitHub Issues / PRs
@@ -117,6 +120,15 @@ sequenceDiagram
                 Filer->>GH: gh issue create<br/>(lab-audit + lab:slug + severity:max)
             end
             GH-->>Filer: issue/comment URL
+            Skill->>PRFiler: invoke with issue# + findings.json + existing-state.yml
+            Note over PRFiler: PR dedup is OPEN-PR-scoped<br/>(merged/closed PRs don't block)
+            alt open fix-PR exists for slug (same-author, mergeable)
+                PRFiler->>MCSRepo: gh pr checkout + apply diffs + commit + push (append)
+                PRFiler->>GH: gh pr comment (appended fixes)
+            else no open PR
+                PRFiler->>MCSRepo: new branch dewain/fix-slug-content-audit-run_id + commit + push
+                PRFiler->>GH: gh pr create (Closes #issue)
+            end
         else clean pass
             Skill->>Skill: append to clean-labs.yml (no GitHub call)
         end

@@ -1,7 +1,7 @@
 ---
 name: mcs-lab-fix-pr-filer
 description: |
-  After mcs-lab-issue-filer has filed (or commented on) the audit issue for a lab, apply the findings' suggested_correction diffs to the lab markdown, copy any proposed_screenshot_replacement images into labs/<slug>/images/, commit on branch `dewain/fix-<slug>-content-audit`, push, and open a PR titled `<slug>: fix audit findings from #<issue-number>` with body "Closes #<issue-number>". Should NOT be invoked directly by the user — the orchestrator calls it after mcs-lab-issue-filer returns the issue number.
+  After mcs-lab-issue-filer has filed (or commented on) the audit issue for a lab, apply the findings' suggested_correction diffs to the lab markdown and copy any proposed_screenshot_replacement images into labs/<slug>/images/. If an OPEN fix-PR for this slug already exists (same author, mergeable), append the commit to it; otherwise open a NEW PR on a run-unique branch `dewain/fix-<slug>-content-audit-<run-id>`. Title `<slug>: fix audit findings from #<issue-number>`, body `Closes #<issue-number>`. Dedup is scoped to OPEN PRs only — a merged or closed prior PR never blocks a new one. Should NOT be invoked directly by the user — the orchestrator calls it after mcs-lab-issue-filer returns the issue number.
 allowed-tools:
   - Read
   - Write
@@ -18,27 +18,35 @@ allowed-tools:
   - Bash(git diff:*)
   - Bash(gh pr list:*)
   - Bash(gh pr view:*)
+  - Bash(gh pr checkout:*)
   - Bash(gh pr create:*)
   - Bash(gh pr edit:*)
+  - Bash(gh pr comment:*)
+  - Bash(gh api:*)
   - Bash(cp:*)
 ---
 
 # mcs-lab-fix-pr-filer (sub-skill)
 
-Apply the audit's suggested corrections to the actual lab files in `microsoft/mcs-labs`, commit them on a per-slug fix branch, and open (or update) the PR that closes the audit issue.
+Apply the audit's suggested corrections to the actual lab files in `microsoft/mcs-labs`, then either **open a new fix-PR on a run-unique branch** or **append to the lab's existing open fix-PR** — whichever the dedup check resolves — and close (or reference) the audit issue.
+
+**PR dedup is scoped to OPEN PRs only.** A merged or closed prior PR for the same lab never blocks a new one — each audit run that finds new problems gets its own PR. The only thing that suppresses a new PR is an *already-open* fix-PR for the same slug, in which case this run's fixes are appended to that PR instead of opening a duplicate. See [[feedback_fresh_branch_per_pr]].
 
 ## Inputs (assumed present from the orchestrator)
 
 - `runs/<run-id>/labs/<slug>/findings.json` — same file the issue-filer read.
 - `runs/<run-id>/labs/<slug>/screenshots/proposed/` — proposed replacement images keyed to `findings[*].proposed_screenshot_replacement_for` paths.
-- `<plugin>/config/judge-config.yml` — for branch naming convention (`issues.pr_append.pr_branch_pattern`, default `dewain/fix-{slug}-content-audit`).
+- `<plugin>/config/judge-config.yml` — branch conventions:
+  - `issues.pr_append.pr_branch_pattern` (default `dewain/fix-{slug}-content-audit-{run_id}`) — the **run-unique** branch name to CREATE when no open PR exists.
+  - `issues.pr_append.pr_match_head_prefix` (default `dewain/fix-{slug}-content-audit`) — the head-ref **prefix** used to find an existing open PR for the slug regardless of its run-id suffix.
+- `runs/<run-id>/existing-state.yml` — the orchestrator's Phase 1.4 probe. `labs[<slug>].open_pr` is non-null when an open fix-PR already exists for the slug.
 - `C:\Users\dewainr\mcs-labs\` — clone of microsoft/mcs-labs.
 - `issue_number` — returned by `mcs-lab-issue-filer`. Required.
 - `lab_slug`, `run_id` — passed through.
 
 ## Outputs
 
-- New or updated branch `dewain/fix-<slug>-content-audit` on `microsoft/mcs-labs`.
+- Either a **new** run-unique branch `dewain/fix-<slug>-content-audit-<run-id>` on `microsoft/mcs-labs`, OR a new commit on the **existing open PR's** branch — never both.
 - New or updated PR titled `<slug>: fix audit findings from #<issue-number>` with body containing `Closes #<issue-number>`.
 - `runs/<run-id>/labs/<slug>/pr-url.txt` — convenience file for the orchestrator's summary.
 - Updated `manifest.yml.labs[<slug>]`: `status: issue_and_pr_filed`, `pr_url`, `pr_action: created | appended | skipped_no_changes`.
@@ -54,17 +62,32 @@ git fetch origin main
 
 If there are uncommitted changes in the working tree, stash them with a clear label and restore the user's prior `HEAD`. (Never clobber unrelated in-flight work.)
 
-### 2. Resolve the branch
+### 2. Resolve the PR target — append to an open PR, else open a new one
 
-Branch name: `dewain/fix-<slug>-content-audit` (from `judge-config.yml.issues.pr_append.pr_branch_pattern`).
+**Dedup is scoped to OPEN PRs only.** First find whether an *open* fix-PR already exists for this slug; if so, append to it; otherwise open a brand-new PR on a run-unique branch. A merged or closed prior PR is irrelevant — it never blocks a new PR.
 
-- If an open PR already exists on that branch (`gh pr list --head <branch> --state open`):
-  - Verify it's authored by the current `gh` user (`pr_append.require_same_author`) and mergeable (`pr_append.require_mergeable`).
-  - If guardrails pass, `git checkout <branch>` and `git pull --ff-only origin <branch>`. Set `pr_action: appended`.
-  - If guardrails fail, abort the PR step (the orchestrator records this as a soft failure: issue was filed but PR could not be appended; the user is told to inspect the branch).
-- If no open PR exists:
-  - If the branch exists locally or remotely but is stale (e.g. behind a merged prior PR), rename it out of the way (`git branch -m <branch> <branch>-rev<N>`) or delete it after confirming no open PR depends on it.
-  - Create a fresh branch from main: `git checkout -b <branch> origin/main`. Set `pr_action: created`.
+**2a. Find an existing open PR for the slug.**
+
+- If the orchestrator's probe wrote `runs/<run-id>/existing-state.yml.labs[<slug>].open_pr` (non-null), use it directly — it already carries `number`, `branch` (the actual head ref, run-id suffix and all), `author`, and `mergeable`.
+- Otherwise, query directly by **head prefix** (matches any run's branch for this slug), most-recently-updated first:
+  ```bash
+  prefix="dewain/fix-<slug>-content-audit"   # judge-config.yml.issues.pr_append.pr_match_head_prefix
+  gh pr list --repo microsoft/mcs-labs --state open --author "@me" \
+    --json number,headRefName,author,mergeable,url,updatedAt \
+    --search "head:$prefix" | jq 'sort_by(.updatedAt) | reverse | .[0] // empty'
+  ```
+  If the head query returns nothing, fall back to a title match: `--search "\"<slug>: fix audit findings\" in:title"`. Only OPEN PRs count.
+
+**2b. If an open PR was found → append.**
+
+- Verify it's authored by the current `gh` user (`pr_append.require_same_author`) and mergeable (`pr_append.require_mergeable`).
+- If guardrails pass: `git fetch origin`, then `gh pr checkout <number> --repo microsoft/mcs-labs` (checks out the PR's actual branch whatever its name). Confirm with `git rev-parse --abbrev-ref HEAD`. Set `pr_action: appended` and remember `<branch>` = that head ref.
+- If guardrails fail (different author, or `CONFLICTING`): abort the PR step (the orchestrator records this as a soft failure: issue was filed but the open PR could not be appended; the user is told to inspect the PR). **Do NOT open a competing second PR for the same lab.**
+
+**2c. If no open PR exists → open a new one on a run-unique branch.**
+
+- Render the create pattern: `branch = dewain/fix-<slug>-content-audit-<run-id>` (from `judge-config.yml.issues.pr_append.pr_branch_pattern`, substituting `{slug}` and `{run_id}`). The `{run_id}` suffix guarantees the name can't collide with a leftover branch from a merged/closed prior PR — so there is **no need to rename or delete any stale branch**.
+- `git fetch origin main`, then `git checkout -b <branch> origin/main`. Set `pr_action: created`.
 
 ### 3. Apply markdown corrections
 
@@ -213,6 +236,8 @@ Write `runs/<run-id>/labs/<slug>/pr-url.txt` containing just the PR URL for the 
 ## Important rules
 
 - **Never force-push.** `pr_append.allow_force_push` is `false` and remains so.
+- **Dedup is OPEN-PR-scoped.** Only an *open* fix-PR for the slug suppresses a new PR. Merged/closed PRs never block a new one — that's the whole point of the run-unique branch name. See [[feedback_fresh_branch_per_pr]].
+- **One open PR per lab.** If an open fix-PR already exists, append to it; never open a second open PR for the same lab in the same breath.
 - **Never modify a closed/merged PR's branch.** Always check open-PR state before pushing. See [[feedback_no_push_to_merged_pr]].
 - **Respect same-author guardrail.** If the current `gh` user does not match the PR author on an existing open PR, abort the append step and leave the issue-filer's record as the only output for this lab.
 - **Restore the user's working tree.** If you stashed changes at the start, `git stash pop` (or leave the stash with a clear label and tell the user how to recover) — never silently lose work.
@@ -223,4 +248,5 @@ Write `runs/<run-id>/labs/<slug>/pr-url.txt` containing just the PR URL for the 
 - **`original_text` not found in markdown**: lab has drifted since the audit. Record in `pr-apply-log.json` and continue.
 - **`proposed_screenshot_replacement` source missing**: subagent didn't save the file. Skip the image update and record in pr-apply-log. The PR still ships the markdown corrections; the screenshot finding remains in the issue for human attention.
 - **Branch is up-to-date with main and no changes apply**: still no-op — set `pr_action: skipped_no_changes` and don't push an empty commit.
+- **An open PR exists but the author/mergeable guardrail fails**: abort the PR step with the reason recorded; do NOT open a competing second PR. The issue-filer's record stands and the user is told to inspect the open PR.
 - **`gh pr create` fails**: leave the branch pushed (the commits are valuable), record the error in `pr-apply-log.json`, and tell the user the manual PR-create command they can run.

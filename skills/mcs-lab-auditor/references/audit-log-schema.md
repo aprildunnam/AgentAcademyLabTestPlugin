@@ -38,7 +38,7 @@ The file is append-only — new entries go at the end. Every run appends one ent
   issue_action: null              # "created" | "commented" | "skipped_duplicate" | "skipped_no_new_findings"
   pr_append_result: null          # populated when the default-on screenshot append fires AND an open fix-PR existed (suppressed by --no-update-screenshots):
                                   #   pr_number: 328
-                                  #   branch: dewain/fix-<slug>-content-audit
+                                  #   branch: dewain/fix-<slug>-content-audit-<run-id>   # run-unique; older PRs may predate the suffix
                                   #   commit_sha: <40-char>
                                   #   commit_url: https://github.com/microsoft/mcs-labs/commit/<sha>
                                   #   files_changed: [labs/<slug>/images/<name>.png, ...]

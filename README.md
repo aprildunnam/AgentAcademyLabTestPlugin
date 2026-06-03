@@ -4,13 +4,13 @@ A Claude Code plugin that audits labs in the [`microsoft/mcs-labs`](https://gith
 
 The auditor is **event-aware**: any workshop entry defined in `_data/lab-config.yml.event_configs` (bootcamp, buildathons, MCS-in-a-Day variants, the Azure AI workshop, anything added in the future) is a valid scope. Single labs can also be audited individually against the full `lab_metadata` catalog — independent of any event.
 
-**The plugin writes to the mcs-labs repo through two narrow paths.** (a) `gh issue create | comment | edit` for issues + label hygiene (always on). (b) A screenshots-only commit appended to an **already-open** fix-PR for a lab when one exists, the PR is authored by the current user, and the PR is mergeable — this is on by default and can be suppressed with `--no-update-screenshots` / `--no-append-to-pr` (CLI) or `issues.pr_append.enabled_by_default: false` (config). The plugin never opens new pull requests and never creates new branches. See `skills/mcs-lab-pr-appender/SKILL.md`.
+**The plugin writes to the mcs-labs repo through three narrow paths.** (a) `gh issue create | comment | edit` for issues + label hygiene (always on). (b) A **fix-PR per audit run** with findings: it applies the `suggested_correction` diffs + screenshot replacements and opens a new PR on a run-unique branch `dewain/fix-<slug>-content-audit-<run-id>` — *unless* an open fix-PR for that lab already exists, in which case the run's commit is appended to that PR instead of opening a duplicate. See `skills/mcs-lab-fix-pr-filer/SKILL.md`. (c) A screenshots-only commit appended to an **already-open** fix-PR (same-author, mergeable) for the lighter re-audit case — on by default, suppressed with `--no-update-screenshots` / `--no-append-to-pr` (CLI) or `issues.pr_append.enabled_by_default: false` (config). See `skills/mcs-lab-pr-appender/SKILL.md`.
 
-**The plugin will never create a duplicate open issue or PR for a lab that already has one open.** Phase 1.4 of every run probes `gh issue list` + `gh pr list` per slug, and the per-lab disposition uses that result — new findings go into a fingerprint-deduped delta comment on the existing issue.
+**The plugin will never create a duplicate _open_ issue or PR for a lab that already has one open.** Phase 1.4 of every run probes `gh issue list` + `gh pr list` per slug, and the per-lab disposition uses that result — new findings go into a fingerprint-deduped delta comment on the existing open issue, and a run's fixes are appended to the existing open PR. Dedup is scoped to **open** items only: a merged or closed prior issue/PR never blocks a new one, so each run with fresh findings gets its own PR on a fresh branch.
 
 ## Status
 
-`v0.2.1` — field-tested. The plugin has completed multiple full audit cycles against live workshop tenants. In the May 2026 audit cycle alone, it raised **24 issues** across 11 bootcamp labs and generated **19 merged fix PRs** against `microsoft/mcs-labs`. See [Real-world impact](#real-world-impact) below.
+`v0.3.0` — field-tested. The plugin has completed multiple full audit cycles against live workshop tenants. In the May 2026 audit cycle alone, it raised **24 issues** across 11 bootcamp labs and generated **19 merged fix PRs** against `microsoft/mcs-labs`. See [Real-world impact](#real-world-impact) below.
 
 ## Real-world impact
 
@@ -44,7 +44,7 @@ All findings: [microsoft/mcs-labs issues (lab-audit label)](https://github.com/m
 3. **Static fan-out + cross-lab consistency.** Each lab gets a background static subagent (markdown checks, link checks, image-ref resolution, prereq sanity). After all per-lab subagents return, a single fan-in pass groups scenes by shape hash across the lab set and flags identifier-token drift between sibling labs (e.g. `Address 1: State/Province` vs `Address1: State or Providence` in two labs that verify the same UI surface). Findings are severity `low` and tagged `flags.cross_lab_drift: true`.
 4. **Interactive step execution.** Each step is dispatched to the Playwright MCP using an action classifier (`navigate | click | type | select | wait | inspect`). Accessibility snapshots are captured before and after each step. Labs are sliced into per-Use-Case subagents so the orchestrator's context doesn't overflow on 50-step labs.
 5. **Step judging.** An LLM judge inspects the snapshots + screenshot and returns a structured JSON verdict (`pass | broken | unclear | non_deterministic | transient | cannot_verify`) with confidence and a suggested correction. An optional second-pass critique judge filters out false positives.
-6. **Issue + fix-PR, or log.** If any findings clear the confidence threshold, one GitHub issue is filed per lab (or a comment added to the existing open issue), and a matching fix-PR is opened on `dewain/fix-<slug>-content-audit` applying the `suggested_correction` diffs and any refreshed screenshots. Otherwise, a clean entry is appended to `runtime/audit-history.yml`.
+6. **Issue + fix-PR, or log.** If any findings clear the confidence threshold, one GitHub issue is filed per lab (or a comment added to the existing open issue), and a matching fix-PR is opened on a run-unique branch `dewain/fix-<slug>-content-audit-<run-id>` applying the `suggested_correction` diffs and any refreshed screenshots — or, if an open fix-PR for the lab already exists, the commit is appended to it instead of opening a duplicate. Otherwise, a clean entry is appended to `runtime/audit-history.yml`.
 
 ## Installation
 
@@ -99,8 +99,8 @@ For the full setup — including prerequisite checks, workshop portal configurat
 commands/                                 # slash command entry points
 skills/mcs-lab-auditor/                   # primary orchestration skill + references/
 skills/mcs-lab-issue-filer/               # sub-skill: findings → gh issue create
-skills/mcs-lab-fix-pr-filer/              # sub-skill: apply correction diffs → fix-PR
-skills/mcs-lab-pr-appender/               # sub-skill: screenshots-only commit → open PR
+skills/mcs-lab-fix-pr-filer/              # sub-skill: apply correction diffs → new fix-PR (or append to open one)
+skills/mcs-lab-pr-appender/               # sub-skill: screenshots-only commit → existing open PR
 config/                                   # workshop.yml, judge-config.yml
 runtime/                                  # gitignored — accounts, audit log, per-run artifacts
 ```

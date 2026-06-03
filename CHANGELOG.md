@@ -6,7 +6,12 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-03
+
 ### Added
+
+- **`issues.pr_append.pr_match_head_prefix` config key** (default `dewain/fix-{slug}-content-audit`) — the head-ref **prefix** the fix-PR filer uses to find an existing open PR for a slug regardless of its run-id suffix. Documented in `docs/extending.md`.
+- **ADR-015 — Fix-PR per audit run; PR dedup scoped to OPEN PRs only** in `docs/design-decisions.md`. Records the move away from a fixed per-slug branch and a "never open a new PR" rule.
 
 - **`/audit-event` slash command** — generic event-audit entry point. Accepts `--event <key>` to pin one of the events defined in `_data/lab-config.yml.event_configs` (`bootcamp`, `agent-buildathon-1day`, `agent-buildathon-1month`, `azure-ai-workshop`, `mcs-in-a-day`, `mcs-in-a-day-v2`, and anything added later). Without `--event`, the Phase 1.5 run-start interview asks Q3a (event picker) to select interactively. Replaces the implicit "bootcamp is the only event" assumption that previously lived in Phase 1.4.
 - **Phase 1.5 Q3a — Event picker.** New interactive question between Q3 (scope) and Q4 (one-lab picker). Reads `event_configs` dynamically and offers the 3 most-used events plus an "Other (type the key)" free-text escape valve. Validates typed event keys against `event_configs.*`.
@@ -20,6 +25,7 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ### Changed
 
+- **Fix-PRs are now opened per audit run on a run-unique branch, and PR dedup is scoped to OPEN PRs only.** Previously `mcs-lab-fix-pr-filer` keyed everything to a fixed per-slug branch `dewain/fix-{slug}-content-audit` and the docs declared "one PR per lab, never open a new PR." That broke once a prior fix-PR was **merged** — new findings had nowhere clean to land. Now: if an **open** fix-PR for the lab exists (same-author, mergeable), the run's commit is **appended** to it; otherwise a **new** PR is opened on a run-unique branch `dewain/fix-{slug}-content-audit-{run_id}`. A merged or closed prior PR never blocks a new one. `issues.pr_append.pr_branch_pattern` default changed to include the `{run_id}` token. Affects `skills/mcs-lab-fix-pr-filer/SKILL.md`, `skills/mcs-lab-auditor/SKILL.md` (Phase 2 step 6), `config/judge-config.yml`, `README.md`, `docs/architecture.md` (sequence diagram now shows the fix-PR filer), `docs/design-decisions.md` (ADR-001 status + ADR-015), and `docs/extending.md`.
 - **Phase 1.4 enumeration** now reads `event_configs` (events map) AND `lab_metadata` (all-labs catalog) instead of hardcoding `bootcamp_lab_orders`. The active event is resolved from the entry-point command and CLI flags (`/audit-bootcamp` → `bootcamp`, `/audit-event --event <key>` → `<key>`, `/audit-event` without `--event` → Q3a picker, `/audit-lab` → no driving event).
 - **`manifest.yml.interview`** now records `event: <event-key|null>` alongside `scope: event|one` and `scope_labs[]`. Resume runs inherit the prior event for the relevant interview short-circuits.
 - **README, `docs/architecture.md`, `docs/installation.md`, `docs/extending.md`** updated to reflect the event-aware entry points and the cross-lab consistency pass. The architecture doc has a new "Cross-lab consistency fan-in" section with a Mermaid diagram.
@@ -188,5 +194,7 @@ Initial scaffold. The plugin is structurally complete: every file referenced by 
 - Single workshop-portal flow assumed (Skillable-style).
 - Screenshots aren't attached inline to issues (`gh` CLI limitation); they're referenced by local path in the issue body.
 
-[Unreleased]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.1.0...v0.2.1
 [0.1.0]: https://github.com/microsoft/BootcampLabTestPlugin/releases/tag/v0.1.0

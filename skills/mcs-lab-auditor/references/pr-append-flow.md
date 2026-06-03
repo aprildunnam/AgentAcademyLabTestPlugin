@@ -1,6 +1,8 @@
 # PR-append flow (narrow carve-out from "issues only")
 
-This document explains *when* and *why* the orchestrator deviates from its default "read-only on the mcs-labs repo" stance to push a single commit onto an existing open fix-PR. The *how* lives in `skills/mcs-lab-pr-appender/SKILL.md`.
+This document explains *when* and *why* the orchestrator deviates from its default "read-only on the mcs-labs repo" stance to push a single **screenshots-only** commit onto an existing open fix-PR. The *how* lives in `skills/mcs-lab-pr-appender/SKILL.md`.
+
+> **Note.** This is the lighter of two PR paths. The primary one is `skills/mcs-lab-fix-pr-filer/SKILL.md`, which applies the run's `suggested_correction` markdown diffs + screenshot replacements and either opens a **new** fix-PR on a run-unique branch or appends to the lab's existing **open** fix-PR (ADR-015). The appender below is the screenshots-only complement for the re-audit case where there's nothing to change but the images.
 
 ## Why this exists
 
