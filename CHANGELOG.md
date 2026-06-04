@@ -6,6 +6,27 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-04
+
+### Added
+
+- **Interactive lab-building mode** — a second mode alongside auditing. The new `/build-lab` command and `mcs-lab-builder` orchestration skill drive Playwright to the Copilot Studio Home page using the existing workshop account flow, then capture a brand-new lab step-by-step: snapshot → step intent → execute → screenshot → write instruction + tips → confirm → checkpoint. Two interaction modes, both confirming **every** step: **guided** (the user dictates each step) and **scenario** (the user describes the lab up front and the AI proposes one step at a time). The finished lab is assembled into a sibling-formatted `labs/<slug>/README.md`, re-run through the existing audit engine as a quality gate, and shipped as a PR on `microsoft/mcs-labs`.
+- **`mcs-lab-builder` skill** (`skills/mcs-lab-builder/SKILL.md`) — Opus-only orchestrator with phases B0 (hard preflight: Opus assert, gh auth, mcs-labs path resolution, registration-mechanism detection) → B1 (account + interaction-mode interview, reusing the auditor's account matrix verbatim) → B2 (navigate to Copilot Studio Home) → B3 (name + slug + collision check + metadata + optional event attachment) → B4 (per-step capture loop) → B5 (ledger → README assembly) → B6 (audit gate) → B7 (PR).
+- **`mcs-lab-new-lab-pr` sub-skill** (`skills/mcs-lab-new-lab-pr/SKILL.md`) — opens the new-lab PR on a run-unique branch `dewain/new-lab-{slug}-{build_id}` off fresh `origin/main`, committing the lab folder + registration entry (+ generator output in generate mode) in one commit. Distinct from `mcs-lab-fix-pr-filer` (which patches an existing lab from findings diffs); a new lab is a one-shot PR with no open-PR append path.
+- **Three builder reference docs** under `skills/mcs-lab-builder/references/`: `build-session-spec.md` (workspace + ledger schema, the capture-loop pseudocode, kebab screenshot naming, the ledger→README renderer, resume semantics), `lab-authoring-template.md` (the canonical sibling-lab README skeleton + callout/image conventions), and `lab-registration-spec.md` (runtime mechanism detection, the `_data/lab-config.yml` entry shapes, order-number rule, optional event attachment).
+- **`build:` config block in `config/judge-config.yml`** — `interaction_mode_default`; `audit_gate.{enabled,fail_on,max_loops,suppress_github_writes}`; `screenshot.image_name_strategy`; `registration.{mcs_labs_repo_path_candidates,root_config_relpath,data_config_relpath,generate_script_relpath,generate_args,order_gap_strategy}`. Plus `issues.new_lab_pr.{pr_branch_pattern,require_same_author}`.
+- **Event/workshop-agnostic by design.** Build mode (and its audit gate) is not tied to bootcamp or any single workshop. A lab is built and tested standalone; events are read dynamically from `lab-config.yml` and attaching a built lab to any event(s) is an optional B3 choice — never hardcoded to bootcamp.
+
+### Changed
+
+- **The audit engine gained an internal no-GitHub-writes invocation path** used by the build audit gate (B6): the auditor's Phase-2 per-UC judge loop runs against a freshly-built lab, but findings are consumed in-loop (fed back into the build to fix) instead of routing to `mcs-lab-issue-filer` / `mcs-lab-fix-pr-filer` / `mcs-lab-pr-appender`. Gated by `build.audit_gate.suppress_github_writes`.
+- **mcs-labs repo path is now resolved, not hardcoded.** Build mode tries `build.registration.mcs_labs_repo_path_candidates` in order (default `C:\Users\dewainr\Projects\mcs-labs`, then `C:\Users\dewainr\mcs-labs`) — the repo moved out of the old fixed location. (Audit-side commands still carry the legacy hardcoded path; tracked for a follow-up.)
+- **`config/judge-config.yml.plugin_version`** corrected from the stale `0.1.0` to `0.4.0`.
+
+### Notes
+
+- The mcs-labs new-lab toolchain documented in that repo's `docs/NEW_LAB_CHECKLIST.md` (root `lab-config.yml` + `Generate-Labs.ps1`) is currently **absent** from `origin/main`; build mode detects this at B0 and falls back to writing `labs/<slug>/README.md` + `_labs/<slug>.md` + the `_data/lab-config.yml` entry directly, halting with guidance if the mechanism is ambiguous.
+
 ## [0.3.0] - 2026-06-03
 
 ### Added
@@ -194,7 +215,8 @@ Initial scaffold. The plugin is structurally complete: every file referenced by 
 - Single workshop-portal flow assumed (Skillable-style).
 - Screenshots aren't attached inline to issues (`gh` CLI limitation); they're referenced by local path in the issue body.
 
-[Unreleased]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.1.0...v0.2.1
 [0.1.0]: https://github.com/microsoft/BootcampLabTestPlugin/releases/tag/v0.1.0
