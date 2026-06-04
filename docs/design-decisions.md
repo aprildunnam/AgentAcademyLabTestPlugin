@@ -326,22 +326,92 @@ Two config keys replace the single fixed pattern: `issues.pr_append.pr_branch_pa
 
 ---
 
-## ADR-014 — Plugin lives at user-level, not as marketplace plugin
+## ADR-016 — Plugin distribution (renumbered; was a duplicate ADR-014)
 
-**Status:** Accepted.
+**Status:** Accepted (revised). Originally "user-level plugin only"; the plugin is now **also distributed as a marketplace plugin** (`mcs-lab-auditor@BootcampLabTestPlugin`).
 
-**Context.** Claude Code plugins can live in a marketplace (auto-installed, versioned, shared) or at the user level (one user's machine). Marketplace plugins are great for distribution but require additional manifest/release machinery.
+**Context.** Claude Code plugins can live in a marketplace (auto-installed, versioned, shared) or at the user level (one user's machine). Marketplace plugins are great for distribution but require additional manifest/release machinery. (This entry was originally numbered ADR-014, colliding with the screenshots carve-out ADR; renumbered to ADR-016 for uniqueness.)
 
-**Decision.** **User-level plugin** at `~/.claude/plugins/mcs-lab-auditor/`, tracked by this Git repo. Users clone the repo into their plugins directory.
+**Decision.** Ship via the **`BootcampLabTestPlugin` marketplace** with a `.claude-plugin/marketplace.json`; the plugin is installed into the versioned cache (`~/.claude/plugins/cache/BootcampLabTestPlugin/mcs-lab-auditor/<version>`). A direct **git clone into `~/.claude/plugins/mcs-lab-auditor/`** remains supported as the development/edit path (and is what `installation.md` documents). `.claude-plugin/plugin.json` and `marketplace.json` carry the version in lockstep.
 
 **Consequences.**
-- Simpler distribution: `git clone` + restart Claude Code.
-- Updates: `git pull`.
-- No marketplace policy compliance work needed.
-- Could be elevated to a marketplace plugin later if/when sharing broadens beyond this team.
+- Updating an installed copy is a marketplace refresh (or `git pull` + re-sync of the cache for the clone path); `runtime/` is gitignored so cached account and history survive.
+- Two install shapes coexist: marketplace cache (distribution) and direct clone (development). Keep their versions aligned.
 
 **Alternatives considered.**
-- **Publish to a marketplace.** Deferred until there's demand and the plugin's Windows-only-ness is resolved.
+- **User-level clone only (the original decision).** Superseded — a marketplace makes versioned distribution and updates cleaner now that the plugin is shared beyond a single machine.
+
+---
+
+## ADR-017 — Interactive lab-building mode with an audit gate
+
+**Status:** Accepted (v0.4.0 addition).
+
+**Context.** The plugin could only *audit* existing labs. Authoring a new lab was still a manual, error-prone process: click through Copilot Studio, screenshot each step, hand-write the markdown, and hope it matches the live UI. The plugin already has all the pieces needed to do this well — a workshop account flow, a driven browser, an LLM judge that compares written instructions to live UI, and the lab markdown format.
+
+**Decision.** Add a second mode (`/build-lab` → `mcs-lab-builder`) that authors a new lab interactively, then **re-runs the finished lab through the existing audit engine as a quality gate** before opening a PR. The gate runs the auditor's per-UC judge loop but **suppresses all GitHub writes** (`build.audit_gate.suppress_github_writes`) — findings are consumed *in-loop* (each above-threshold `broken`/`unclear` finding loops back into the capture loop for a fix) instead of being filed as issues/PRs. The gate passes only when zero above-threshold findings remain (capped at `build.audit_gate.max_loops`).
+
+**Consequences.**
+- A built lab is verified against the live UI by the same judge that audits existing labs — the lab can't ship with steps that don't actually work.
+- The audit engine gains a non-GitHub invocation path; the judge/finding machinery stays disposition-agnostic (only the disposition step differs between modes).
+- Build mode confirms **every** step with the user (both interaction modes), trading speed for authoring accuracy.
+
+**Alternatives considered.**
+- **Author the markdown without re-driving the UI.** Rejected — defeats the plugin's core value (catching written-vs-live drift) at the moment it matters most.
+- **Reuse the issue/PR filers to record gate findings.** Rejected — gate findings are an authoring feedback loop, not a maintainer-facing report; filing them would create noise and a chicken-and-egg PR.
+
+---
+
+## ADR-018 — New-lab PR as a separate sub-skill, not an extension of the fix-PR filer
+
+**Status:** Accepted (v0.4.0 addition).
+
+**Context.** Build mode ends by opening a PR that adds a whole new lab. The plugin already has `mcs-lab-fix-pr-filer`, which opens/append PRs for audit *fixes*.
+
+**Decision.** Add a dedicated `mcs-lab-new-lab-pr` sub-skill rather than overloading the fix-PR filer. A new lab is a one-shot PR (folder + registration entry + generated/`_labs` output) on a run-unique branch `dewain/new-lab-{slug}-{build_id}` off fresh `origin/main`; it has no `suggested_correction` diffs and no open-PR-append/dedup semantics.
+
+**Consequences.**
+- Each filer keeps a crisp contract: fix-filer patches an existing lab from findings diffs with OPEN-PR dedup; new-lab filer adds a lab with no dedup (re-builds get a fresh `build_id` → fresh branch).
+- Branches off fresh `origin/main` (the mcs-labs clone is often on a feature branch), stashes/restores unrelated work, and never adds AI attribution.
+
+**Alternatives considered.**
+- **Extend `mcs-lab-fix-pr-filer` with a "new lab" branch.** Rejected — muddies its findings-diff + open-PR-dedup model with an unrelated code path.
+
+---
+
+## ADR-019 — Build and audit are event/workshop-agnostic
+
+**Status:** Accepted (v0.4.0 addition; generalizes ADR-005).
+
+**Context.** Despite the repo name "BootcampLabTestPlugin" and `/audit-bootcamp`, neither auditing nor building should be limited to the bootcamp event. A lab exists independently of any event; events are an optional grouping.
+
+**Decision.** Build mode (and its audit gate) operate on a lab **standalone**. A built lab is registered with `section` / `journeys` / `order` (all event-independent); attaching it to one or more events/workshops is an optional B3 choice, and the available events are read dynamically from `_data/lab-config.yml` — never hardcoded to bootcamp. Audit mode already supports any event (`/audit-event --event <key>`) and any single lab (`/audit-lab <slug>`).
+
+**Consequences.**
+- New events on the mcs-labs side need no plugin change.
+- The default for a built lab is "no event attachment" (standalone), keeping the diff minimal and leaving event wiring to maintainers unless explicitly requested.
+
+**Alternatives considered.**
+- **Default new labs into the bootcamp order.** Rejected — bakes in a bootcamp-centric assumption the user explicitly rejected.
+
+---
+
+## ADR-020 — Runtime registration-mechanism detection + mcs-labs path resolution
+
+**Status:** Accepted (v0.4.0 addition).
+
+**Context.** `mcs-labs/docs/NEW_LAB_CHECKLIST.md` documents registering a lab by editing a root `lab-config.yml` and running `scripts/Generate-Labs.ps1`. As of v0.4.0 **neither file exists** in the mcs-labs repo (feature branch or `origin/main`) — only the generated `_data/lab-config.yml` remains, with a stale "DO NOT EDIT" header. Separately, the repo moved out of the old hardcoded `C:\Users\dewainr\mcs-labs` to `…\Projects\mcs-labs`.
+
+**Decision.** Build mode **detects the registration mechanism at runtime** (B0): if a root `lab-config.yml` + generator exist, use the generate flow; otherwise fall back to **direct writes** of `labs/<slug>/README.md` + `_labs/<slug>.md` + the `_data/lab-config.yml` entry (the same direct-`_labs` editing the fix-PR filer already does). Genuinely ambiguous cases halt and ask rather than guess. The mcs-labs repo path is **resolved** from `build.registration.mcs_labs_repo_path_candidates` (first existing wins), not hardcoded.
+
+**Consequences.**
+- The plugin survives the upstream toolchain drift instead of failing mid-PR.
+- The draft is always preserved under `runtime/builds/<build-id>/`, so a halt loses no work.
+- Audit-side commands still carry the legacy hardcoded path; aligning them on the same resolution is tracked as a follow-up.
+
+**Alternatives considered.**
+- **Assume the documented generator exists.** Rejected — it doesn't; that would fail every build at registration.
+- **Always write `_data/lab-config.yml` directly without detection.** Rejected — if the generator returns upstream, hand-editing generated output would be wrong; detection keeps both paths correct.
 
 ---
 

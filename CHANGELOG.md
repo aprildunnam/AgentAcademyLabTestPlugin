@@ -6,6 +6,18 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+### Documentation
+
+- **Documented build mode across all docs.** PR #35 shipped the `/build-lab` feature but only touched `README.md` + `CHANGELOG.md`. This pass brings the rest of the documentation current:
+  - `docs/architecture.md` — new "Build mode (interactive lab authoring)" section with the B0–B7 lifecycle diagram; build-mode write boundary + workspace layout (`runtime/builds/<build-id>/`); corrected the stale "Issues, not PRs" rationale.
+  - `docs/design-decisions.md` — ADR-017 (build mode + audit gate), ADR-018 (new-lab PR as a separate sub-skill), ADR-019 (event/workshop-agnostic), ADR-020 (runtime registration detection + mcs-labs path resolution). Renumbered the duplicate ADR-014 ("plugin distribution") to ADR-016 and updated it for marketplace distribution.
+  - `docs/installation.md` — `/build-lab` in the command list, PR permission note, and a "Building a new lab" walkthrough.
+  - `docs/extending.md` — "Customizing build mode" table; build-mode path resolution note; refreshed the "What NOT to extend" write-path boundary.
+  - `docs/security.md` — build mode reuses the same account/DPAPI (no new secrets); added the new-lab PR write path and noted the gate files nothing on GitHub.
+  - `docs/troubleshooting.md` — new "Build mode" failure-mode section (path resolution, registration mechanism, gate loops, slug collision, PR permission, resume).
+  - `README.md` — two-mode intro, build-mode "How it works", project layout + artifacts + limitations.
+  - `docs/mcs-lab-auditor-overview-and-architecture.pdf` — regenerated from `scripts/Build-OverviewPdf.py` (now covers build mode; version → v0.4.0). Note: the prior committed PDF was stale relative to its own script (it embedded custom fonts the current script no longer references), so the regenerated file is smaller and uses the script's base-14 fonts.
+
 ## [0.4.0] - 2026-06-04
 
 ### Added

@@ -1,16 +1,21 @@
 # BootcampLabTestPlugin (`mcs-lab-auditor`)
 
-A Claude Code plugin that audits labs in the [`microsoft/mcs-labs`](https://github.com/microsoft/mcs-labs) repository end-to-end. It drives the live product UI with Playwright, has an LLM judge compare observed behavior to each written instruction, and files **one GitHub issue per lab** (plus a matching fix-PR) against `microsoft/mcs-labs` whenever steps are broken or unclear. Clean labs produce a local-only entry in an audit-history log — no GitHub activity at all when nothing's wrong.
+A Claude Code plugin that **audits and builds** labs in the [`microsoft/mcs-labs`](https://github.com/microsoft/mcs-labs) repository end-to-end, driving the live product UI with Playwright.
 
-The auditor is **event-aware**: any workshop entry defined in `_data/lab-config.yml.event_configs` (bootcamp, buildathons, MCS-in-a-Day variants, the Azure AI workshop, anything added in the future) is a valid scope. Single labs can also be audited individually against the full `lab_metadata` catalog — independent of any event.
+- **Audit mode** (`/audit-*`) drives an existing lab's steps, has an LLM judge compare observed behavior to each written instruction, and files **one GitHub issue per lab** (plus a matching fix-PR) whenever steps are broken or unclear. Clean labs produce a local-only audit-history entry — no GitHub activity when nothing's wrong.
+- **Build mode** (`/build-lab`, v0.4.0+) **interactively authors a new lab**: it gets a workshop account, drives to the Copilot Studio Home page, captures the lab step-by-step (instructions + tips + screenshots, confirming every step), assembles a sibling-formatted `labs/<slug>/README.md`, re-runs it through the same audit engine as a quality gate, and opens a PR adding the lab.
+
+Both modes are **event/workshop-agnostic**: any workshop entry defined in `_data/lab-config.yml.event_configs` (bootcamp, buildathons, MCS-in-a-Day variants, the Azure AI workshop, anything added later) is a valid audit scope, single labs can be audited individually against the full `lab_metadata` catalog, and a built lab is created standalone with optional event attachment — nothing is hardcoded to bootcamp.
 
 **The plugin writes to the mcs-labs repo through three narrow paths.** (a) `gh issue create | comment | edit` for issues + label hygiene (always on). (b) A **fix-PR per audit run** with findings: it applies the `suggested_correction` diffs + screenshot replacements and opens a new PR on a run-unique branch `dewain/fix-<slug>-content-audit-<run-id>` — *unless* an open fix-PR for that lab already exists, in which case the run's commit is appended to that PR instead of opening a duplicate. See `skills/mcs-lab-fix-pr-filer/SKILL.md`. (c) A screenshots-only commit appended to an **already-open** fix-PR (same-author, mergeable) for the lighter re-audit case — on by default, suppressed with `--no-update-screenshots` / `--no-append-to-pr` (CLI) or `issues.pr_append.enabled_by_default: false` (config). See `skills/mcs-lab-pr-appender/SKILL.md`.
 
-**The plugin will never create a duplicate _open_ issue or PR for a lab that already has one open.** Phase 1.4 of every run probes `gh issue list` + `gh pr list` per slug, and the per-lab disposition uses that result — new findings go into a fingerprint-deduped delta comment on the existing open issue, and a run's fixes are appended to the existing open PR. Dedup is scoped to **open** items only: a merged or closed prior issue/PR never blocks a new one, so each run with fresh findings gets its own PR on a fresh branch.
+**The plugin will never create a duplicate _open_ issue or PR for a lab that already has one open.** Phase 1.4 of every audit run probes `gh issue list` + `gh pr list` per slug, and the per-lab disposition uses that result — new findings go into a fingerprint-deduped delta comment on the existing open issue, and a run's fixes are appended to the existing open PR. Dedup is scoped to **open** items only: a merged or closed prior issue/PR never blocks a new one, so each run with fresh findings gets its own PR on a fresh branch.
+
+**Build mode adds one more write path:** a **new-lab PR** (`skills/mcs-lab-new-lab-pr/SKILL.md`) on a run-unique branch `dewain/new-lab-<slug>-<build-id>` off fresh `origin/main`. Build mode's audit gate **files nothing on GitHub** — its findings stay local and feed the authoring loop until the lab passes.
 
 ## Status
 
-`v0.3.0` — field-tested. The plugin has completed multiple full audit cycles against live workshop tenants. In the May 2026 audit cycle alone, it raised **24 issues** across 11 bootcamp labs and generated **19 merged fix PRs** against `microsoft/mcs-labs`. See [Real-world impact](#real-world-impact) below.
+`v0.4.0` — field-tested audit mode; build mode is new. The plugin has completed multiple full audit cycles against live workshop tenants. In the May 2026 audit cycle alone, it raised **24 issues** across 11 bootcamp labs and generated **19 merged fix PRs** against `microsoft/mcs-labs`. See [Real-world impact](#real-world-impact) below. The interactive lab-building mode (`/build-lab`) shipped in v0.4.0 and awaits its first full live-tenant build.
 
 ## Real-world impact
 
@@ -46,6 +51,19 @@ All findings: [microsoft/mcs-labs issues (lab-audit label)](https://github.com/m
 4. **Interactive step execution.** Each step is dispatched to the Playwright MCP using an action classifier (`navigate | click | type | select | wait | inspect`). Accessibility snapshots are captured before and after each step. Labs are sliced into per-Use-Case subagents so the orchestrator's context doesn't overflow on 50-step labs.
 5. **Step judging.** An LLM judge inspects the snapshots + screenshot and returns a structured JSON verdict (`pass | broken | unclear | non_deterministic | transient | cannot_verify`) with confidence and a suggested correction. An optional second-pass critique judge filters out false positives.
 6. **Issue + fix-PR, or log.** If any findings clear the confidence threshold, one GitHub issue is filed per lab (or a comment added to the existing open issue), and a matching fix-PR is opened on a run-unique branch `dewain/fix-<slug>-content-audit-<run-id>` applying the `suggested_correction` diffs and any refreshed screenshots — or, if an open fix-PR for the lab already exists, the commit is appended to it instead of opening a duplicate. Otherwise, a clean entry is appended to `runtime/audit-history.yml`.
+
+### How build mode works (`/build-lab`)
+
+Build mode reuses the account flow, Playwright cookbook, judge, and finding schema above, and adds an authoring loop (phases B0–B7 in `skills/mcs-lab-builder/SKILL.md`):
+
+1. **Preflight + interview.** Assert Opus, check `gh`, **resolve the mcs-labs path**, **detect the registration mechanism**, then pick the account and an interaction mode — **guided** (you dictate each step) or **scenario** (you describe the lab, the AI proposes each step). Both confirm every step.
+2. **Navigate** to the Copilot Studio Home page; name the lab (slug + collision check); capture metadata and optional event attachment.
+3. **Capture loop.** For each step: snapshot → step intent → execute in Playwright → screenshot → write the instruction + tips → **confirm** → checkpoint to a ledger.
+4. **Assemble** the full sibling-formatted `labs/<slug>/README.md` from the ledger.
+5. **Audit gate.** Register + materialize the lab and run the audit engine against it with **all GitHub writes suppressed**; any broken/unclear step loops back for a fix until the lab passes.
+6. **PR.** Open a PR adding `labs/<slug>/README.md` + screenshots + the registration entry. Skipped under `--no-pr`.
+
+See [`docs/architecture.md`](docs/architecture.md#build-mode-interactive-lab-authoring) for the full lifecycle diagram.
 
 ## Installation
 
@@ -91,19 +109,21 @@ For the full setup — including prerequisite checks, workshop portal configurat
 | File | Purpose |
 |---|---|
 | `config/workshop.yml` | Workshop portal URL + redemption page selectors. Edit on first run — the default URL is the placeholder `REPLACE_ME_ON_FIRST_RUN`. |
-| `config/judge-config.yml` | Confidence thresholds, retry caps, non-deterministic lab list, scene-boundary probe URL. |
+| `config/judge-config.yml` | Confidence thresholds, retry caps, non-deterministic lab list, scene-boundary probe URL, and the `build:` block (interaction mode, audit gate, mcs-labs path + registration). |
 
 ## Project layout
 
 ```
 .claude-plugin/plugin.json                # plugin manifest
-commands/                                 # slash command entry points
-skills/mcs-lab-auditor/                   # primary orchestration skill + references/
+commands/                                 # slash command entry points (/audit-*, /build-lab)
+skills/mcs-lab-auditor/                   # audit orchestration skill + references/
+skills/mcs-lab-builder/                   # build orchestration skill + references/ (B0–B7)
 skills/mcs-lab-issue-filer/               # sub-skill: findings → gh issue create
 skills/mcs-lab-fix-pr-filer/              # sub-skill: apply correction diffs → new fix-PR (or append to open one)
 skills/mcs-lab-pr-appender/               # sub-skill: screenshots-only commit → existing open PR
-config/                                   # workshop.yml, judge-config.yml
-runtime/                                  # gitignored — accounts, audit log, per-run artifacts
+skills/mcs-lab-new-lab-pr/                # sub-skill (build mode): new lab → PR
+config/                                   # workshop.yml, judge-config.yml (incl. build: block)
+runtime/                                  # gitignored — accounts, audit log, per-run + per-build artifacts
 ```
 
 The `references/` directory under each skill holds the operational rulebooks the skill loads on demand: lab-parser grammar, Playwright cookbook, workshop-redemption flow, LLM judge prompts, finding schema, audit-log schema.
@@ -116,11 +136,13 @@ The `runtime/` directory is gitignored. It contains:
 - `account/account.meta.json` — non-secret account metadata (user_id, timestamps).
 - `audit-history.yml` — rolling local log of every audit run, pass or fail.
 - `runs/<run-id>/...` — per-run parsed steps, findings, screenshots, transcripts.
+- `builds/<build-id>/...` — per-build (build mode) workspace: draft README, captured screenshots, step ledger, resume state, gate findings.
 
 ## Limitations
 
 - **Windows-only**, due to DPAPI.
-- **Hard-coded paths** to `C:\Users\dewainr\mcs-labs` in several places — adjust for your clone location ([instructions](docs/installation.md#step-5b--adjust-hard-coded-paths-only-if-your-clone-is-not-at-cusersdewainrmcs-labs)).
+- **Hard-coded paths** to `C:\Users\dewainr\mcs-labs` in the **audit** commands — adjust for your clone location ([instructions](docs/installation.md#step-5b--adjust-hard-coded-paths-only-if-your-clone-is-not-at-cusersdewainrmcs-labs)). **Build mode** instead resolves the repo path from `judge-config.yml.build.registration.mcs_labs_repo_path_candidates`; aligning the audit commands on the same resolution is a tracked follow-up.
+- **mcs-labs new-lab toolchain drift**: the root `lab-config.yml` + `Generate-Labs.ps1` documented in that repo's `NEW_LAB_CHECKLIST.md` are absent upstream, so build mode registers new labs by writing `_labs/<slug>.md` + the `_data/lab-config.yml` entry directly (it auto-detects and uses the generator if it returns).
 - **Single workshop-portal flow** assumed (Skillable-style). Other portals require editing `references/workshop-redemption.md` and `config/workshop.yml` ([how-to](docs/extending.md#adapting-to-a-different-workshop-portal)).
 - **Screenshots aren't attached to issues** — `gh issue create` doesn't support inline file uploads; screenshots stay in local run artifacts and are referenced by path in the issue body.
 - **No automatic tenant cleanup**. Orphan agents created during testing accumulate; the user manages tenant hygiene separately. (Deliberate — see [ADR-004](docs/design-decisions.md#adr-004--no-environment-cleanup-as-part-of-audit-runs).)
@@ -134,7 +156,7 @@ The `runtime/` directory is gitignored. It contains:
 | [`docs/design-decisions.md`](docs/design-decisions.md) | The "why" behind the shape of the plugin — ADR-style enumeration of architectural choices and their alternatives. |
 | [`docs/security.md`](docs/security.md) | What's encrypted, what's logged, what's at risk, what isn't. Read this before extending anything credential-handling. |
 | [`docs/troubleshooting.md`](docs/troubleshooting.md) | Common failure modes during a run, grouped by category. |
-| [`docs/extending.md`](docs/extending.md) | Adding commands, adapting to a different workshop portal, pointing at a different lab repo, tuning the judge. |
+| [`docs/extending.md`](docs/extending.md) | Adding commands, adapting to a different workshop portal, pointing at a different lab repo, tuning the judge, customizing build mode. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Project layout, change recipes, testing approach, conventions. |
 | [`SECURITY.md`](SECURITY.md) | How to report security issues (via MSRC, **not** GitHub). |
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history. |

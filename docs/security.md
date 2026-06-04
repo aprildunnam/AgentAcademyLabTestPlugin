@@ -2,6 +2,8 @@
 
 `mcs-lab-auditor` handles workshop-issued test account credentials and drives a logged-in browser through several Microsoft product portals. This document spells out exactly what is sensitive, where each sensitive item lives, what protects it, and what the residual risks are.
 
+> **Build mode (`/build-lab`, v0.4.0+) introduces no new secrets.** It reuses the same workshop account + DPAPI credential cache and the same logged-in browser session described here. Its only additional at-rest artifacts are the build workspace under `runtime/builds/<build-id>/` (draft markdown, captured screenshots, accessibility snapshots) — same protections and residual risks as the `runtime/runs/` artifacts below. Its only GitHub write is the new-lab PR (the audit gate writes nothing to GitHub).
+
 If you find a flaw in this model, **do not file a public GitHub issue** — report it via MSRC per [`SECURITY.md`](../SECURITY.md).
 
 ## Secret inventory
@@ -78,7 +80,7 @@ If `account_user_id` is sensitive in your context (e.g., the workshop account's 
 - **Compromise of an active signed-in MCP browser session**: an attacker with same-user access could act as the workshop account for as long as that session remains valid (usually a few hours). The workshop account itself has limited scope and expires within 24–48 hours.
 - **Accidental disclosure via the audit log**: the log contains workshop-account identities and timestamps, no secrets.
 - **Accidental disclosure via filed GitHub issues**: the issue body template excludes secrets by construction.
-- **Accidental write to `microsoft/mcs-labs`** outside the two narrow paths (Issues API + screenshots-only PR-append). The orchestrator's "Important rules" section and the `mcs-lab-pr-appender` sub-skill enumerate every write the plugin is allowed to make; anything beyond that is a bug, not a feature. The PR-append guardrails (`require_same_author`, `require_mergeable`, `allow_force_push: false`, branch-name protection list, screenshots-only scope) defend against the most common ways an automated push could damage a shared repo.
+- **Accidental write to `microsoft/mcs-labs`** outside the enumerated narrow paths. Those paths are: the **Issues API**; the **fix-PR per audit run** (ADR-015); the **screenshots-only PR append** (ADR-014); and, in build mode, the **new-lab PR** (ADR-018). The orchestrator's "Important rules" sections and each PR sub-skill enumerate every write the plugin is allowed to make; anything beyond that is a bug, not a feature. Guardrails (`require_same_author`, `require_mergeable`, `allow_force_push: false`, run-unique branch names off fresh `origin/main`, stash/restore of unrelated working-tree changes) defend against the most common ways an automated push could damage a shared repo. **Build mode's audit gate files nothing on GitHub** (`build.audit_gate.suppress_github_writes`) — its findings stay local and feed the authoring loop.
 
 ### Out of scope
 
