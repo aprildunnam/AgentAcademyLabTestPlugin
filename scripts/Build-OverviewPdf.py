@@ -437,18 +437,19 @@ def build_story(styles):
     story.append(P(styles, "cover_title", "mcs-lab-auditor"))
     story.append(Spacer(1, 0.05 * inch))
     story.append(P(styles, "cover_subtitle",
-                   "End-to-end audits for Microsoft Copilot Studio workshop labs."))
+                   "Audit and build Microsoft Copilot Studio workshop labs, end-to-end."))
     story.append(Spacer(1, 0.35 * inch))
     story.append(P(styles, "cover_summary",
-        "A Claude Code plugin that drives the live product UI with Playwright, "
-        "judges each step with an LLM, and files GitHub issues + matching fix PRs "
-        "against <font face='Courier' color='#7dd3fc'>microsoft/mcs-labs</font> whenever the lab and the "
-        "UI disagree."
+        "A Claude Code plugin that drives the live product UI with Playwright and judges each "
+        "step with an LLM. <b>Audit mode</b> files GitHub issues + matching fix PRs against "
+        "<font face='Courier' color='#7dd3fc'>microsoft/mcs-labs</font> whenever the lab and the UI disagree. "
+        "<b>Build mode</b> interactively authors a new lab step-by-step, gates it through the same "
+        "audit engine, and opens a PR adding it. Both modes are event/workshop-agnostic."
     ))
     story.append(Spacer(1, 0.25 * inch))
     story.append(P(styles, "cover_byline",
         "Overview &middot; Architecture &middot; Installation &middot; CUA comparison &nbsp;|&nbsp; "
-        f"v0.3.0-unreleased &middot; {date.today().isoformat()}"
+        f"v0.4.0 &middot; {date.today().isoformat()}"
     ))
     story.append(PageBreak())
 
@@ -456,7 +457,7 @@ def build_story(styles):
     story.append(P(styles, "toc_title", "CONTENTS"))
     story.append(HRule(thickness=1.5, color=Theme.primary, space_after=10))
     toc_rows = [
-        ["1", "Overview", "what the plugin does, top-level entry points"],
+        ["1", "Overview", "audit + build modes, top-level entry points"],
         ["2", "Why a CUA cannot replace this", "interview, correction loop, verdicts, static checks, PR authoring"],
         ["3", "Architecture", "boundaries, components, run lifecycle, cross-lab consistency"],
         ["4", "Installation", "prerequisites, step-by-step, first run, Claude Code + Copilot CLI"],
@@ -488,18 +489,20 @@ def build_story(styles):
     # ==================== 1. Overview ====================
     story.extend(section_opener(styles, 1, "Overview", eyebrow="What the plugin does"))
     story.append(P(styles, "lede",
-        "<font color='#1d4ed8'><b>mcs-lab-auditor</b></font> takes a workshop event (or a single lab) as input and "
-        "produces, per lab, either (a) a clean-pass entry in a local audit log, or (b) one "
-        "GitHub issue plus one fix-PR against <font face='Courier'>microsoft/mcs-labs</font> describing every step "
-        "where the live UI did not match the written instruction. Findings include verbatim "
-        "text replacements, screenshot evidence, and machine-readable fingerprints that future "
-        "audits use to de-duplicate against the same issue."
+        "<font color='#1d4ed8'><b>mcs-lab-auditor</b></font> has two modes. <b>Audit mode</b> takes a workshop "
+        "event (or a single lab) and produces, per lab, either (a) a clean-pass entry in a local "
+        "audit log, or (b) one GitHub issue plus one fix-PR against <font face='Courier'>microsoft/mcs-labs</font> "
+        "describing every step where the live UI did not match the written instruction. "
+        "<b>Build mode</b> (v0.4.0+) interactively authors a brand-new lab, drives every step through "
+        "Playwright, gates the finished lab through the same audit engine, and opens a PR adding it."
     ))
     story.append(P(styles, "body",
-        "The plugin is <b>event-aware</b>. Any entry in <font face='Courier'>_data/lab-config.yml.event_configs</font> "
-        "(Architecture Bootcamp, Agent Build-A-Thon variants, MCS-in-a-Day variants, the Azure AI "
-        "workshop, anything added later) is a valid scope. Single labs can also be audited "
-        "individually against the full <font face='Courier'>lab_metadata</font> catalog - independent of any event."
+        "Both modes are <b>event/workshop-agnostic</b>. Any entry in "
+        "<font face='Courier'>_data/lab-config.yml.event_configs</font> (Architecture Bootcamp, Agent Build-A-Thon "
+        "variants, MCS-in-a-Day variants, the Azure AI workshop, anything added later) is a valid "
+        "audit scope; single labs can be audited against the full <font face='Courier'>lab_metadata</font> "
+        "catalog; and a built lab is created standalone with optional event attachment - nothing is "
+        "hardcoded to bootcamp."
     ))
 
     story.append(P(styles, "h2", "Top-level entry points"))
@@ -515,10 +518,12 @@ def build_story(styles):
          "Print a local summary of recent audit runs. No browser activity."],
         ["/audit-account [show|redeem|clear]",
          "Manage the DPAPI-cached workshop-issued test account."],
+        ["/build-lab [<lab-name>]",
+         "Interactively build a NEW lab end-to-end, gate it through the audit engine, and open a PR (v0.4.0+)."],
     ]
     story.append(header_table(cmd_rows, [2.1 * inch, 4.1 * inch]))
 
-    story.append(P(styles, "h2", "What runs at a glance"))
+    story.append(P(styles, "h2", "What runs at a glance (audit mode)"))
     story.extend(bullets(styles, [
         "<b>Run-start interview</b> (Q1 account / Q2 phase mix / Q3 scope / Q3a event picker / Q4 lab picker).",
         "<b>Lab parsing</b> into use cases, scenes, and numbered steps. Image refs become semantic hints.",
@@ -526,6 +531,20 @@ def build_story(styles):
         "<b>Interactive step execution</b> via Playwright MCP - one per-Use-Case subagent at a time.",
         "<b>LLM judge</b> emits a structured verdict per step (pass / broken / unclear / non_deterministic / transient / cannot_verify).",
         "<b>Issue + fix-PR, or local log</b>. Findings render to one issue body and one PR with the literal diffs applied.",
+    ]))
+
+    story.append(P(styles, "h2", "Build mode at a glance (/build-lab)"))
+    story.append(P(styles, "body",
+        "Build mode reuses the account flow, Playwright cookbook, judge, and finding schema above, "
+        "and adds an interactive authoring loop (phases B0-B7). It confirms <b>every</b> step with the user."
+    ))
+    story.extend(bullets(styles, [
+        "<b>Preflight + interview</b> - assert Opus, check gh, resolve the mcs-labs path, detect the registration mechanism; pick the account and a mode: <b>guided</b> (you dictate each step) or <b>scenario</b> (the AI proposes each step).",
+        "<b>Navigate</b> to the Copilot Studio Home page; name the lab (slug + collision check); capture metadata + optional event attachment.",
+        "<b>Capture loop</b> - snapshot, execute the step in Playwright, screenshot, write the instruction + tips, confirm, checkpoint to a ledger.",
+        "<b>Assemble</b> the sibling-formatted labs/&lt;slug&gt;/README.md from the ledger.",
+        "<b>Audit gate</b> - register + run the audit engine against the built lab with all GitHub writes suppressed; broken/unclear steps loop back for a fix until it passes.",
+        "<b>New-lab PR</b> - add labs/&lt;slug&gt;/README.md + screenshots + the registration entry. Skipped under --no-pr.",
     ]))
 
     # ==================== 2. Why not a CUA ====================

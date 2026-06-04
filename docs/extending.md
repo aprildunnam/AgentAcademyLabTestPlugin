@@ -67,7 +67,9 @@ To add `/audit-foo`:
 
 ## Pointing at a different lab repo
 
-By default the plugin reads from `C:\Users\dewainr\mcs-labs`. Adapting:
+> **Build mode already resolves the path.** `/build-lab` (v0.4.0+) does **not** use the hardcoded path below — it resolves the mcs-labs repo from `config/judge-config.yml.build.registration.mcs_labs_repo_path_candidates` (first existing wins; default `…\Projects\mcs-labs` then `…\mcs-labs`). The hardcoded path described here still applies to the **audit** commands; aligning them on the same candidate-resolution is a tracked follow-up (ADR-020). To point build mode at a different clone, add it as the first entry in that candidates list.
+
+For the audit commands, the plugin reads from `C:\Users\dewainr\mcs-labs` by default. Adapting:
 
 ### Quick (per-machine) override
 
@@ -171,13 +173,29 @@ The DPAPI dependency is the blocker. Plan:
 
 This is a v0.3+ effort. Track via a GitHub issue if it's a real need.
 
+## Customizing build mode (`/build-lab`)
+
+Build mode authors a new lab end-to-end; the pieces you'll most likely adjust:
+
+| Want to | Edit |
+|---|---|
+| Change the default interaction mode | `judge-config.yml.build.interaction_mode_default` (`prompt` / `guided` / `scenario`). Per-run override: `--mode`. |
+| Change what fails the audit gate, or how many fix loops it allows | `judge-config.yml.build.audit_gate.fail_on` (default `[broken, unclear]`) and `audit_gate.max_loops`. |
+| Point build mode at a different mcs-labs clone | Prepend your path to `judge-config.yml.build.registration.mcs_labs_repo_path_candidates`. |
+| Change the new-lab PR branch name | `judge-config.yml.issues.new_lab_pr.pr_branch_pattern` (default `dewain/new-lab-{slug}-{build_id}`). |
+| Change the new-lab README format | Edit `skills/mcs-lab-builder/references/lab-authoring-template.md` — the canonical skeleton B5 renders against. |
+| Change how a lab is registered (config maps, `_labs` frontmatter) | Edit `skills/mcs-lab-builder/references/lab-registration-spec.md`. It documents both the `generate` and `direct` mechanisms; B0 detects which applies. |
+| Change the capture loop, ledger schema, or screenshot naming | Edit `skills/mcs-lab-builder/references/build-session-spec.md`. |
+
+**If the mcs-labs new-lab toolchain returns** (a root `lab-config.yml` + `scripts/Generate-Labs.ps1`), no code change is needed — B0 detects it and switches from direct-write to the generate flow automatically (`lab-registration-spec.md` §1). Confirm `build.registration.generate_script_relpath` matches the script's actual path.
+
 ## What NOT to extend
 
 Some boundaries are deliberate and shouldn't be crossed without re-opening the relevant ADR (`docs/design-decisions.md`):
 
-- **Don't add an "apply suggested correction as a PR" mode.** ADR-001 explicitly chose issues over PRs.
+- **Keep every write path narrow and explicit.** The plugin's writes to `microsoft/mcs-labs` are exactly: the Issues API (ADR-001), the fix-PR per audit run (ADR-015), the screenshots-only PR append (ADR-014), and the build-mode new-lab PR (ADR-018). Don't add a path that mutates the repo outside these — and don't broaden the audit fix-PR into auto-applying corrections without review.
 - **Don't add automatic tenant cleanup.** ADR-004 explicitly excluded this.
-- **Don't commit `runtime/` contents.** The `.gitignore` enforces it; don't relax it.
-- **Don't hard-code lab slugs.** ADR-005 — always read from `_data/lab-config.yml`.
+- **Don't commit `runtime/` contents.** The `.gitignore` enforces it; don't relax it. This includes `runtime/builds/` (build-mode workspaces).
+- **Don't hard-code lab slugs or assume the bootcamp event.** ADR-005 / ADR-019 — always read from `_data/lab-config.yml`; both audit and build are event/workshop-agnostic.
 
 If a real need pushes against one of these, write a new ADR superseding the old one and have a conversation before merging.

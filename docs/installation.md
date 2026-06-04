@@ -9,7 +9,7 @@ Step-by-step setup for `mcs-lab-auditor`. If you hit problems, jump to [Troubles
 | **Windows 10 or 11** | DPAPI credential caching is Windows-only | `winver` |
 | **PowerShell 7+** | Used by the workshop-redemption flow and `audit-account` | `pwsh -v` (or `$PSVersionTable.PSVersion` inside PowerShell) |
 | **Git** | To clone this plugin and `microsoft/mcs-labs` | `git --version` |
-| **GitHub CLI (`gh`)** authenticated with an account that can file issues on `microsoft/mcs-labs` | The plugin's only write path | `gh auth status` and `gh repo view microsoft/mcs-labs --json viewerPermission` |
+| **GitHub CLI (`gh`)** authenticated with an account that can file issues on `microsoft/mcs-labs` (and **open PRs**, for fix-PRs and build mode) | The plugin's GitHub write path. `READ` is insufficient. | `gh auth status` and `gh repo view microsoft/mcs-labs --json viewerPermission` |
 | **Claude Code** (Desktop, CLI, or IDE) | Hosts the plugin | Run Claude Code; check version in About/help |
 | **Playwright MCP plugin enabled in Claude Code** | Drives the browser | In Claude Code: confirm `mcp__plugin_playwright_playwright__*` tools are listed in a `/tools` or equivalent command, or that `playwright@claude-plugins-official` appears in `~/.claude/settings.json` under enabled plugins |
 | **A local clone of `microsoft/mcs-labs`** | The plugin reads lab markdown and the bootcamp config from it | `Test-Path C:\Users\dewainr\mcs-labs\_data\lab-config.yml` should return `True` |
@@ -110,6 +110,7 @@ Plugins are discovered at session start. Close Claude Code (or end your Copilot 
 - `/audit-lab` (single lab — with or without a slug)
 - `/audit-report`
 - `/audit-account`
+- `/build-lab` (interactively build a **new** lab and open a PR — v0.4.0+)
 
 If those don't appear, see [Troubleshooting](#troubleshooting).
 
@@ -232,6 +233,30 @@ Expect 3–8 hours for the bootcamp's 11 labs (other events vary by lab count). 
 ```
 
 (The `<run-id>` is printed at the start of each run and recorded in `runtime/runs/<run-id>/manifest.yml`. Resume inherits the prior run's `event`, `phase_mix`, and `scope_labs`.)
+
+---
+
+## Building a new lab (`/build-lab`, v0.4.0+)
+
+Build mode authors a brand-new lab end-to-end and opens a PR adding it to `microsoft/mcs-labs`. It reuses the same cached workshop account, so Steps 6 (cache a test account) and the `gh` PR permission above are the only prerequisites.
+
+```text
+/build-lab "Build a Returns Triage Agent"          # full build → audit gate → PR
+/build-lab "Build a Returns Triage Agent" --no-pr  # author + gate only; leaves the draft, no PR
+/build-lab --resume <build-id>                      # resume an interrupted build
+```
+
+What happens:
+
+1. **Account + mode** — pick the cached account (or redeem) and choose **guided** (you dictate each step) or **scenario** (you describe the lab, the AI proposes each step). Both confirm every step.
+2. **Navigate** to the Copilot Studio Home page, then name the lab.
+3. **Capture loop** — for each step: the action runs in the browser, a screenshot is taken, the instruction prose + tips are written, and you confirm before moving on.
+4. **Audit gate** — the finished lab is re-run through the audit engine; any broken/unclear steps loop back for a fix. No GitHub issue/PR is filed by the gate.
+5. **PR** — once the gate passes, a PR adds `labs/<slug>/README.md` + screenshots + the registration entry.
+
+Build mode is **event/workshop-agnostic** — the new lab is standalone by default; attaching it to an event (bootcamp, etc.) is an optional prompt. It **resolves the mcs-labs repo path automatically** from `config/judge-config.yml.build.registration.mcs_labs_repo_path_candidates` (so the Step 5b hardcoded-path edit is not needed for build mode). Build artifacts live under `runtime/builds/<build-id>/` (gitignored); the mcs-labs working tree is touched only when the PR is created.
+
+> Heads-up: the mcs-labs new-lab toolchain documented in that repo's `docs/NEW_LAB_CHECKLIST.md` (root `lab-config.yml` + `Generate-Labs.ps1`) is currently absent upstream; build mode detects this and writes `labs/<slug>/README.md` + `_labs/<slug>.md` + the `_data/lab-config.yml` entry directly. See [`extending.md`](extending.md#customizing-build-mode-build-lab).
 
 ---
 

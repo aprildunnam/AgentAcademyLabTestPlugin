@@ -154,6 +154,32 @@ Probably a `--resume` after a partially-written entry. The plugin should append-
 
 The plugin emits a soft warning at 5 MB. Archive old entries manually: move them to a dated file like `runtime/audit-history-2026Q1.yml.bak` and trim the live file. Don't auto-rotate from the plugin — too much risk of losing the wrong entries.
 
+## Build mode (`/build-lab`) issues
+
+**Symptom:** Build halts at B0 with "could not locate the mcs-labs repo."
+
+None of the paths in `judge-config.yml.build.registration.mcs_labs_repo_path_candidates` had a readable `_data/lab-config.yml`. Add your clone's path as the first entry in that list. (Build mode does **not** use the audit commands' hardcoded `C:\Users\dewainr\mcs-labs`.)
+
+**Symptom:** Build halts at B6 with a registration-mechanism message ("could not find the editable root `lab-config.yml`" / "generator not found").
+
+The mcs-labs new-lab toolchain documented in `NEW_LAB_CHECKLIST.md` (root `lab-config.yml` + `scripts/Generate-Labs.ps1`) is absent upstream. Expected — build mode falls back to **direct writes** of `labs/<slug>/README.md` + `_labs/<slug>.md` + the `_data/lab-config.yml` entry. If it halted instead of falling back, the detection found a partial/ambiguous toolchain (e.g. a root config but no generator); resolve which mechanism is real, or register manually. The draft is safe under `runtime/builds/<build-id>/draft/`.
+
+**Symptom:** The audit gate never passes — it keeps looping back to the capture loop.
+
+A step the gate judges `broken`/`unclear` above threshold blocks the gate. Either fix the step when prompted (re-record / re-screenshot / re-word) or, if it's a false positive, the gate stops after `build.audit_gate.max_loops` (default 5) and offers to open a **draft** PR listing the residual findings. To inspect them, read `runtime/builds/<build-id>/audit/findings.json`. Tune `build.audit_gate.fail_on` / thresholds if the judge is too strict for this lab.
+
+**Symptom:** Slug collision — "a lab with this name already exists."
+
+B3 found the derived `<slug>` already in `_data/lab-config.yml` (an `id:`) or as a `labs/<slug>/` folder. Build mode never overwrites an existing lab — pick a different name. (To *fix* an existing lab, use the audit flow, not `/build-lab`.)
+
+**Symptom:** PR step fails with 403 / permission denied.
+
+Build mode opens a PR (not just an issue), so `gh` needs PR-create permission on `microsoft/mcs-labs`. Check `gh repo view microsoft/mcs-labs --json viewerPermission` (`WRITE`+). Use `--no-pr` to author + gate without opening a PR.
+
+**Symptom:** A build was interrupted; how do I continue?
+
+`/build-lab --resume <build-id>`. It re-runs preflight + the account prompt, returns to where the browser left off, and resumes at the first unconfirmed step. Confirmed steps in `runtime/builds/<build-id>/ledger.yml` (and their screenshots) are preserved. The `<build-id>` is printed at build start and stored in `runtime/builds/<build-id>/manifest.yml`.
+
 ## Filesystem issues
 
 **Symptom:** `Cannot remove the item ... because it is in use`.
