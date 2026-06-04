@@ -186,6 +186,15 @@ issues:
     require_mergeable: true                     # `mergeable: MERGEABLE` required
     allow_force_push: false                     # never enabled
 
+  # --- New-lab PR (used by mcs-lab-builder B7 / mcs-lab-new-lab-pr) ---
+  # A NEW lab built by /build-lab is a one-shot PR (no open-PR append path —
+  # that is the fix-PR filer's job). The {build_id} token makes the branch
+  # run-unique, so re-building the same slug never collides with a merged or
+  # closed prior PR.
+  new_lab_pr:
+    pr_branch_pattern: "dewain/new-lab-{slug}-{build_id}"
+    require_same_author: true
+
 # --- Existing-state probe (Phase 1.4) ---
 existing_state:
   check_open_issues: true       # off → orchestrator falls back to inline filer queries (legacy behavior)
@@ -206,5 +215,43 @@ consistency:
   cross_lab_high_confidence_floor: 0.90    # findings at or above this get confidence 0.85
   cross_lab_min_cluster_size: 2            # shapes shared by fewer labs are ignored (single-lab clusters always are)
 
+# --- Interactive lab-builder (used by mcs-lab-builder / /build-lab) ---
+# Build mode AUTHORS a new lab end-to-end, then re-runs it through the audit
+# engine as a quality gate before opening a PR. It is event/workshop-agnostic:
+# a lab is built and tested standalone; event attachment is optional (B3).
+build:
+  # Default interaction mode when neither --mode nor an interview answer is set.
+  # `prompt` = ask at B1; `guided` = user dictates each step; `scenario` = AI
+  # proposes one step at a time. Both modes confirm EVERY step.
+  interaction_mode_default: prompt        # prompt | guided | scenario
+
+  # --- Audit gate (B6) ---
+  # After the lab is drafted, register + materialize it and run the auditor's
+  # Phase-2 judge loop against it. Findings are consumed IN-LOOP (fed back into
+  # the build to fix), never routed to the issue/PR filers. The gate passes
+  # when zero above-threshold findings of a `fail_on` outcome remain.
+  audit_gate:
+    enabled: true
+    fail_on: [broken, unclear]            # outcomes that block the gate
+    max_loops: 5                          # cap on fix-and-recheck iterations
+    suppress_github_writes: true          # NEVER file an issue/PR from the gate
+
+  screenshot:
+    image_name_strategy: kebab_from_target   # see build-session-spec.md §screenshots
+
+  # --- mcs-labs registration (B6/B7) ---
+  registration:
+    # The mcs-labs repo path is NOT fixed (it moved out of ~/mcs-labs). The
+    # orchestrator tries these in order and uses the first whose
+    # _data/lab-config.yml exists.
+    mcs_labs_repo_path_candidates:
+      - "C:\\Users\\dewainr\\Projects\\mcs-labs"
+      - "C:\\Users\\dewainr\\mcs-labs"
+    root_config_relpath: "lab-config.yml"          # generate-mode source of truth (may be absent)
+    data_config_relpath: "_data/lab-config.yml"    # direct-mode registration target
+    generate_script_relpath: "scripts/Generate-Labs.ps1"   # may be absent → direct-write mode
+    generate_args: ["-SkipPDFs"]
+    order_gap_strategy: section_midpoint           # pick a free order number mid-band (see lab-registration-spec.md §2)
+
 # --- Plugin version (written into manifest.yml and issue bodies) ---
-plugin_version: "0.1.0"
+plugin_version: "0.4.0"

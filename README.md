@@ -36,6 +36,7 @@ All findings: [microsoft/mcs-labs issues (lab-audit label)](https://github.com/m
 | `/audit-lab [<slug>] [--no-issue] [--dry-run]` | Audit a single lab. With `<slug>`, the slug pins scope. Without, the run-start interview picks one from the **full all-labs catalog** (`lab_metadata.*`). `--dry-run` exercises only the markdown parser. |
 | `/audit-report [<run-id>]` | Print a local summary of recent audit runs. |
 | `/audit-account [show\|redeem\|clear]` | Manage the DPAPI-cached workshop-issued test account. |
+| `/build-lab [<lab-name>] [--resume <build-id>] [--mode guided\|scenario] [--no-pr]` | **Interactively build a NEW lab** end-to-end via Playwright, capturing instructions + screenshots step-by-step, gate it through the audit engine, and open a PR on `microsoft/mcs-labs`. Event/workshop-agnostic — a lab is built standalone; event attachment is optional. |
 
 ## How it works
 

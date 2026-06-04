@@ -9,8 +9,8 @@
   "plugins": [
     {
       "name": "mcs-lab-auditor",
-      "description": "Drive Playwright through every lab in the mcs-labs bootcamp event, compare actual UI behavior to written instructions, and file one GitHub issue per lab when steps are broken or unclear. Clean labs produce local log entries only.",
-      "version": "0.3.0",
+      "description": "Audit AND interactively build Microsoft Copilot Studio labs (any event/workshop) end-to-end via Playwright. Audit mode files fingerprint-deduped findings + fix PRs; build mode authors a new lab step-by-step, gates it through the audit engine, and opens a PR adding it to mcs-labs.",
+      "version": "0.4.0",
       "source": "./"
     }
   ]
