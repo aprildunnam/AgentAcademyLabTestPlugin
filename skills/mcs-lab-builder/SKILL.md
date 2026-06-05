@@ -9,6 +9,10 @@ allowed-tools:
   - Write
   - Edit
   - Bash(gh issue list:*)
+  - Bash(gh issue create:*)
+  - Bash(gh issue view:*)
+  - Bash(gh issue edit:*)
+  - Bash(gh issue comment:*)
   - Bash(gh pr list:*)
   - Bash(gh auth status:*)
   - Bash(gh repo view:*)
@@ -120,6 +124,33 @@ The browser session established here is reused across the whole build (and by B6
 4. **Optional event attachment (event-agnostic).** Ask whether to attach the lab to any event(s)/workshop(s). Read the available events dynamically from `_data/lab-config.yml` event configs — present them as options plus "None (standalone lab)" as the default-recommended first option and an "Other (type the key)" escape. Record the chosen events (possibly empty) as `manifest.events`. **Do not** default to bootcamp or any specific event.
 5. **Seed the workspace.** Create `runtime/builds/<build-id>/draft/README.md` from `references/lab-authoring-template.md` with the captured metadata filled into the Lab Details table and title. Create `draft/images/`. Write the metadata into `manifest.yml`.
 
+### B3.5 — File the new-lab proposal issue (MANDATORY when PR target is reachable)
+
+As soon as the lab is named and scaffolded, open a tracking issue on `microsoft/mcs-labs` so the new lab is visible to the team as an **In Progress** proposal for the whole duration of the build. Governed by `judge-config.yml.build.proposal_issue` (defaults in `references/build-session-spec.md`).
+
+1. **Skip / defer conditions.** Skip only if `build.proposal_issue.enabled: false`, or if `gh` is unauthenticated / lacks issue-create permission on the repo (then warn and continue — the build still produces a draft; record `proposal_issue.status: skipped`). On `--resume`, **reuse** the issue recorded in `manifest.proposal_issue` — never open a second one.
+2. **Dedup.** Before creating, query for an existing open proposal for this slug:
+   ```
+   gh issue list --repo microsoft/mcs-labs --state open \
+     --label "type: new-lab" --search "<slug> in:title" \
+     --json number,title,url --limit 5
+   ```
+   If a match exists, reuse it (record it in the manifest) instead of opening a duplicate.
+3. **Create the issue** with the repo's existing taxonomy labels (do not invent new ones):
+   ```
+   gh issue create --repo microsoft/mcs-labs \
+     --title "<build.proposal_issue.title_pattern>"   # default: "New lab proposal: {title} ({slug})"
+     --label "type: new-lab" \
+     --label "status: in-progress" \
+     --body-file "runtime/builds/<build-id>/proposal-issue.md"
+   ```
+   Render `proposal-issue.md` first: the lab title + slug, a one-line summary of what it teaches (from the B3 metadata / scenario), the captured metadata (section / difficulty / duration / journeys, and any optional event attachment), the interaction mode, the build-id, and a line stating **Status: In Progress — being authored interactively by `mcs-lab-builder`.** Include a stable marker comment `<!-- mcs-lab-builder:proposal slug=<slug> -->` so re-runs and the PR step can find it.
+4. **Record** the result in `manifest.yml` under `proposal_issue: { number, url, status: open, labels: [...] }`. Print the issue URL to the user.
+
+The labels come from `build.proposal_issue.labels` (default `["type: new-lab", "status: in-progress"]`). These match the existing `microsoft/mcs-labs` labels (`type: new-lab` = "Brand new lab proposal"; `status: in-progress` = "Someone is actively working on this"). If a configured label does not exist on the repo, file with the labels that do and warn about the missing one rather than failing the build.
+
+> **This is the one GitHub write build mode makes before B7, and it is intentional.** It is separate from the B6 audit gate, which still writes nothing to GitHub (`build.audit_gate.suppress_github_writes`). The proposal issue tracks the *lab*, not findings.
+
 ### B4 — Per-step interactive capture loop
 
 This is the core authoring loop. It runs per scene, scenes grouped under use cases, until the user ends the lab. Both modes confirm **every** step before checkpoint. The precise loop, the ledger schema, and the `render_step_markdown` / `propose_next_step` procedures live in `references/build-session-spec.md` §capture-loop. Summary:
@@ -163,7 +194,7 @@ The lab must be a real `_labs/<slug>.md` for the auditor's parser to consume. Pe
 
 ### B7 — Generate + PR
 
-Skipped entirely under `--no-pr` (print the registration steps + draft location instead). Otherwise invoke the **`mcs-lab-new-lab-pr`** sub-skill with: `build-id`, resolved `mcs_labs_repo`, `slug`, the staged files, the registration mode, and the optional `events`. It branches off fresh `origin/main`, commits the new-lab files + registration changes (+ generator output if generate mode) in one commit, and opens the PR (`<slug>: add new lab`). Record `pr_url` in `manifest.yml`.
+Skipped entirely under `--no-pr` (print the registration steps + draft location instead; the proposal issue stays open as **In Progress** for a human to pick up). Otherwise invoke the **`mcs-lab-new-lab-pr`** sub-skill with: `build-id`, resolved `mcs_labs_repo`, `slug`, the staged files, the registration mode, the optional `events`, and the **`proposal_issue.number`** from `manifest.yml`. It branches off fresh `origin/main`, commits the new-lab files + registration changes (+ generator output if generate mode) in one commit, and opens the PR (`<slug>: add new lab`). When a proposal issue exists, the PR body links it per `build.proposal_issue.link_pr_with` (default `Closes`, so merging the lab auto-closes the proposal). Record `pr_url` in `manifest.yml`.
 
 ### Wrap-up
 1. Close the browser (`mcp__plugin_playwright_playwright__browser_close`).
@@ -172,7 +203,7 @@ Skipped entirely under `--no-pr` (print the registration steps + draft location 
 
 ## Resume flow (`--resume <build-id>`)
 
-1. Load `runtime/builds/<build-id>/{manifest.yml, session-state.yml, ledger.yml}`. Inherit `mode`, `slug`, metadata, `events`, `registration_mode`, `mcs_labs_repo`.
+1. Load `runtime/builds/<build-id>/{manifest.yml, session-state.yml, ledger.yml}`. Inherit `mode`, `slug`, metadata, `events`, `registration_mode`, `mcs_labs_repo`, and `proposal_issue` (the existing In-Progress issue is reused — B3.5 never opens a second one on resume).
 2. Re-run B0 preflight (Opus assert, path + mechanism re-detect, configs) and B1 **account** question (re-prompt unless `account_prompt_mode` permits skipping AND cache is unexpired — a build after cache expiry needs fresh credentials).
 3. B2 navigate-home, re-running the idempotent Welcome handler, returning to `session-state.yml.browser_left_at.url`.
 4. Resume B4 at `session-state.yml.last_confirmed_step_id + 1` in the recorded `current_uc` / `current_scene`. Confirmed steps in `ledger.yml` (and their on-disk screenshots) are preserved.
@@ -182,7 +213,7 @@ Skipped entirely under `--no-pr` (print the registration steps + draft location 
 - **Event/workshop-agnostic.** Never assume bootcamp. Read events from `lab-config.yml`; standalone is the default.
 - **Resolve the mcs-labs path; never hardcode `C:\Users\dewainr\mcs-labs`.** The repo moved to `…\Projects\mcs-labs`. Use the B0 resolution.
 - **Touch the mcs-labs working tree only in B6/B7.** All B0–B5 artifacts live under `runtime/builds/` (gitignored). Under `--no-pr` or any halt, the mcs-labs tree is not modified.
-- **The audit gate files nothing on GitHub.** Findings feed the build loop, not `mcs-lab-issue-filer`. The only GitHub write in build mode is the B7 new-lab PR.
+- **Build mode makes exactly two GitHub writes: the B3.5 proposal issue and the B7 new-lab PR.** Nothing else. The B6 audit gate files nothing on GitHub — its findings feed the build loop, not `mcs-lab-issue-filer`.
 - **Never overwrite an existing lab.** Collision → new name.
 - **Never log the workshop password.** DPAPI handling is inherited from the auditor; only `workshop_code_hint` (first 4 chars) may appear.
 - **Halt loudly on auth_expired.** No silent re-auth mid-build; the ledger is the durable record, so flush and resume.
@@ -191,7 +222,8 @@ Skipped entirely under `--no-pr` (print the registration steps + draft location 
 
 ## What success looks like
 
-- `runtime/builds/<build-id>/` holds `manifest.yml`, `ledger.yml`, `draft/README.md`, `draft/images/*`, and `audit/findings.json`.
+- `runtime/builds/<build-id>/` holds `manifest.yml`, `ledger.yml`, `draft/README.md`, `draft/images/*`, `proposal-issue.md`, and `audit/findings.json`.
+- A **proposal issue** is open on `microsoft/mcs-labs` labeled `type: new-lab` + `status: in-progress`, opened at B3.5 and recorded in `manifest.proposal_issue`.
 - The built lab passed the audit gate with zero above-threshold `broken`/`unclear` findings (or the user accepted a draft PR with residuals listed).
-- A PR on `microsoft/mcs-labs` adds `labs/<slug>/README.md` + `images/` + the registration entry (+ `_labs/<slug>.md` and `_data/lab-config.yml`), branch `dewain/new-lab-<slug>-<build-id>`, with no AI attribution.
-- One-line chat summary: `Built <slug> in <duration>. Gate passed after <N> fix loop(s). PR: <url>.`
+- A PR on `microsoft/mcs-labs` adds `labs/<slug>/README.md` + `images/` + the registration entry (+ `_labs/<slug>.md` and `_data/lab-config.yml`), branch `dewain/new-lab-<slug>-<build-id>`, linking the proposal issue (`Closes #<n>`), with no AI attribution.
+- One-line chat summary: `Built <slug> in <duration>. Proposal issue #<n> (In Progress). Gate passed after <N> fix loop(s). PR: <url>.`

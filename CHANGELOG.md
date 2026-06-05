@@ -6,6 +6,18 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-05
+
+### Added
+
+- **Build mode opens a "new lab proposal" tracking issue (B3.5).** As soon as a new lab is named, `/build-lab` files a GitHub issue on `microsoft/mcs-labs` labeled **`type: new-lab`** ("Brand new lab proposal") + **`status: in-progress`** ("Someone is actively working on this") — the repo's existing label taxonomy, not new labels — so the lab is visible to the team as **In Progress** for the whole build. The issue is deduped per slug (reuses an existing open proposal rather than duplicating), reused on `--resume`, recorded in `manifest.proposal_issue`, and **closed by the final lab PR** (`Closes #<n>`, configurable). Rendered body saved to `runtime/builds/<build-id>/proposal-issue.md`.
+- **`build.proposal_issue` config block** in `config/judge-config.yml`: `enabled`, `repo`, `labels`, `title_pattern`, `link_pr_with` (`Closes` | `Refs`). Documented in `skills/mcs-lab-builder/references/build-session-spec.md`.
+
+### Changed
+
+- **Build mode now makes two GitHub writes, both intentional:** the B3.5 proposal issue and the B7 new-lab PR. The B6 audit gate still writes nothing to GitHub (`build.audit_gate.suppress_github_writes`). `mcs-lab-builder` gains `gh issue create/view/edit/comment` permissions; `mcs-lab-new-lab-pr` links the PR to the proposal issue. Updated `commands/build-lab.md`, `skills/mcs-lab-builder/SKILL.md` (B3.5, B7, resume, rules, success), `skills/mcs-lab-new-lab-pr/SKILL.md`, `docs/architecture.md`, `docs/security.md`, `README.md`.
+- **Version → 0.5.0** across `plugin.json`, `marketplace.json`, and `judge-config.yml.plugin_version`.
+
 ### Documentation
 
 - **Documented build mode across all docs.** PR #35 shipped the `/build-lab` feature but only touched `README.md` + `CHANGELOG.md`. This pass brings the rest of the documentation current:
@@ -227,7 +239,8 @@ Initial scaffold. The plugin is structurally complete: every file referenced by 
 - Single workshop-portal flow assumed (Skillable-style).
 - Screenshots aren't attached inline to issues (`gh` CLI limitation); they're referenced by local path in the issue body.
 
-[Unreleased]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.1.0...v0.2.1

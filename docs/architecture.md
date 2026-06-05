@@ -41,7 +41,7 @@ flowchart LR
     1. **Issues API** — `gh issue create | comment | edit`. Always on. Comments on existing open issues with finding-fingerprint dedup; never creates a duplicate open issue for the same lab.
     2. **Fix-PR per run** — applies the run's `suggested_correction` diffs + screenshot replacements. If an **open** fix-PR for the lab exists (same-author, mergeable), the commit is **appended** to it; otherwise `gh pr create` opens a **new** PR on a run-unique branch `dewain/fix-<slug>-content-audit-<run-id>`. Dedup is OPEN-PR-scoped — a merged/closed prior PR never blocks a new one. Enforced in `mcs-lab-fix-pr-filer` (ADR-015).
     3. **Open PR screenshot append** — `git push` of one screenshots-only commit onto an already-open fix-PR branch. **On by default**, suppress with `--no-update-screenshots`. Same-author, mergeable, unprotected-branch guardrails enforced in `mcs-lab-pr-appender`. Never creates a new branch or new PR.
-  - *Build mode* (one path): **New-lab PR** — adds `labs/<slug>/README.md` + screenshots + the registration entry (`_data/lab-config.yml`, and `_labs/<slug>.md`) in one commit on a run-unique branch `dewain/new-lab-<slug>-<build-id>` off fresh `origin/main`, via `mcs-lab-new-lab-pr` (ADR-018). The build's **audit gate runs the audit engine with all GitHub writes suppressed** — it never files an issue or fix-PR; findings feed back into the build loop (ADR-017).
+  - *Build mode* (two paths): (1) **New-lab proposal issue** — at B3.5, `gh issue create` on `microsoft/mcs-labs` labeled `type: new-lab` + `status: in-progress`, opened as soon as the lab is named so it's tracked as **In Progress** for the whole build (deduped per slug, reused on `--resume`, closed by the lab PR). (2) **New-lab PR** — adds `labs/<slug>/README.md` + screenshots + the registration entry (`_data/lab-config.yml`, and `_labs/<slug>.md`) in one commit on a run-unique branch `dewain/new-lab-<slug>-<build-id>` off fresh `origin/main`, via `mcs-lab-new-lab-pr`, linking the proposal issue with `Closes #<n>` (ADR-018). The build's **audit gate runs the audit engine with all GitHub writes suppressed** — it never files an issue or fix-PR; findings feed back into the build loop (ADR-017).
 - **Secret boundary**: workshop credentials live only in `runtime/account/credential.enc` (DPAPI-encrypted) and in memory for the duration of one sign-in dispatch. Build mode reuses this same account flow unchanged. See [`security.md`](security.md).
 
 ## Run lifecycle
@@ -183,11 +183,12 @@ flowchart TD
     B1[B1 interview<br/>account + interaction mode]
     B2[B2 navigate-home<br/>sign in → Copilot Studio Home]
     B3[B3 name + scaffold<br/>slug, collision check, metadata,<br/>optional event attach, seed workspace]
+    B35[B3.5 proposal issue<br/>gh issue: type: new-lab +<br/>status: in-progress]
     B4[B4 capture loop<br/>snapshot → intent → execute →<br/>screenshot → write → CONFIRM → checkpoint]
     B5[B5 prose assembly<br/>ledger → labs/&lt;slug&gt;/README.md]
     B6{B6 audit gate<br/>register + run audit engine<br/>GitHub writes SUPPRESSED}
-    B7[B7 PR via mcs-lab-new-lab-pr]
-    B0 --> B1 --> B2 --> B3 --> B4 --> B5 --> B6
+    B7[B7 PR via mcs-lab-new-lab-pr<br/>Closes the proposal issue]
+    B0 --> B1 --> B2 --> B3 --> B35 --> B4 --> B5 --> B6
     B6 -->|broken/unclear findings| B4
     B6 -->|clean pass| B7
     B4 -->|guided: user dictates step<br/>scenario: AI proposes one step| B4
@@ -197,7 +198,9 @@ flowchart TD
 - **guided** — the user dictates each step and any key consideration; the AI executes it, captures a screenshot, and writes the instruction prose.
 - **scenario** — the user gives the scenario up front; the AI proposes one step at a time and executes it only after confirmation.
 
-**The audit gate (B6) reuses the audit engine, diverting disposition.** It stages + registers the built lab, materializes `_labs/<slug>.md`, then runs the auditor's per-UC judge loop against it — but consumes findings *in-loop* (each above-threshold `broken`/`unclear` finding loops back to B4 for a fix) instead of routing them to `mcs-lab-issue-filer`. `build.audit_gate.suppress_github_writes` guarantees no issue/PR is filed by the gate. The only GitHub write in build mode is the B7 new-lab PR.
+**A "new lab proposal" issue is opened up front (B3.5).** As soon as the lab is named, build mode files a `type: new-lab` + `status: in-progress` issue on `microsoft/mcs-labs` so the lab is visible to the team as *In Progress* for the whole build. It is deduped per slug, reused on `--resume`, recorded in `manifest.proposal_issue`, and closed by the B7 PR. This is governed by `build.proposal_issue` and is one of build mode's **two** intentional GitHub writes (the other is the B7 PR).
+
+**The audit gate (B6) reuses the audit engine, diverting disposition.** It stages + registers the built lab, materializes `_labs/<slug>.md`, then runs the auditor's per-UC judge loop against it — but consumes findings *in-loop* (each above-threshold `broken`/`unclear` finding loops back to B4 for a fix) instead of routing them to `mcs-lab-issue-filer`. `build.audit_gate.suppress_github_writes` guarantees no issue/PR is filed *by the gate* — the proposal issue and the new-lab PR are the only GitHub writes build mode makes.
 
 **Registration mechanism is detected at runtime** (B0). The new-lab toolchain documented in `mcs-labs/docs/NEW_LAB_CHECKLIST.md` (root `lab-config.yml` + `Generate-Labs.ps1`) is currently absent from that repo, so build mode falls back to **direct writes** of `labs/<slug>/README.md` + `_labs/<slug>.md` + the `_data/lab-config.yml` entry. If a generator returns, it edits the root config and runs it instead. See `skills/mcs-lab-builder/references/lab-registration-spec.md` and ADR-020.
 

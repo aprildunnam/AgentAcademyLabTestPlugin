@@ -17,7 +17,7 @@ allowed-tools:
 
 # mcs-lab-new-lab-pr (sub-skill)
 
-Open the PR for a freshly-built lab. You are called by `mcs-lab-builder` at B7 with: `build_id`, `mcs_labs_repo` (resolved absolute path), `slug`, `registration_mode` (`generate` | `direct`), the lab metadata + `order` + `journeys`, the optional `events` list, and the build workspace path `runtime/builds/<build-id>/`. The audit gate has already passed (or the user accepted a draft PR with residual findings listed by the orchestrator).
+Open the PR for a freshly-built lab. You are called by `mcs-lab-builder` at B7 with: `build_id`, `mcs_labs_repo` (resolved absolute path), `slug`, `registration_mode` (`generate` | `direct`), the lab metadata + `order` + `journeys`, the optional `events` list, the **`proposal_issue.number`** (the In-Progress `type: new-lab` issue opened at B3.5, if any), and the build workspace path `runtime/builds/<build-id>/`. The audit gate has already passed (or the user accepted a draft PR with residual findings listed by the orchestrator).
 
 **Why a separate skill from `mcs-lab-fix-pr-filer`.** That filer's contract is: patch an existing `_labs/<slug>.md` from `suggested_correction` diffs and replace images, with OPEN-PR-dedup keyed to a lab's audit history. A new lab has no existing markdown to patch and no findings diffs — it adds a whole folder, a registration entry, and (in generate mode) generated output. Keeping this separate preserves both skills' contracts.
 
@@ -67,7 +67,7 @@ Open the PR for a freshly-built lab. You are called by `mcs-lab-builder` at B7 w
      --title "<slug>: add new lab" \
      --body-file "runtime/builds/<build_id>/pr-body.md"
    ```
-   Render `pr-body.md` first: what the lab teaches, the UC list, the lab metadata (section/difficulty/duration/journeys, events if any), a "How it was verified" line (`Built interactively and passed the mcs-lab-builder audit gate, build <build_id>`), and — if the user accepted residual findings — a "Findings deferred to review" list. Use `gh pr create --draft` when residual findings exist.
+   Render `pr-body.md` first: what the lab teaches, the UC list, the lab metadata (section/difficulty/duration/journeys, events if any), a "How it was verified" line (`Built interactively and passed the mcs-lab-builder audit gate, build <build_id>`), and — if the user accepted residual findings — a "Findings deferred to review" list. **If a `proposal_issue.number` was passed, include `Closes #<proposal_issue.number>` in the body** (per `build.proposal_issue.link_pr_with`; use `Refs #<n>` instead if configured to `Refs`) so merging the lab resolves the In-Progress proposal. Use `gh pr create --draft` when residual findings exist.
 
 8. **Restore + record.**
    - `git switch -` then `git stash pop` if a stash was created.

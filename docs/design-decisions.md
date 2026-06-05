@@ -415,6 +415,27 @@ Two config keys replace the single fixed pattern: `issues.pr_append.pr_branch_pa
 
 ---
 
+## ADR-021 — Build mode opens an "In Progress" proposal issue up front
+
+**Status:** Accepted (v0.5.0 addition).
+
+**Context.** A new lab takes a while to author interactively, and the team needs visibility that a lab is being built before its PR appears — to avoid two people building the same lab, and to track proposals through a lifecycle.
+
+**Decision.** At B3.5 (right after the lab is named), build mode opens a tracking issue on `microsoft/mcs-labs` labeled **`type: new-lab`** + **`status: in-progress`** — the repo's *existing* label taxonomy, not new labels. The issue is deduped per slug (reuses an existing open proposal rather than duplicating), reused on `--resume`, recorded in `manifest.proposal_issue`, and **closed by the B7 lab PR** (`Closes #<n>`, configurable to `Refs`). Governed by `build.proposal_issue`.
+
+**Consequences.**
+- A new lab is visible as *In Progress* for the entire build, not just when the PR lands.
+- Build mode now makes **two** intentional GitHub writes (proposal issue + PR); the audit gate still writes nothing (`build.audit_gate.suppress_github_writes`).
+- Reuses the repo's label vocabulary, so proposals sit alongside existing `type:`/`status:` triage automation with no new labels to create.
+- Under `--no-pr` or an aborted build, the proposal issue remains open as *In Progress* for a human to pick up or close.
+
+**Alternatives considered.**
+- **Open the issue only at PR time (B7).** Rejected — defeats the "visible while in progress" goal; the issue and PR would appear together.
+- **Invent a dedicated `new lab proposal` / `In Progress` label.** Rejected — the repo already has `type: new-lab` ("Brand new lab proposal") and `status: in-progress`; reusing them avoids label sprawl and fits existing triage.
+- **Track via a GitHub Projects board status field.** Deferred — requires a project ID + GraphQL and `read:project`/`project` scopes; labels are portable and need no extra auth. Could be layered on later via config.
+
+---
+
 ## Cross-references
 
 - [`architecture.md`](architecture.md) — how these decisions compose at runtime.
