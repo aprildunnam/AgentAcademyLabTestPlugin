@@ -22,19 +22,19 @@ The first positional argument is an **optional** free-text lab name (e.g. `"Buil
 
 ## Pre-flight context
 
-- cached account: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode JsonField -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -JsonField user_id -Fallback "(none)"`
-- mcs-labs repo (Projects): !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode Exists -Path "C:\Users\dewainr\Projects\mcs-labs\_data\lab-config.yml" -Fallback "MISSING"`
-- mcs-labs repo (home): !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode Exists -Path "C:\Users\dewainr\mcs-labs\_data\lab-config.yml" -Fallback "MISSING"`
-- existing lab ids (collision check, Projects): !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode GrepContext -Path "C:\Users\dewainr\Projects\mcs-labs\_data\lab-config.yml" -Pattern "id:" -ContextAfter 0 -Fallback "MISSING - resolve mcs-labs path in B0"`
+- cached account: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode JsonField -Path "$env:CLAUDE_PLUGIN_ROOT\runtime\account\account.meta.json" -JsonField user_id -Fallback "(none)"`
+- plugin version: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Test-PluginVersion.ps1"`
+- mcs-labs repo (resolved + updated): !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Status`
+- existing lab ids (collision check): !`pwsh -NoProfile -Command '$r = & "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Path -NoPull; & "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode GrepContext -Path "$r\_data\lab-config.yml" -Pattern "id:" -ContextAfter 0 -Fallback "MISSING - resolve mcs-labs path in B0"'`
 
 ## Your task
 
-Invoke the `mcs-lab-builder` skill and follow `~/.claude/plugins/mcs-lab-auditor/skills/mcs-lab-builder/SKILL.md`. The skill defines the full build lifecycle (phases B0–B7):
+Invoke the `mcs-lab-builder` skill and follow `$env:CLAUDE_PLUGIN_ROOT/skills/mcs-lab-builder/SKILL.md`. The skill defines the full build lifecycle (phases B0–B7):
 
-1. **B0 preflight** — assert Opus orchestrator; check `gh` auth + repo perm; **resolve the mcs-labs repo path** (the candidates above — never assume `C:\Users\dewainr\mcs-labs`, the repo moved to `…\Projects\mcs-labs`); **detect the registration mechanism** (root `lab-config.yml` + `Generate-Labs.ps1` vs. direct writes — see `references/lab-registration-spec.md`); load configs.
+1. **B0 preflight** — assert Opus orchestrator; run the plugin self-version check; check `gh` auth + repo perm; **resolve the mcs-labs repo path** via `scripts/Resolve-LabRepo.ps1` (env override → config candidates → built-ins → clone `microsoft/mcs-labs` if absent → fast-forward to latest; never assume a hard-coded path); **detect the registration mechanism** (root `lab-config.yml` + `Generate-Labs.ps1` vs. direct writes — see `references/lab-registration-spec.md`); load configs.
 2. **B1 interview** — account question (cached / redeem / abort — same matrix as the auditor's Q1) + interaction mode (`guided` / `scenario`), unless a CLI flag answered them.
 3. **B2 navigate-home** — sign in with the chosen account and reach the Copilot Studio Home page (Welcome modal dismissed).
-4. **B3 name + scaffold** — ask the lab name (or use arg 1), slugify, collision-check, seed the build workspace, capture lab metadata, and optionally offer attaching to ANY event/workshop (read dynamically from `lab-config.yml` — never hardcode bootcamp).
+4. **B3 name + scaffold** — ask the lab name (or use arg 1), slugify, collision-check, seed the build workspace, capture lab metadata, and optionally offer attaching to ANY event or workshop (read dynamically from the repo's `_events/`/`_workshops/` collections via `scripts/Get-EventCatalog.ps1` — never hardcode bootcamp).
 4.5. **B3.5 file the proposal issue** — open a tracking issue on `microsoft/mcs-labs` labeled `type: new-lab` + `status: in-progress` so the new lab is visible as an **In Progress** proposal while you build it (deduped per slug; reused on `--resume`). The final PR closes it.
 5. **B4 capture loop** — the per-step authoring loop: snapshot → step intent (you dictate, or AI proposes) → execute in Playwright → screenshot → write the instruction + tips → confirm → checkpoint. Repeat per scene/use-case until the lab is complete.
 6. **B5 prose assembly** — render the full `labs/<slug>/README.md` from the step ledger, matching sibling-lab format.

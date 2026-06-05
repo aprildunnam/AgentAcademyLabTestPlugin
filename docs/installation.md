@@ -12,7 +12,7 @@ Step-by-step setup for `mcs-lab-auditor`. If you hit problems, jump to [Troubles
 | **GitHub CLI (`gh`)** authenticated with an account that can file issues on `microsoft/mcs-labs` (and **open PRs**, for fix-PRs and build mode) | The plugin's GitHub write path. `READ` is insufficient. | `gh auth status` and `gh repo view microsoft/mcs-labs --json viewerPermission` |
 | **Claude Code** (Desktop, CLI, or IDE) | Hosts the plugin | Run Claude Code; check version in About/help |
 | **Playwright MCP plugin enabled in Claude Code** | Drives the browser | In Claude Code: confirm `mcp__plugin_playwright_playwright__*` tools are listed in a `/tools` or equivalent command, or that `playwright@claude-plugins-official` appears in `~/.claude/settings.json` under enabled plugins |
-| **A local clone of `microsoft/mcs-labs`** | The plugin reads lab markdown and the bootcamp config from it | `Test-Path C:\Users\dewainr\mcs-labs\_data\lab-config.yml` should return `True` |
+| **A local clone of `microsoft/mcs-labs`** *(optional — auto-cloned if missing)* | The plugin reads lab markdown, the `_events/` + `_workshops/` collections, and `_data/lab-config.yml` from it | Not required up front: `scripts/Resolve-LabRepo.ps1` resolves an existing clone or clones one into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs` at run start. See [Repo resolution](#repo-resolution-no-path-edits-needed). |
 | **An unredeemed workshop code** | One per audit run, used during `/audit-account redeem` | Obtained from your workshop organizer; expires after one redemption |
 
 > Heads-up: workshop accounts typically expire within 24–48 hours. Don't redeem the code days before you intend to start an audit run.
@@ -40,18 +40,20 @@ gh repo view microsoft/mcs-labs --json viewerPermission
 
 The `viewerPermission` should be `TRIAGE`, `WRITE`, `MAINTAIN`, or `ADMIN`. `READ` is insufficient to file issues — request triage access from the `microsoft/mcs-labs` maintainers if needed.
 
-## Step 2 — Clone the labs repo
+## Step 2 — Clone the labs repo (optional)
 
-The plugin assumes `C:\Users\dewainr\mcs-labs` by default. If your username differs, see [Step 5b](#step-5b--adjust-hard-coded-paths-only-if-your-clone-is-not-at-cusersdewainrmcs-labs) below.
+**You can skip this step.** At run start the plugin resolves the mcs-labs repo automatically and, if no local clone is found, clones `microsoft/mcs-labs` into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs` and fast-forwards it to `origin/main` — there are no hard-coded paths to adjust. See [Repo resolution](#repo-resolution-no-path-edits-needed) for the full resolution order and the `MCS_LABS_REPO` override.
+
+If you'd rather clone it yourself (e.g. you already have a working tree you edit), put it anywhere on a built-in candidate path — `%USERPROFILE%\Projects\mcs-labs` is tried first:
 
 ```powershell
-git clone https://github.com/microsoft/mcs-labs.git C:\Users\dewainr\mcs-labs
+git clone https://github.com/microsoft/mcs-labs.git "$env:USERPROFILE\Projects\mcs-labs"
 ```
 
-Verify the bootcamp config is readable:
+Verify the lab config is readable:
 
 ```powershell
-Test-Path C:\Users\dewainr\mcs-labs\_data\lab-config.yml   # should print True
+Test-Path "$env:USERPROFILE\Projects\mcs-labs\_data\lab-config.yml"   # should print True
 ```
 
 ## Step 3 — Install the plugin
@@ -86,7 +88,7 @@ git clone https://github.com/microsoft/BootcampLabTestPlugin (Join-Path $copilot
 
 Caveats for Copilot CLI:
 
-- The plugin currently hard-codes a few Windows-specific paths (`C:\Users\dewainr\mcs-labs`, `$env:USERPROFILE\.claude\plugins\mcs-lab-auditor` in the command-file `!` interpolations). Adjust these to use a Copilot-CLI-relative path or to read from an environment variable if you're running outside Claude Code. See [`docs/extending.md`](extending.md#pointing-at-a-different-machine).
+- The plugin no longer hard-codes any machine paths: it reads its own files via `$env:CLAUDE_PLUGIN_ROOT` and resolves the mcs-labs repo via `scripts/Resolve-LabRepo.ps1`. If your Copilot CLI host doesn't set `CLAUDE_PLUGIN_ROOT`, export it to the plugin's install directory before launching, and (optionally) set `MCS_LABS_REPO` to point at your labs clone. See [`docs/extending.md`](extending.md#pointing-at-a-different-lab-repo).
 - Workshop-portal redemption uses Playwright via the Claude Code Playwright MCP plugin. If your Copilot CLI session doesn't have an MCP server providing equivalent `mcp__plugin_playwright_playwright__*` tools, the interactive phase won't run — use `--static-only` for doc-audit sweeps and fall back to Claude Code when you need the interactive phase.
 - DPAPI credential storage is Windows-only regardless of which runtime invokes the skill.
 
@@ -138,26 +140,27 @@ tenant_hint: "your-workshop-label-here"
 
 If your workshop portal isn't Skillable-style (i.e. doesn't display credentials on a confirmation page), also adjust `redemption_selectors` — see [`extending.md`](extending.md#adapting-to-a-different-workshop-portal).
 
-### Step 5b — Adjust hard-coded paths (only if your clone is **not** at `C:\Users\dewainr\mcs-labs`)
+### Repo resolution (no path edits needed)
 
-In four files, replace `C:\Users\dewainr\mcs-labs` with your actual path:
+> **There is nothing to edit here.** As of v0.6.0 the plugin has **no hard-coded machine paths** — the old "Step 5b: adjust hard-coded paths" procedure is obsolete and has been removed. Both audit and build modes resolve the mcs-labs repo at run start via `scripts/Resolve-LabRepo.ps1`, and all plugin-internal reads use `$env:CLAUDE_PLUGIN_ROOT`.
 
-- `commands/audit-bootcamp.md`
-- `commands/audit-lab.md`
-- `commands/audit-account.md`
-- `skills/mcs-lab-auditor/SKILL.md`
+The resolver tries these in order and uses the first that contains `_data/lab-config.yml`:
 
-PowerShell one-liner (replace `<YOUR\PATH>` with your clone path, then run from the plugin root):
+1. **`$env:MCS_LABS_REPO`** — set this if you want to force a specific clone:
+   ```powershell
+   [Environment]::SetEnvironmentVariable("MCS_LABS_REPO", "D:\src\mcs-labs", "User")
+   # then restart Claude Code so the session picks it up
+   ```
+2. **`mcs_labs_repo_path_candidates`** in `config/judge-config.yml` — add your clone path (use doubled backslashes) to have it preferred over the built-ins.
+3. **Built-in candidates** under `%USERPROFILE%`: `Projects\mcs-labs`, `mcs-labs`, `source\repos\mcs-labs`, `.mcs-lab-auditor\mcs-labs`.
+4. **Auto-clone** — if none of the above exist, `microsoft/mcs-labs` is cloned into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs`.
+
+Once resolved, the repo is fast-forwarded to `origin/main` (unless it's checked out on a non-`main` branch), so audits always run against the latest lab content. To verify resolution at any time:
 
 ```powershell
-$plugin = "$env:USERPROFILE\.claude\plugins\mcs-lab-auditor"
-$old = 'C:\\Users\\dewainr\\mcs-labs'
-$new = '<YOUR\PATH>'
-Get-ChildItem -Recurse $plugin -Include "audit-*.md","SKILL.md" |
-  ForEach-Object { (Get-Content $_.FullName) -replace [regex]::Escape($old), $new | Set-Content $_.FullName }
+pwsh "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Status
+# e.g. "mcs-labs: C:\Users\you\Projects\mcs-labs [pulled]"
 ```
-
-A configurable path is on the roadmap; see [`extending.md`](extending.md#pointing-at-a-different-lab-repo).
 
 ## Step 6 — Cache a test account
 
@@ -217,7 +220,7 @@ This drives the browser through the entire lab. Expect 5–10 minutes. The plugi
 
 ## Step 9 — Full event sweep (when ready)
 
-Once one single-lab run looks correct end-to-end, you can audit a whole event. The Architecture Bootcamp is the default — but any event in `_data/lab-config.yml.event_configs` works:
+Once one single-lab run looks correct end-to-end, you can audit a whole event or workshop. The Architecture Bootcamp is the default — but any scope in the `_events/` or `_workshops/` collections works (events and workshops are both first-class):
 
 ```text
 /audit-bootcamp                              # shortcut: event = bootcamp
@@ -254,7 +257,7 @@ What happens:
 4. **Audit gate** — the finished lab is re-run through the audit engine; any broken/unclear steps loop back for a fix. No GitHub issue/PR is filed by the gate.
 5. **PR** — once the gate passes, a PR adds `labs/<slug>/README.md` + screenshots + the registration entry.
 
-Build mode is **event/workshop-agnostic** — the new lab is standalone by default; attaching it to an event (bootcamp, etc.) is an optional prompt. It **resolves the mcs-labs repo path automatically** from `config/judge-config.yml.build.registration.mcs_labs_repo_path_candidates` (so the Step 5b hardcoded-path edit is not needed for build mode). Build artifacts live under `runtime/builds/<build-id>/` (gitignored); the mcs-labs working tree is touched only when the PR is created.
+Build mode is **event/workshop-agnostic** — the new lab is standalone by default; attaching it to an event or workshop (bootcamp, etc.) is an optional prompt, with the available scopes read from the `_events/` + `_workshops/` collections. It **resolves the mcs-labs repo path automatically** with the same `scripts/Resolve-LabRepo.ps1` resolver audit mode uses (env override → config candidates → built-ins → auto-clone), so no path edits are ever needed. Build artifacts live under `runtime/builds/<build-id>/` (gitignored); the mcs-labs working tree is touched only when the PR is created.
 
 > Heads-up: the mcs-labs new-lab toolchain documented in that repo's `docs/NEW_LAB_CHECKLIST.md` (root `lab-config.yml` + `Generate-Labs.ps1`) is currently absent upstream; build mode detects this and writes `labs/<slug>/README.md` + `_labs/<slug>.md` + the `_data/lab-config.yml` entry directly. See [`extending.md`](extending.md#customizing-build-mode-build-lab).
 
@@ -270,6 +273,8 @@ git pull
 ```
 
 Then restart Claude Code so the latest skills, commands, and references are loaded. `runtime/` is gitignored, so your cached account and audit history survive the update.
+
+Every `/audit-*` and `/build-lab` run begins with a best-effort **self-version check** (`scripts/Test-PluginVersion.ps1`): it compares your local `.claude-plugin/plugin.json` version to the version published on `origin/main` of `microsoft/BootcampLabTestPlugin` (via `gh api`) and, if a newer version is available, prints a non-blocking warning recommending `/plugin` to update. The check is skipped silently when `gh` is unavailable or you're offline — it never blocks a run.
 
 ---
 

@@ -20,7 +20,9 @@ flowchart LR
     Cmd --> Skill[mcs-lab-auditor SKILL]
     Skill --> Refs[references/<br/>parser, judge, cookbook,<br/>redemption, schemas]
     Skill --> Cfg[config/<br/>workshop.yml,<br/>judge-config.yml]
-    Skill -->|reads| Labs[(mcs-labs repo<br/>_labs/*.md<br/>_data/lab-config.yml)]
+    Skill -->|resolve + auto-clone<br/>Resolve-LabRepo.ps1| Labs[(mcs-labs repo<br/>_labs/*.md<br/>_events/ + _workshops/<br/>_data/lab-config.yml)]
+    Skill -->|enumerate scope<br/>Get-EventCatalog.ps1| Labs
+    Skill -.->|self-version check<br/>Test-PluginVersion.ps1| GHPlugin[(microsoft/<br/>BootcampLabTestPlugin<br/>marketplace.json)]
     Skill -->|drives| PW[Playwright MCP]
     PW -->|navigates| Portals[(Copilot Studio<br/>M365 Copilot<br/>Power Platform<br/>Azure portal<br/>SharePoint)]
     Skill -->|writes| Runtime[(runtime/<br/>account/, runs/,<br/>audit-history.yml)]
@@ -35,7 +37,7 @@ flowchart LR
 
 ### Key boundaries
 
-- **Source-of-truth boundary**: `_data/lab-config.yml` provides both the **event catalog** (`event_configs.<event-key>.config_key` → `<event_key>_lab_orders`) and the **all-labs catalog** (`lab_metadata.<id>`). The run's scope is one of: (a) all labs in a chosen event, (b) a CSV subset of an event's labs, or (c) a single lab from the all-labs catalog. The slug list is never hard-coded in this plugin.
+- **Source-of-truth boundary**: the **scope catalog** (events *and* workshops) comes from two Jekyll collections in the mcs-labs repo — `_events/<id>.md` (formal curated events) and `_workshops/<id>.md` (on-demand workshops) — enumerated by `scripts/Get-EventCatalog.ps1`. Both collections share one front-matter schema (`title`, `description`, `event_id`, `order`, and a `labs:` list of `{ slug, label }`); the catalog tags each scope with `type` (event|workshop), `id`, `order`, `external`/`external_url`/`repository`, and `auditable`. `external: true` scopes (the Agent Academy tracks) host their labs in another repo (`microsoft/agent-academy`), so they are listed but `auditable: false` and never driven. The **all-labs catalog** for the single-lab picker still comes from `_data/lab-config.yml.lab_metadata.<id>` (unchanged). The legacy `_data/lab-config.yml.event_configs` table is only a last-resort fallback — it has drifted out of sync with the collections (missing agent-in-a-day + the academy workshops, still listing an obsolete mcs-in-a-day-v2). The run's scope is one of: (a) all labs in a chosen event/workshop, (b) a CSV subset of a scope's labs, or (c) a single lab from the all-labs catalog. The slug list is never hard-coded in this plugin.
 - **Write boundary**:
   - *Audit mode* (three narrow paths):
     1. **Issues API** — `gh issue create | comment | edit`. Always on. Comments on existing open issues with finding-fingerprint dedup; never creates a duplicate open issue for the same lab.
@@ -68,9 +70,11 @@ sequenceDiagram
 
     User->>CC: /audit-event (or /audit-bootcamp / /audit-lab)
     CC->>Skill: load skill + command
+    Note over Skill: Phase 1 step 1 — Test-PluginVersion.ps1<br/>(non-blocking; warns if a newer version is published)
     Skill->>Cfg: read workshop.yml, judge-config.yml
-    Skill->>Labs: read lab-config.yml → event_configs + lab_metadata
-    Skill->>User: interview (Q1 account / Q2 phase mix / Q3 scope / Q3a event / Q4 lab)
+    Skill->>Labs: Resolve-LabRepo.ps1 (env → candidates → built-ins → auto-clone; ff to origin/main)
+    Skill->>Labs: Get-EventCatalog.ps1 (enumerate _events/ + _workshops/) + read lab_metadata
+    Skill->>User: interview (Q1 account / Q2 phase mix / Q3 scope / Q3a event-or-workshop / Q4 lab)
     User-->>Skill: answers
     Skill->>GH: gh auth status; gh repo view (permission check)
     Skill->>Acct: read account.meta.json (if cached)
@@ -173,13 +177,13 @@ For single-lab runs, the fan-in reads the most recent prior-run `scene-fingerpri
 
 ## Build mode (interactive lab authoring)
 
-Build mode (`/build-lab` → `mcs-lab-builder` skill, v0.4.0+) authors a brand-new lab and ships it as a PR. It reuses audit mode's account flow, Playwright cookbook, LLM judge, and finding schema, and adds an interactive authoring loop on top. It is **event/workshop-agnostic**: a lab is built and tested standalone; attaching it to an event is an optional B3 choice read dynamically from `lab-config.yml`.
+Build mode (`/build-lab` → `mcs-lab-builder` skill, v0.4.0+) authors a brand-new lab and ships it as a PR. It reuses audit mode's account flow, Playwright cookbook, LLM judge, and finding schema, and adds an interactive authoring loop on top. It is **event/workshop-agnostic**: a lab is built and tested standalone; attaching it to an event or workshop is an optional B3 choice, with the available scopes read dynamically from the `_events/` + `_workshops/` collections (`scripts/Get-EventCatalog.ps1`).
 
 The lifecycle runs in phases B0–B7 (see `skills/mcs-lab-builder/SKILL.md`):
 
 ```mermaid
 flowchart TD
-    B0[B0 preflight<br/>Opus assert, gh auth,<br/>resolve mcs-labs path,<br/>detect registration mechanism]
+    B0[B0 preflight<br/>Opus assert, gh auth,<br/>self-version check,<br/>resolve + auto-clone mcs-labs path,<br/>detect registration mechanism]
     B1[B1 interview<br/>account + interaction mode]
     B2[B2 navigate-home<br/>sign in → Copilot Studio Home]
     B3[B3 name + scaffold<br/>slug, collision check, metadata,<br/>optional event attach, seed workspace]
@@ -201,6 +205,8 @@ flowchart TD
 **A "new lab proposal" issue is opened up front (B3.5).** As soon as the lab is named, build mode files a `type: new-lab` + `status: in-progress` issue on `microsoft/mcs-labs` so the lab is visible to the team as *In Progress* for the whole build. It is deduped per slug, reused on `--resume`, recorded in `manifest.proposal_issue`, and closed by the B7 PR. This is governed by `build.proposal_issue` and is one of build mode's **two** intentional GitHub writes (the other is the B7 PR).
 
 **The audit gate (B6) reuses the audit engine, diverting disposition.** It stages + registers the built lab, materializes `_labs/<slug>.md`, then runs the auditor's per-UC judge loop against it — but consumes findings *in-loop* (each above-threshold `broken`/`unclear` finding loops back to B4 for a fix) instead of routing them to `mcs-lab-issue-filer`. `build.audit_gate.suppress_github_writes` guarantees no issue/PR is filed *by the gate* — the proposal issue and the new-lab PR are the only GitHub writes build mode makes.
+
+**The mcs-labs repo path is resolved (and auto-cloned) at B0** by the shared `scripts/Resolve-LabRepo.ps1` — the same resolver audit mode uses — trying `$env:MCS_LABS_REPO`, the `mcs_labs_repo_path_candidates` config list, built-in candidates under `%USERPROFILE%`, and finally cloning `microsoft/mcs-labs` into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs`; the resolved repo is fast-forwarded to `origin/main`. See ADR-023.
 
 **Registration mechanism is detected at runtime** (B0). The new-lab toolchain documented in `mcs-labs/docs/NEW_LAB_CHECKLIST.md` (root `lab-config.yml` + `Generate-Labs.ps1`) is currently absent from that repo, so build mode falls back to **direct writes** of `labs/<slug>/README.md` + `_labs/<slug>.md` + the `_data/lab-config.yml` entry. If a generator returns, it edits the root config and runs it instead. See `skills/mcs-lab-builder/references/lab-registration-spec.md` and ADR-020.
 

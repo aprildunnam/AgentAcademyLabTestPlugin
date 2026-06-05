@@ -5,7 +5,7 @@ A Claude Code plugin that **audits and builds** labs in the [`microsoft/mcs-labs
 - **Audit mode** (`/audit-*`) drives an existing lab's steps, has an LLM judge compare observed behavior to each written instruction, and files **one GitHub issue per lab** (plus a matching fix-PR) whenever steps are broken or unclear. Clean labs produce a local-only audit-history entry — no GitHub activity when nothing's wrong.
 - **Build mode** (`/build-lab`, v0.4.0+) **interactively authors a new lab**: it gets a workshop account, drives to the Copilot Studio Home page, captures the lab step-by-step (instructions + tips + screenshots, confirming every step), assembles a sibling-formatted `labs/<slug>/README.md`, re-runs it through the same audit engine as a quality gate, and opens a PR adding the lab.
 
-Both modes are **event/workshop-agnostic**: any workshop entry defined in `_data/lab-config.yml.event_configs` (bootcamp, buildathons, MCS-in-a-Day variants, the Azure AI workshop, anything added later) is a valid audit scope, single labs can be audited individually against the full `lab_metadata` catalog, and a built lab is created standalone with optional event attachment — nothing is hardcoded to bootcamp.
+Both modes are **event/workshop-agnostic**. The audit scope is enumerated from two Jekyll collections in the mcs-labs repo — `_events/<id>.md` (formal curated events: bootcamp, the buildathons) and `_workshops/<id>.md` (on-demand workshops: the Azure AI workshop, MCS-in-a-Day, Agent-in-a-Day, the Agent Academy tracks) — via `scripts/Get-EventCatalog.ps1`. **Events and workshops are both first-class audit scopes.** Single labs can still be audited individually against the full `lab_metadata` catalog, and a built lab is created standalone with optional event/workshop attachment — nothing is hardcoded to bootcamp. (The legacy `_data/lab-config.yml.event_configs` table is now only a last-resort fallback; it has drifted out of sync with the collections.)
 
 **The plugin writes to the mcs-labs repo through three narrow paths.** (a) `gh issue create | comment | edit` for issues + label hygiene (always on). (b) A **fix-PR per audit run** with findings: it applies the `suggested_correction` diffs + screenshot replacements and opens a new PR on a run-unique branch `dewain/fix-<slug>-content-audit-<run-id>` — *unless* an open fix-PR for that lab already exists, in which case the run's commit is appended to that PR instead of opening a duplicate. See `skills/mcs-lab-fix-pr-filer/SKILL.md`. (c) A screenshots-only commit appended to an **already-open** fix-PR (same-author, mergeable) for the lighter re-audit case — on by default, suppressed with `--no-update-screenshots` / `--no-append-to-pr` (CLI) or `issues.pr_append.enabled_by_default: false` (config). See `skills/mcs-lab-pr-appender/SKILL.md`.
 
@@ -15,7 +15,7 @@ Both modes are **event/workshop-agnostic**: any workshop entry defined in `_data
 
 ## Status
 
-`v0.5.0` — field-tested audit mode; build mode is new. The plugin has completed multiple full audit cycles against live workshop tenants. In the May 2026 audit cycle alone, it raised **24 issues** across 11 bootcamp labs and generated **19 merged fix PRs** against `microsoft/mcs-labs`. See [Real-world impact](#real-world-impact) below. The interactive lab-building mode (`/build-lab`) shipped in v0.4.0 (proposal-issue tracking added in v0.5.0) and awaits its first full live-tenant build.
+`v0.6.0` — field-tested audit mode; build mode is new. The plugin has completed multiple full audit cycles against live workshop tenants. In the May 2026 audit cycle alone, it raised **24 issues** across 11 bootcamp labs and generated **19 merged fix PRs** against `microsoft/mcs-labs`. See [Real-world impact](#real-world-impact) below. The interactive lab-building mode (`/build-lab`) shipped in v0.4.0 (proposal-issue tracking added in v0.5.0) and awaits its first full live-tenant build. v0.6.0 makes the plugin fully portable: all hard-coded machine paths are gone (the mcs-labs repo is resolved — and auto-cloned — at run start, plugin files are read via `$env:CLAUDE_PLUGIN_ROOT`), audit scope is read from the `_events/` + `_workshops/` collections, and every run begins with a non-blocking plugin self-version check.
 
 ## Real-world impact
 
@@ -30,14 +30,14 @@ The auditor has been exercised end-to-end against the full Architecture Bootcamp
 | **Cross-lab consistency** | Sibling labs verifying the same Account Data Lookup Agent used different field labels — caught by the automated cross-lab drift check |
 | **Missing steps** | Greeting-topic disable step missing before testing in mcs-tools; missing prereq guidance for analytics |
 
-All findings: [microsoft/mcs-labs issues (lab-audit label)](https://github.com/microsoft/mcs-labs/issues?q=label%3Alab-audit). For context, a full bootcamp review by a vendor typically costs **$10,000–$15,000**; the auditor runs a full sweep for ~$30–$60 in token spend.
+All findings: [microsoft/mcs-labs issues (lab-audit label)](https://github.com/microsoft/mcs-labs/issues?q=label%3Alab-audit). A full bootcamp sweep runs for roughly **$30–$60** in estimated token spend.
 
 ## Commands
 
 | Command | Purpose |
 |---|---|
-| `/audit-event [--event <key>] [--resume <id>] [--labs csv] [--no-issue]` | Audit every lab in a workshop event. With `--event <key>`, the event is pinned; without it, the run-start interview asks. Generic over all events defined in `_data/lab-config.yml.event_configs`. |
-| `/audit-bootcamp [--resume <id>] [--labs csv] [--no-issue]` | Shortcut for `/audit-event --event bootcamp`. Audits every lab listed in `_data/lab-config.yml.bootcamp_lab_orders`. |
+| `/audit-event [--event <key>] [--resume <id>] [--labs csv] [--no-issue]` | Audit every lab in an event or workshop. With `--event <key>`, the scope is pinned; without it, the run-start interview asks. Generic over every scope in the `_events/` and `_workshops/` collections (enumerated by `scripts/Get-EventCatalog.ps1`). |
+| `/audit-bootcamp [--resume <id>] [--labs csv] [--no-issue]` | Shortcut for `/audit-event --event bootcamp`. Audits every lab listed in the bootcamp `_events/bootcamp.md` `labs:` front-matter. |
 | `/audit-lab [<slug>] [--no-issue] [--dry-run]` | Audit a single lab. With `<slug>`, the slug pins scope. Without, the run-start interview picks one from the **full all-labs catalog** (`lab_metadata.*`). `--dry-run` exercises only the markdown parser. |
 | `/audit-report [<run-id>]` | Print a local summary of recent audit runs. |
 | `/audit-account [show\|redeem\|clear]` | Manage the DPAPI-cached workshop-issued test account. |
@@ -83,14 +83,16 @@ git clone https://github.com/microsoft/BootcampLabTestPlugin (Join-Path $copilot
 
 …then restart your runtime. The five `/audit-*` commands should appear.
 
-For the full setup — including prerequisite checks, workshop portal configuration, Copilot CLI caveats, hard-coded path adjustments (if your `mcs-labs` clone isn't at `C:\Users\dewainr\mcs-labs`), test-account caching, and a smoke-test sequence — see [`docs/installation.md`](docs/installation.md). For a single-document overview-plus-architecture-plus-install reference, see [`docs/mcs-lab-auditor-overview-and-architecture.pdf`](docs/mcs-lab-auditor-overview-and-architecture.pdf).
+There are **no per-machine path edits** to make: the mcs-labs repo is resolved automatically at run start (and cloned for you if no local copy exists — see below), and the plugin reads its own files via `$env:CLAUDE_PLUGIN_ROOT`. Each run also begins with a best-effort plugin self-version check that warns (non-blocking) when a newer version is published, recommending `/plugin` to update.
+
+For the full setup — including prerequisite checks, workshop portal configuration, Copilot CLI caveats, the `MCS_LABS_REPO` override, test-account caching, and a smoke-test sequence — see [`docs/installation.md`](docs/installation.md). For a single-document overview-plus-architecture-plus-install reference, see [`docs/mcs-lab-auditor-overview-and-architecture.pdf`](docs/mcs-lab-auditor-overview-and-architecture.pdf).
 
 ## Prerequisites
 
 - **OS**: Windows 10/11. The credential cache uses Windows DPAPI via PowerShell `ConvertFrom-SecureString`; macOS/Linux are not supported in this release.
 - **Tooling**: `gh` CLI (authenticated and permitted to file issues on `microsoft/mcs-labs`), PowerShell 7+.
 - **Claude Code plugins**: the global Playwright MCP plugin enabled (`playwright@claude-plugins-official`).
-- **Repo clone**: a local clone of `microsoft/mcs-labs` (the plugin reads `_labs/<slug>.md` and `_data/lab-config.yml`). The default path it looks at is `C:\Users\dewainr\mcs-labs` — adjust the path references in `skills/mcs-lab-auditor/SKILL.md` and the command files if your clone lives elsewhere.
+- **Repo clone**: a local clone of `microsoft/mcs-labs` (the plugin reads `_labs/<slug>.md`, the `_events/` + `_workshops/` collections, and `_data/lab-config.yml`). You don't need to clone it manually or edit any path: `scripts/Resolve-LabRepo.ps1` resolves the repo at run start in this order — `$env:MCS_LABS_REPO`, the `mcs_labs_repo_path_candidates` in `config/judge-config.yml`, a built-in list under `%USERPROFILE%`, and finally an **auto-clone** of `microsoft/mcs-labs` into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs`. The resolved repo is then fast-forwarded to `origin/main` so audits always run against the latest lab content. This applies to **both** audit and build modes.
 - **Workshop access**: an unredeemed workshop code from a Skillable-style portal. The portal URL is configured in `config/workshop.yml` on first run.
 
 ## Getting started
@@ -123,6 +125,7 @@ skills/mcs-lab-fix-pr-filer/              # sub-skill: apply correction diffs �
 skills/mcs-lab-pr-appender/               # sub-skill: screenshots-only commit → existing open PR
 skills/mcs-lab-new-lab-pr/                # sub-skill (build mode): new lab → PR
 config/                                   # workshop.yml, judge-config.yml (incl. build: block)
+scripts/                                  # Resolve-LabRepo.ps1, Get-EventCatalog.ps1, Test-PluginVersion.ps1, ...
 runtime/                                  # gitignored — accounts, audit log, per-run + per-build artifacts
 ```
 
@@ -141,7 +144,7 @@ The `runtime/` directory is gitignored. It contains:
 ## Limitations
 
 - **Windows-only**, due to DPAPI.
-- **Hard-coded paths** to `C:\Users\dewainr\mcs-labs` in the **audit** commands — adjust for your clone location ([instructions](docs/installation.md#step-5b--adjust-hard-coded-paths-only-if-your-clone-is-not-at-cusersdewainrmcs-labs)). **Build mode** instead resolves the repo path from `judge-config.yml.build.registration.mcs_labs_repo_path_candidates`; aligning the audit commands on the same resolution is a tracked follow-up.
+- **No per-machine path edits.** The mcs-labs repo path is resolved (and auto-cloned if missing) by `scripts/Resolve-LabRepo.ps1` for **both** audit and build modes; all plugin-internal paths use `$env:CLAUDE_PLUGIN_ROOT`. Override the repo location with `$env:MCS_LABS_REPO` or the `mcs_labs_repo_path_candidates` list in `config/judge-config.yml` ([details](docs/installation.md#repo-resolution-no-path-edits-needed)).
 - **mcs-labs new-lab toolchain drift**: the root `lab-config.yml` + `Generate-Labs.ps1` documented in that repo's `NEW_LAB_CHECKLIST.md` are absent upstream, so build mode registers new labs by writing `_labs/<slug>.md` + the `_data/lab-config.yml` entry directly (it auto-detects and uses the generator if it returns).
 - **Single workshop-portal flow** assumed (Skillable-style). Other portals require editing `references/workshop-redemption.md` and `config/workshop.yml` ([how-to](docs/extending.md#adapting-to-a-different-workshop-portal)).
 - **Screenshots aren't attached to issues** — `gh issue create` doesn't support inline file uploads; screenshots stay in local run artifacts and are referenced by path in the issue body.

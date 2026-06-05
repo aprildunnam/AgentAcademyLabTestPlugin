@@ -33,9 +33,9 @@ The first positional argument is the mode (default: `show` if no args).
 
 ## Pre-flight context
 
-- cached account meta: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode Raw -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -Fallback "(no cached account)"`
-- credential.enc present: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode SizeBytes -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\credential.enc" -Fallback "no"`
-- workshop portal configured: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode GrepContext -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\config\workshop.yml" -Pattern "^workshop_portal_url" -ContextAfter 0 -Fallback "(workshop.yml not found)"`
+- cached account meta: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode Raw -Path "$env:CLAUDE_PLUGIN_ROOT\runtime\account\account.meta.json" -Fallback "(no cached account)"`
+- credential.enc present: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode SizeBytes -Path "$env:CLAUDE_PLUGIN_ROOT\runtime\account\credential.enc" -Fallback "no"`
+- workshop portal configured: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode GrepContext -Path "$env:CLAUDE_PLUGIN_ROOT\config\workshop.yml" -Pattern "^workshop_portal_url" -ContextAfter 0 -Fallback "(workshop.yml not found)"`
 
 ## Your task
 
@@ -80,8 +80,8 @@ Dispatch by `config/workshop.yml.portal_kind`:
 ### Mode: clear
 
 ```powershell
-Remove-Item -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\credential.enc" -ErrorAction SilentlyContinue
-Remove-Item -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -ErrorAction SilentlyContinue
+Remove-Item -Path "$env:CLAUDE_PLUGIN_ROOT\runtime\account\credential.enc" -ErrorAction SilentlyContinue
+Remove-Item -Path "$env:CLAUDE_PLUGIN_ROOT\runtime\account\account.meta.json" -ErrorAction SilentlyContinue
 ```
 
 Print:

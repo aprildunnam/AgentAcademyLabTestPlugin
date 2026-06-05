@@ -15,6 +15,16 @@ When you see an unexpected behavior, start by reading `runtime/runs/<latest-run-
 | `plugin.json` malformed | Run `Get-Content .claude-plugin\plugin.json -Raw \| ConvertFrom-Json` — if it throws, the manifest is broken. |
 | Frontmatter missing on a command file | Each `commands/*.md` must start with a `---\n…\n---` block including `description:`. Without it, the command isn't registered. |
 
+## Plugin self-version check
+
+**Symptom:** A run prints `UPDATE AVAILABLE: local vX < published vY — run /plugin to update …` at the very start.
+
+This is the non-blocking self-version check (`scripts/Test-PluginVersion.ps1`, Phase 1 step 1). It compared your local `.claude-plugin/plugin.json` version to the version published on `origin/main` of `microsoft/BootcampLabTestPlugin` and found a newer one. It does **not** stop the run — but you should update (`/plugin`, or `git pull` + restart for a cloned install) so you're not auditing on stale logic. `runtime/` survives the update.
+
+**Symptom:** The check prints `version check skipped (...)`.
+
+Expected when it can't reach the published manifest — `gh` isn't installed/authenticated, or you're offline. The check is best-effort and silently degrades; the run continues on your local version. If you want the check to work, ensure `gh auth status` is healthy.
+
 ## Run-start account prompt
 
 **Symptom:** Plugin reports `redemption_timeout` or fails to scrape credentials.
@@ -156,9 +166,20 @@ The plugin emits a soft warning at 5 MB. Archive old entries manually: move them
 
 ## Build mode (`/build-lab`) issues
 
-**Symptom:** Build halts at B0 with "could not locate the mcs-labs repo."
+**Symptom:** Build (or audit) halts at repo resolution with "mcs-labs repo not found."
 
-None of the paths in `judge-config.yml.build.registration.mcs_labs_repo_path_candidates` had a readable `_data/lab-config.yml`. Add your clone's path as the first entry in that list. (Build mode does **not** use the audit commands' hardcoded `C:\Users\dewainr\mcs-labs`.)
+Both modes resolve the repo via `scripts/Resolve-LabRepo.ps1`, which normally **auto-clones** `microsoft/mcs-labs` into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs` when no local copy is found — so a hard failure here means the clone itself couldn't happen. Check, in order:
+
+- **`git` not on PATH** — the resolver can't clone without it (`git --version`). Install Git, then re-run.
+- **No network / `gh`-less offline run** — the clone step needs to reach `github.com`. If you're offline, point the resolver at an existing local clone via `$env:MCS_LABS_REPO` or `mcs_labs_repo_path_candidates`, and pass `-NoPull` semantics will apply (a stale local copy is preferred over a hard failure).
+- **`-NoClone` / read-only context** — if cloning is disabled, you must supply a path. Set `$env:MCS_LABS_REPO` to your clone or add it to `mcs_labs_repo_path_candidates` in `config/judge-config.yml`.
+
+To see what the resolver picks (and why):
+
+```powershell
+pwsh "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Status
+# e.g. "mcs-labs: C:\Users\you\Projects\mcs-labs [pulled]"  or  "[cloned]"
+```
 
 **Symptom:** Build halts at B6 with a registration-mechanism message ("could not find the editable root `lab-config.yml`" / "generator not found").
 
