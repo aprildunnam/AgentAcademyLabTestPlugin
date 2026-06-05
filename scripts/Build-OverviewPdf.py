@@ -913,7 +913,7 @@ def build_story(styles):
 
     story.append(P(styles, "h3", "Model preset (Phase 1.5 Q2a)"))
     story.append(P(styles, "body",
-        "The orchestrator is always Opus (asserted at Phase 1 step 1). The "
+        "The orchestrator is always Opus (asserted at Phase 1 step 2). The "
         "<font face='Courier'>execution.model.preset</font> key controls sub-agent model selection:"
     ))
     story.extend(bullets(styles, [

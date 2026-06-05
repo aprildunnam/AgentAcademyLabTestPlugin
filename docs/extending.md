@@ -67,49 +67,49 @@ To add `/audit-foo`:
 
 ## Pointing at a different lab repo
 
-> **Build mode already resolves the path.** `/build-lab` (v0.4.0+) does **not** use the hardcoded path below — it resolves the mcs-labs repo from `config/judge-config.yml.build.registration.mcs_labs_repo_path_candidates` (first existing wins; default `…\Projects\mcs-labs` then `…\mcs-labs`). The hardcoded path described here still applies to the **audit** commands; aligning them on the same candidate-resolution is a tracked follow-up (ADR-020). To point build mode at a different clone, add it as the first entry in that candidates list.
+> **There is no hard-coded path to bulk-replace anymore.** As of v0.6.0 (ADR-023) **both** audit and build modes resolve the mcs-labs repo at run start via `scripts/Resolve-LabRepo.ps1`, and all plugin-internal reads use `$env:CLAUDE_PLUGIN_ROOT`. The old "bulk-replace `C:\Users\dewainr\mcs-labs` across four files" procedure is obsolete and has been removed.
 
-For the audit commands, the plugin reads from `C:\Users\dewainr\mcs-labs` by default. Adapting:
+`Resolve-LabRepo.ps1` resolves the repo in this order (first match containing `_data/lab-config.yml` wins):
 
-### Quick (per-machine) override
-
-Several files reference the hard-coded path. Bulk-replace `C:\Users\dewainr\mcs-labs` with your clone path in:
-- `commands/audit-bootcamp.md`
-- `commands/audit-lab.md`
-- `commands/audit-account.md`
-- `skills/mcs-lab-auditor/SKILL.md` (look for the "Resolve the plugin directory" section)
-
-### Proper config-driven path (recommended for a v0.2)
-
-1. Add to `config/judge-config.yml`:
-   ```yaml
-   labs:
-     repo_path: "C:\\Users\\dewainr\\mcs-labs"
-     lab_config_relative: "_data/lab-config.yml"
-     labs_dir_relative: "_labs"
+1. **`$env:MCS_LABS_REPO`** — an explicit override; highest priority. Set it (User scope) and restart your runtime:
+   ```powershell
+   [Environment]::SetEnvironmentVariable("MCS_LABS_REPO", "D:\src\mcs-labs", "User")
    ```
-2. Update `SKILL.md` Phase 1 to read these values rather than hard-coding paths.
-3. Update the pre-flight `!` interpolations in the command files to use `$env:USERPROFILE` or read from config.
+2. **`mcs_labs_repo_path_candidates`** in `config/judge-config.yml` — add your clone path (doubled backslashes) to prefer it over the built-ins.
+3. **Built-in candidates** under `%USERPROFILE%`: `Projects\mcs-labs`, `mcs-labs`, `source\repos\mcs-labs`, `.mcs-lab-auditor\mcs-labs`.
+4. **Auto-clone** — if none exist, `microsoft/mcs-labs` is cloned into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs`.
 
-This change is bounded (one config key, four file edits) but touches enough places that it's worth doing as a single PR rather than ad-hoc per machine. Open an issue if you want to tackle it.
+After resolution the repo is fast-forwarded to `origin/main` (unless it's on a non-`main` branch) so audits always run against the latest content. To point the plugin at a custom clone, either set `MCS_LABS_REPO` or prepend the path to `mcs_labs_repo_path_candidates` — no file edits beyond that.
 
-### Adding or auditing a different workshop event
+```powershell
+# Confirm what the resolver picks
+pwsh "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Status
+```
 
-As of v0.3.0, event scope is **first-class**. Every workshop entry in `_data/lab-config.yml.event_configs` (bootcamp, buildathons, MCS-in-a-Day variants, the Azure AI workshop, anything added in the future) is a valid `/audit-event --event <key>` target. No plugin edits needed when a new event is added on the mcs-labs side — `event_configs` is read dynamically at run start.
+### Adding or auditing a different event or workshop
 
-What still needs editing if a brand-new event has a structural quirk:
+Event **and** workshop scopes are **first-class** (ADR-022). The scope catalog is enumerated at run start from two Jekyll collections in the mcs-labs repo by `scripts/Get-EventCatalog.ps1`:
+
+- `_events/<id>.md` — formal curated events (bootcamp, the buildathons).
+- `_workshops/<id>.md` — on-demand workshops (the Azure AI workshop, MCS-in-a-Day, Agent-in-a-Day, the Agent Academy tracks).
+
+Both share one front-matter schema (`title`, `description`, `event_id`, `order`, and a `labs:` list of `{ slug, label }`), and either is a valid `/audit-event --event <id>` target. No plugin edits are needed when a new event or workshop is added on the mcs-labs side — just drop a `_events/<id>.md` or `_workshops/<id>.md` file with a `labs:` list and it appears in the picker. `external: true` scopes (the Agent Academy tracks, whose labs live in `microsoft/agent-academy`) are **listed but not auditable** — they're surfaced for awareness only and never driven.
+
+> The legacy `_data/lab-config.yml.event_configs` table is now only a **last-resort fallback** and has drifted out of sync with the collections (it's missing agent-in-a-day + the academy workshops and still lists an obsolete mcs-in-a-day-v2). Don't add new scopes there — add a collection file instead.
+
+What still needs editing if a brand-new event/workshop has a structural quirk:
 
 1. **Different lab-dependency chains** — add a chain to `config/judge-config.yml.lab_dependencies` if the new event's labs share tenant state in a non-bootcamp pattern.
 2. **Custom workshop portal** — if the new event uses a different portal kind (Skillable vs chatbot vs email), set `config/workshop.yml.portal_kind` accordingly and follow `references/workshop-redemption*.md`.
 3. **Custom event grouping in the Q3a picker** — the picker's top 3 options come from the most-used events in `runtime/audit-history.yml`; you can also hand-curate the recommended option by editing the option labels in `SKILL.md` Phase 1.5 Q3a.
 
-Auditing a brand-new event with no plugin changes:
+Auditing a brand-new event or workshop with no plugin changes:
 
 ```text
-/audit-event --event <new-event-key>
+/audit-event --event <new-scope-id>
 ```
 
-The skill enumerates `event_configs.<new-event-key>.config_key` to get the slug list and proceeds.
+The skill enumerates the scope's `labs:` front-matter (via `Get-EventCatalog.ps1`) to get the slug list and proceeds.
 
 ## Adding a new finding outcome
 
@@ -132,7 +132,7 @@ Most behavior changes can be made via `config/judge-config.yml` alone:
 | Surface more findings even at low confidence | Lower the same threshold to 0.3, and lower `low_confidence_marker_max` to 0.4 |
 | Skip GitHub issues entirely for now | Always pass `--no-issue` (or temporarily set `issues.on_duplicate: skip` *and* mark every lab non-deterministic — there's no global "disable issues" flag yet, but `--no-issue` per invocation is the same effect) |
 | Cap a runaway lab | Lower `execution.max_steps_per_lab` |
-| Disable critique pass | Set `critique.enabled: false` (saves ~10% cost, accepts higher false-positive rate) |
+| Disable critique pass | Set `critique.enabled: false` (~10% fewer judge calls, accepts higher false-positive rate) |
 | Add a lab to the non-deterministic list | Append to `non_deterministic_lab_slugs` |
 | Change the dedupe behavior | Set `issues.on_duplicate` to `comment` (default) or `skip`. `create_anyway` is deprecated and silently coerced to `comment`. |
 | Disable fingerprint dedup (post every finding on every run) | Set `issues.dedupe_by_fingerprint: false`. Not recommended — produces duplicate-comment churn. |
@@ -181,7 +181,7 @@ Build mode authors a new lab end-to-end; the pieces you'll most likely adjust:
 |---|---|
 | Change the default interaction mode | `judge-config.yml.build.interaction_mode_default` (`prompt` / `guided` / `scenario`). Per-run override: `--mode`. |
 | Change what fails the audit gate, or how many fix loops it allows | `judge-config.yml.build.audit_gate.fail_on` (default `[broken, unclear]`) and `audit_gate.max_loops`. |
-| Point build mode at a different mcs-labs clone | Prepend your path to `judge-config.yml.build.registration.mcs_labs_repo_path_candidates`. |
+| Point build mode (or audit mode) at a different mcs-labs clone | Set `$env:MCS_LABS_REPO`, or prepend your path to `mcs_labs_repo_path_candidates` in `judge-config.yml`. Both modes share `scripts/Resolve-LabRepo.ps1` (see [Pointing at a different lab repo](#pointing-at-a-different-lab-repo)). |
 | Change the new-lab PR branch name | `judge-config.yml.issues.new_lab_pr.pr_branch_pattern` (default `dewain/new-lab-{slug}-{build_id}`). |
 | Change the new-lab README format | Edit `skills/mcs-lab-builder/references/lab-authoring-template.md` — the canonical skeleton B5 renders against. |
 | Change how a lab is registered (config maps, `_labs` frontmatter) | Edit `skills/mcs-lab-builder/references/lab-registration-spec.md`. It documents both the `generate` and `direct` mechanisms; B0 detects which applies. |
@@ -196,6 +196,7 @@ Some boundaries are deliberate and shouldn't be crossed without re-opening the r
 - **Keep every write path narrow and explicit.** The plugin's writes to `microsoft/mcs-labs` are exactly: the Issues API (ADR-001), the fix-PR per audit run (ADR-015), the screenshots-only PR append (ADR-014), and the build-mode new-lab PR (ADR-018). Don't add a path that mutates the repo outside these — and don't broaden the audit fix-PR into auto-applying corrections without review.
 - **Don't add automatic tenant cleanup.** ADR-004 explicitly excluded this.
 - **Don't commit `runtime/` contents.** The `.gitignore` enforces it; don't relax it. This includes `runtime/builds/` (build-mode workspaces).
-- **Don't hard-code lab slugs or assume the bootcamp event.** ADR-005 / ADR-019 — always read from `_data/lab-config.yml`; both audit and build are event/workshop-agnostic.
+- **Don't hard-code lab slugs or assume the bootcamp event.** ADR-005 / ADR-019 / ADR-022 — enumerate scope from the `_events/` + `_workshops/` collections (`Get-EventCatalog.ps1`) and read the all-labs catalog from `_data/lab-config.yml.lab_metadata`; both audit and build are event/workshop-agnostic.
+- **Don't reintroduce hard-coded machine paths.** ADR-023 — read plugin files via `$env:CLAUDE_PLUGIN_ROOT` and resolve the mcs-labs repo via `scripts/Resolve-LabRepo.ps1`. Never bake a `C:\Users\...` path into a command, skill, or script.
 
 If a real need pushes against one of these, write a new ADR superseding the old one and have a conversation before merging.

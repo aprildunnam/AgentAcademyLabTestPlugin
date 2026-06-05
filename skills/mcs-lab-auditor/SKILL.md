@@ -1,7 +1,7 @@
 ---
 name: mcs-lab-auditor
 description: |
-  Audit Microsoft Copilot Studio bootcamp labs end-to-end. Drives Playwright through every numbered step of each lab in `C:\Users\dewainr\mcs-labs\_data\lab-config.yml` → `lab_orders.event.bootcamp`, compares the live UI to the written instructions with an LLM judge, and either files a GitHub issue (one per lab with findings) or appends a clean-pass entry to a local audit log. Use this skill when the user says "audit the bootcamp", "run the lab auditor", "test the mcs-labs labs", or invokes any `/audit-*` command from this plugin.
+  Audit Microsoft Copilot Studio labs end-to-end for any event or workshop. Resolves the mcs-labs repo location dynamically (clones/updates it as needed), enumerates auditable scopes from the repo's `_events/` and `_workshops/` collections, drives Playwright through every numbered step of each lab in the chosen scope, compares the live UI to the written instructions with an LLM judge, and either files a GitHub issue (one per lab with findings) or appends a clean-pass entry to a local audit log. Use this skill when the user says "audit the bootcamp", "audit a workshop", "run the lab auditor", "test the mcs-labs labs", or invokes any `/audit-*` command from this plugin.
 allowed-tools:
   - Read
   - Glob
@@ -52,7 +52,7 @@ Read whichever you need before doing the corresponding step. Don't try to keep a
 
 | Command | What this skill does |
 |---|---|
-| `/audit-event [--event <key>] [--resume <id>] [--labs csv] [--no-issue]` | Audit every lab in a workshop event. With `--event <key>` the event is pinned; without it, Phase 1.5 Q3a picks one. Generic over all events defined in `lab-config.yml.event_configs`. |
+| `/audit-event [--event <key>] [--resume <id>] [--labs csv] [--no-issue]` | Audit every lab in an event OR workshop. With `--event <key>` the scope is pinned; without it, Phase 1.5 Q3a picks one. Generic over every scope in the repo's `_events/` and `_workshops/` collections. |
 | `/audit-bootcamp [--resume <id>] [--labs csv] [--no-issue]` | Shortcut for `/audit-event --event bootcamp`. Audits every bootcamp lab. Skips Q3 and Q3a in the interview. |
 | `/audit-lab [<slug>] [--no-issue] [--dry-run]` | Audit a single lab. With `<slug>`, the slug pins scope. Without, Phase 1.5 Q4 picks one from the **full all-labs catalog** (`lab_metadata.*`), not constrained to any event. |
 | `/audit-report [<run-id>]` | Summarize `audit-history.yml`. No browser activity. |
@@ -62,7 +62,16 @@ Read whichever you need before doing the corresponding step. Don't try to keep a
 
 ### Phase 1 — Pre-flight (no browser yet)
 
-1. **Orchestrator-is-Opus assertion (MANDATORY).** The mcs-lab-auditor orchestrator REQUIRES Opus. The plugin halts at this step if the Claude Code session model is not Opus. Detection: the system env line `You are powered by the model named Opus 4.7` (or any future `Opus X.Y`). Lower-tier orchestration silently degrades the entire audit's reliability — Sonnet and Haiku struggle with recovery patterns, dialog disambiguation, and the long-form per-lab state tracking. Sub-agents (per-UC, per-step judge, critique, static fan-out, issue-filer, fix-PR filer, PR appender) CAN run on lower-tier models — that's the Q5 model-preset question. The orchestrator itself cannot.
+1. **Plugin self-version check (best-effort, runs FIRST).** Before anything else, confirm this plugin is current — auditing on a stale copy produces stale findings. Run:
+   ```
+   pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Test-PluginVersion.ps1"
+   ```
+   It compares the local `.claude-plugin/plugin.json` version to the version published on `origin/main` of `microsoft/BootcampLabTestPlugin`. Behavior:
+   - `plugin up-to-date (vX.Y.Z)` → continue silently.
+   - `UPDATE AVAILABLE: local vA < published vB …` (exit 10) → **surface the warning to the user** and recommend running `/plugin` to update before continuing, but do NOT hard-halt — let the user decide (they may be intentionally testing a local build).
+   - `version check skipped (…)` (offline / `gh` unavailable) → note it and continue. The check is best-effort and never blocks a run.
+
+2. **Orchestrator-is-Opus assertion (MANDATORY).** The mcs-lab-auditor orchestrator REQUIRES Opus. The plugin halts at this step if the Claude Code session model is not Opus. Detection: the system env line `You are powered by the model named Opus 4.7` (or any future `Opus X.Y`). Lower-tier orchestration silently degrades the entire audit's reliability — Sonnet and Haiku struggle with recovery patterns, dialog disambiguation, and the long-form per-lab state tracking. Sub-agents (per-UC, per-step judge, critique, static fan-out, issue-filer, fix-PR filer, PR appender) CAN run on lower-tier models — that's the Q5 model-preset question. The orchestrator itself cannot.
 
    On non-Opus orchestrator, halt with:
    ```
@@ -71,34 +80,45 @@ Read whichever you need before doing the corresponding step. Don't try to keep a
    Switch to Opus (e.g. /model in Claude Code) and re-run the /audit-* command.
    Lower-tier sub-agents are still supported — see Phase 1.5 Q5 model-preset.
    ```
-   Do NOT proceed past Phase 1 step 1 on a non-Opus session.
+   Do NOT proceed past Phase 1 step 2 on a non-Opus session.
 
-2. **Resolve the plugin directory**. It is `C:\Users\dewainr\.claude\plugins\mcs-lab-auditor`. The mcs-labs repo is `C:\Users\dewainr\mcs-labs`. Both are fixed paths on this machine.
+3. **Resolve the plugin directory and the mcs-labs repo (NO hard-coded paths).**
+   - The plugin's own files are reached via the `${CLAUDE_PLUGIN_ROOT}` environment variable Claude Code sets for this plugin — never a hard-coded `C:\Users\...\.claude\plugins\...` path. All script invocations below use `"$env:CLAUDE_PLUGIN_ROOT\scripts\<name>.ps1"`.
+   - The mcs-labs repo location is **resolved, not assumed**. Run:
+     ```
+     pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Path
+     ```
+     This finds the repo (via `$env:MCS_LABS_REPO`, the `judge-config.yml.build.registration.mcs_labs_repo_path_candidates`, or a built-in candidate list), **clones `microsoft/mcs-labs` into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs` if no local copy exists**, fast-forwards it to `origin/main`, and prints the resolved absolute path. Capture that path as `$REPO` and use it for every subsequent read of `_labs/`, `_events/`, `_workshops/`, `_data/`. On `--dry-run` or static-only runs you may pass `-NoPull` to skip the fetch. If resolution fails (clone error, no git), halt with the script's error message.
 
-3. **Load configs**:
+4. **Load configs**:
    - `config/workshop.yml`
    - `config/judge-config.yml`
 
-4. **Check `gh` auth**:
+5. **Check `gh` auth**:
    ```
    gh auth status
    gh repo view microsoft/mcs-labs --json viewerPermission
    ```
    If either fails, halt with a clear message before doing anything else.
 
-5. **Enumerate the lab catalog AND the active event's lab list**:
-   - Read `C:\Users\dewainr\mcs-labs\_data\lab-config.yml`.
-   - From `event_configs`, build a map `{event_key → { title, description, config_key, slugs[] }}` for every event defined in the file. `slugs[]` is the ordered list read from the matching `<config_key>` top-level entry (e.g. `bootcamp_lab_orders`, `agent_buildathon_1month_lab_orders`, `mcs_in_a_day_v2_lab_orders`, etc.). Skip the `legacy_lab_orders` table.
-   - From `lab_metadata`, build the **all-labs catalog**: `{slug → { id, title, section, difficulty, duration }}`. This is the picker source for single-lab scope (Phase 1.5 Q4) and the comparison surface for single-lab cross-lab consistency runs.
-   - Determine which event drives the active run:
-     - `/audit-bootcamp` → event = `bootcamp` (pinned).
-     - `/audit-event` → event = the value of `--event <key>` if passed; otherwise resolved by Phase 1.5 Q3a (event picker).
-     - `/audit-lab <slug>` → event is informational only (the run audits a single slug regardless); use the first event whose `slugs[]` contains the slug for display purposes, or `none` if the slug is event-less.
-   - For the active scope (whole event, `--labs csv` subset, or single slug), confirm `_labs/<slug>.md` exists for every chosen slug. If not, record `status: skipped, reason: lab_file_missing` and continue with the next slug — never abort the whole run because one lab is missing.
+6. **Enumerate the auditable scopes (events AND workshops) AND the active scope's lab list.** The source of truth is the repo's two Jekyll collections, NOT the legacy `lab-config.yml.event_configs` table (which has drifted out of sync — it is missing newer workshops like `agent-in-a-day` and the academy series and still lists an obsolete `mcs-in-a-day-v2`). Use the legacy table only as a last-resort fallback when the collections are unreadable.
+   - Run:
+     ```
+     pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-EventCatalog.ps1" -RepoRoot "$REPO" -Json
+     ```
+     This scans `$REPO\_events\*.md` (`type: event`) and `$REPO\_workshops\*.md` (`type: workshop`) and returns, per scope: `{ type, id, title, description, order, external, external_url, repository, auditable, labs[] }`. `labs[]` is the ordered slug list from each scope's front-matter `labs:` array. When a richer `$REPO\_data\agendas\<id>.yml` exists, its `schedule[]` entries with `type: lab` override the order/labels — but the slug set is the same.
+     - **Events** are formal curated experiences (bootcamp, the buildathons). **Workshops** are less formal / on-demand (azure-ai-workshop, mcs-in-a-day, agent-in-a-day, the agent-academy series).
+     - `external: true` scopes (e.g. the agent-academy workshops) host their labs in another repo (`repository`), so `auditable` is false — list them for awareness in the picker but never try to drive them; if one is chosen, explain it can't be audited locally and point at its `external_url`.
+   - Build the **all-labs catalog** for single-lab scope (Phase 1.5 Q4): `{slug → { title, … }}` from `lab_metadata.*` in `$REPO\_data\lab-config.yml`, with each `_labs/<slug>.md` front-matter `title:` as a fallback. (`lab_metadata` is still maintained per-lab, so it remains the single-lab picker source.)
+   - Determine which scope drives the active run:
+     - `/audit-bootcamp` → scope = the `bootcamp` event (pinned).
+     - `/audit-event` → scope = the event/workshop named by `--event <key>` if passed; otherwise resolved by Phase 1.5 Q3a (scope picker). `--event` matches an `id` from the catalog regardless of whether it is an event or a workshop.
+     - `/audit-lab <slug>` → scope is a single slug; for display, use the first catalog entry whose `labs[]` contains the slug, or `none` if the slug belongs to no scope.
+   - For the active scope (whole event/workshop, `--labs csv` subset, or single slug), confirm `$REPO\_labs\<slug>.md` exists for every chosen slug. If not, record `status: skipped, reason: lab_file_missing` and continue with the next slug — never abort the whole run because one lab is missing.
 
-6. **Run-start account prompt** (see Phase 1.5 below). On `--dry-run`, skip this — `--dry-run` only exercises the parser and writes `steps.json` per lab.
+7. **Run-start account prompt** (see Phase 1.5 below). On `--dry-run`, skip this — `--dry-run` only exercises the parser and writes `steps.json` per lab.
 
-7. **Create the run directory**:
+8. **Create the run directory**:
    ```
    $run_id = (Get-Date -Format "yyyy-MM-ddTHHmmZ") + "-" + (-join ((1..4) | % { '{0:x}' -f (Get-Random -Maximum 16) }))
    $run_dir = "runtime/runs/$run_id"
@@ -204,7 +224,7 @@ Skip this question when ANY of:
 - `judge-config.yml.execution.model.preset` is set to a non-`prompt` value (i.e. the config has an explicit default, e.g. set by a previous run).
 - `--resume <run-id>` was passed (preset is inherited from the prior manifest).
 
-The orchestrator is always Opus (asserted in Phase 1 step 1). This question only chooses the model for **sub-agents** spawned by the orchestrator: per-UC subagents, the per-step LLM judge, the critique pass, static fan-out subagents, the cross-lab consistency fan-in, the lab parser subagent, and the issue-filer / fix-PR filer / PR appender sub-skills.
+The orchestrator is always Opus (asserted in Phase 1 step 2). This question only chooses the model for **sub-agents** spawned by the orchestrator: per-UC subagents, the per-step LLM judge, the critique pass, static fan-out subagents, the cross-lab consistency fan-in, the lab parser subagent, and the issue-filer / fix-PR filer / PR appender sub-skills.
 
 When asking, use `AskUserQuestion`:
 
@@ -221,7 +241,7 @@ On `Custom`, the orchestrator writes the current resolved assignments back to `j
 #### Q3. Scope — an event or a single lab?
 
 Skip this question when ANY of:
-- `--labs <csv>` CLI flag was passed (scope = csv → event is the one whose `slugs[]` is a superset of the csv, or `multi` if the csv crosses events).
+- `--labs <csv>` CLI flag was passed (scope = csv → the driving event/workshop is the one whose `labs[]` is a superset of the csv, or `multi` if the csv crosses scopes).
 - The entry point is `/audit-lab <slug>` (slug already names the scope; scope = `one` immediately).
 - The entry point is `/audit-bootcamp` (scope is implicitly `event=bootcamp` and the question is skipped).
 - The entry point is `/audit-event --event <key>` (scope is `event=<key>` and the question is skipped — but Q3a still runs if no `--event` was passed).
@@ -231,35 +251,37 @@ When asking, use `AskUserQuestion`:
 
 - Question: `What should this run audit?`
 - Options:
-  - `[Recommended] A whole event (all its labs)` — description: `Audit every lab in a workshop event in order, respecting lab_dependencies. Follow-up question picks which event.`
+  - `[Recommended] A whole event or workshop (all its labs)` — description: `Audit every lab in an event or workshop in order, respecting lab_dependencies. Follow-up question picks which one.`
   - `Just one lab` — description: `Pick a single lab from the full mcs-labs catalog. Follow-up question lists choices.`
 
-#### Q3a. Event picker (only if Q3 = "A whole event")
+#### Q3a. Event/workshop picker (only if Q3 = "A whole event or workshop")
 
-`AskUserQuestion` supports 2–4 options, and the mcs-labs catalog defines 6 events (and growing). Show the most commonly-audited 3 events directly plus an `Other` escape hatch that accepts a free-text event key validated against `event_configs.*`.
+The picker source is the **events + workshops catalog** built in Phase 1 step 6 from the repo's `_events/` and `_workshops/` collections — NOT the legacy `event_configs` table. Each entry already carries `type` (`event` | `workshop`), `id`, `title`, `description`, `auditable`, and `labs[]`.
 
-Read the option set dynamically from `event_configs` at interview time. The first three options below are the typical defaults; if `event_configs` differs (e.g. an event was added or removed), regenerate the list using these rules:
+`AskUserQuestion` supports 2–4 options, and the catalog defines ~9 scopes (and growing). Show the most relevant 3 directly plus an `Other` escape hatch that accepts a free-text `id` validated against the catalog:
 
-1. The most-used event in `runtime/audit-history.yml` over the last 30 days is the first option, marked `[Recommended]`.
-2. The two next-most-used events fill the second and third slots.
-3. `Other event (type the key)` is always option 4 — picks any of the remaining events via "Other" free-text. Validate the typed key against the keys of `event_configs`; if invalid, re-ask Q3a with a `(invalid event key: <typed>)` prefix on the question.
+1. The most-used scope in `runtime/audit-history.yml` over the last 30 days is the first option, marked `[Recommended]`.
+2. The two next-most-used (or, if no history, the highest-`labs`-count auditable scopes) fill the second and third slots.
+3. `Other event/workshop (type the id)` is always option 4 — picks any remaining scope via "Other" free-text. Validate the typed id against the catalog `id`s; if invalid, re-ask Q3a with a `(invalid id: <typed>)` prefix.
 
-For the typical case as of this writing:
+**Label each option with its type** so the user can tell events from workshops, e.g. `[Event] Architecture Bootcamp (11 labs)` / `[Workshop] Agent in a Day (4 labs)`. Render title and description directly from the catalog entry — never hardcode them, so adding a scope only requires a new `_events/` or `_workshops/` file in the repo.
 
-- Question: `Which event?`
+Example option set (regenerate dynamically — do not hardcode):
+
+- Question: `Which event or workshop?`
 - Options:
-  - `[Recommended] Architecture Bootcamp (11 labs)` — description: `bootcamp — Intensive hands-on bootcamp covering progressive AI assistants, core concepts, governance, tools, multi-agent architectures, and autonomous agents.`
-  - `Agent Build-A-Thon, 1 month (8 labs)` — description: `agent-buildathon-1month — Comprehensive month-long agent development program covering declarative agents, autonomous AI, and enterprise deployment patterns.`
-  - `MCS in a Day V2 (4 labs)` — description: `mcs-in-a-day-v2 — Updated full-day workshop covering progressive AI assistants and core Copilot Studio concepts.`
-  - `Other event (type the key)` — description: `Free-text entry. Valid keys: bootcamp, agent-buildathon-1day, agent-buildathon-1month, azure-ai-workshop, mcs-in-a-day, mcs-in-a-day-v2.`
+  - `[Recommended] [Event] Architecture Bootcamp (11 labs)` — description: the catalog `description` for `bootcamp`.
+  - `[Workshop] Agent in a Day (4 labs)` — description: the catalog `description` for `agent-in-a-day`.
+  - `[Workshop] MCS in a Day (4 labs)` — description: the catalog `description` for `mcs-in-a-day`.
+  - `Other event/workshop (type the id)` — description: `Free-text entry. Any id from the catalog, e.g. agent-buildathon-1day, agent-buildathon-1month, azure-ai-workshop.`
 
-Render each title and description directly from `event_configs.<key>.title` and `event_configs.<key>.description` — never hardcode them in the option labels, so adding a new event only requires a `lab-config.yml` edit.
+If the chosen scope has `auditable: false` (an `external` workshop such as the agent-academy series, whose labs live in another repo), do not start an audit: explain that it is hosted at the scope's `external_url` / `repository` and cannot be driven locally, then re-ask Q3a for an auditable scope.
 
-Once the event is resolved, `scope_labs` is the `slugs[]` from `event_configs.<event>.config_key`.
+Once the scope is resolved, `scope_labs` is the `labs[]` slug list from its catalog entry (agenda-overridden order when `_data/agendas/<id>.yml` exists).
 
 #### Q4. One-lab picker (only if Q3 = "Just one lab")
 
-The picker source for a single-lab scope is **the full all-labs catalog** (`lab_metadata.*`), NOT one event's `slugs[]`. The user has every lab in the mcs-labs repo to choose from — including specialized, optional, and external labs that no single event includes.
+The picker source for a single-lab scope is **the full all-labs catalog** (`lab_metadata.*`), NOT one event/workshop's `labs[]`. The user has every lab in the mcs-labs repo to choose from — including specialized, optional, and external labs that no single event/workshop includes.
 
 Because `AskUserQuestion` supports only 2–4 options per question and the catalog has 60+ labs, ask in two steps grouped by `lab_metadata.<id>.section`:
 
@@ -296,8 +318,9 @@ interview:
   account_choice: cached | redeemed | aborted
   phase_mix: static | interactive | both
   model_preset: optimized | opus | custom   # Q2a; see execution.model.resolved below for per-function assignments
-  scope: event | one             # "event" → audit the chosen event's lab list; "one" → audit a single slug from the all-labs catalog
-  event: <event-key|null>        # null when scope == one (single-lab runs have no driving event)
+  scope: event | one             # "event" → audit a whole event/workshop's lab list; "one" → audit a single slug from the all-labs catalog
+  scope_type: event | workshop | null  # which collection the chosen scope came from; null when scope == one
+  event: <scope-id|null>         # the chosen event/workshop id; null when scope == one (single-lab runs have no driving scope)
   scope_labs: [<slug>, ...]      # the final list driving Phase 1.7 (always 1+ entries)
   skipped_questions:              # questions short-circuited by CLI flags or by the entry-point command
     - { question: "phase_mix", reason: "cli_flag: --static-only" }

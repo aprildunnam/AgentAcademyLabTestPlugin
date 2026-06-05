@@ -15,12 +15,12 @@ If a positional argument is provided, treat it as a `<run-id>` and show only tha
 
 ## Pre-flight context
 
-- audit history present: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode BytesLabel -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\audit-history.yml" -Fallback "MISSING - no runs yet"`
-- runs directory contents: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode RecentDirs -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\runs" -Count 5 -Fallback "(no runs)"`
+- audit history present: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode BytesLabel -Path "$env:CLAUDE_PLUGIN_ROOT\runtime\audit-history.yml" -Fallback "MISSING - no runs yet"`
+- runs directory contents: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode RecentDirs -Path "$env:CLAUDE_PLUGIN_ROOT\runtime\runs" -Count 5 -Fallback "(no runs)"`
 
 ## Your task
 
-1. Read `~/.claude/plugins/mcs-lab-auditor/runtime/audit-history.yml`. If missing, tell the user no runs have been recorded yet and suggest `/audit-bootcamp` or `/audit-lab <slug>`.
+1. Read `$env:CLAUDE_PLUGIN_ROOT/runtime/audit-history.yml`. If missing, tell the user no runs have been recorded yet and suggest `/audit-bootcamp` or `/audit-lab <slug>`.
 
 2. If a `<run-id>` argument was given:
    - Filter to entries where `run_id == <given>`.
@@ -31,7 +31,7 @@ If a positional argument is provided, treat it as a `<run-id>` and show only tha
    - Group entries by `run_id`, sort by latest `finished_at` descending.
    - Print the most recent 5 runs, one block per run.
    - For each run, show: run-id, started_at, account_user_id, labs total, status breakdown (pass / issue_filed / error / skipped), list of issue URLs filed.
-   - At the very end, list any labs from `_data/lab-config.yml` `lab_orders.event.bootcamp` that have NEVER been audited.
+   - At the very end, list any labs from the `bootcamp` event's `labs[]` (in the repo's `_events/bootcamp.md`) that have NEVER been audited.
 
 Output format: terse, monospace-friendly. Use unicode box-drawing only if the user's terminal supports it — otherwise plain ASCII tables.
 

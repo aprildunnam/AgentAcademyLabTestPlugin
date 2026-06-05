@@ -6,6 +6,24 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-05
+
+### Added
+
+- **Events AND workshops are both first-class audit scopes.** The mcs-labs repo split curated scopes into two Jekyll collections — `_events/` (formal: bootcamp, the buildathons) and `_workshops/` (on-demand: Azure AI workshop, MCS in a Day, **Agent in a Day**, the Agent Academy series). The auditor now enumerates scope from these collections instead of the legacy `lab-config.yml.event_configs` table, which had drifted out of sync (it lacked the newer workshops and still listed an obsolete `mcs-in-a-day-v2`). The Phase 1.5 Q3/Q3a picker labels each option `[Event]` / `[Workshop]`, and `/audit-event --event <id>` accepts the id of either. New `scripts/Get-EventCatalog.ps1` reads each scope's front-matter `labs:` list and tags `external` scopes (e.g. Agent Academy, whose labs live in another repo) as **not auditable** so they're listed but never driven.
+- **Plugin self-version check runs first (`scripts/Test-PluginVersion.ps1`).** Before any audit work, the orchestrator compares the local `plugin.json` version to the version published on `origin/main` of `microsoft/BootcampLabTestPlugin` and warns (non-blocking) when an update is available — so audits don't silently run on a stale copy. Wired into every audit/build command's pre-flight as a new Phase-1 step 1.
+- **Dynamic mcs-labs repo resolution with auto-clone + always-latest (`scripts/Resolve-LabRepo.ps1`).** The repo location is resolved at run start (via `$env:MCS_LABS_REPO`, the `judge-config.yml` candidates, or a built-in list), **clones `microsoft/mcs-labs` into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs` when no local copy exists**, and fast-forwards it to `origin/main` so every audit compares against current lab content.
+
+### Changed
+
+- **All hard-coded machine paths removed from audit mode.** The `C:\Users\dewainr\.claude\plugins\mcs-lab-auditor` plugin path in every command pre-flight and the `~/.claude/...` SKILL.md read paths are now `$env:CLAUDE_PLUGIN_ROOT`; the `C:\Users\dewainr\mcs-labs` repo path is replaced by `Resolve-LabRepo.ps1`. This completes the follow-up noted in 0.4.0 ("Audit-side commands still carry the legacy hardcoded path"). The plugin now works on any contributor's machine with no per-machine edits.
+- **Phase 1 pre-flight renumbered** (orchestrator `SKILL.md`): step 1 self-version check, step 2 Opus assertion, step 3 portable plugin + resolved repo paths, step 6 events+workshops enumeration. Q3/Q3a, the interview-outcome manifest (`scope_type: event | workshop`), and the command prose were updated to match.
+- **Version → 0.6.0** across `plugin.json`, `marketplace.json`, and `judge-config.yml.plugin_version`.
+
+### Documentation
+
+- Updated `README.md`, `docs/architecture.md`, `docs/installation.md`, `docs/extending.md`, `docs/troubleshooting.md`, and `docs/design-decisions.md` (new ADR-022 events-vs-workshops source of truth, ADR-023 portable path resolution + self-version check) for the collection-based scope model, the new scripts, and the removal of hard-coded paths.
+
 ## [0.5.0] - 2026-06-05
 
 ### Added

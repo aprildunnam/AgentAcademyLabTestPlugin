@@ -436,6 +436,52 @@ Two config keys replace the single fixed pattern: `issues.pr_append.pr_branch_pa
 
 ---
 
+## ADR-022 — Events vs workshops: collections are the source of truth
+
+**Status:** Accepted (v0.6.0 addition; generalizes ADR-005 / ADR-019).
+
+**Context.** The mcs-labs repo split its curated scopes into two Jekyll collections: `_events/<id>.md` for formal, curated event experiences (bootcamp, agent-buildathon-1day, agent-buildathon-1month) and `_workshops/<id>.md` for on-demand workshops (azure-ai-workshop, mcs-in-a-day, agent-in-a-day, the Agent Academy recruit/operative/commander tracks). Both share one front-matter schema — `title`, `description`, `event_id`, `order`, and a `labs:` list of `{ slug, label }` — with an optional richer agenda at `_data/agendas/<id>.yml`. Meanwhile the plugin's original scope source, the legacy `_data/lab-config.yml.event_configs` table, **drifted out of sync**: it lacks agent-in-a-day and the academy workshops and still lists an obsolete `mcs-in-a-day-v2`. Continuing to read `event_configs` would silently miss real scopes and offer dead ones.
+
+**Decision.** Enumerate the scope catalog from the **`_events/` + `_workshops/` collections** via a new `scripts/Get-EventCatalog.ps1`. For each scope it emits `type` (event|workshop), `id`, `title`, `description`, `order`, `external`, `external_url`, `repository`, `auditable`, and the `labs[]` slug list — events first, then workshops, each ordered by `order` then `id`. **Events and workshops are both first-class audit scopes.** Scopes flagged `external: true` (the Agent Academy tracks, whose labs live in `microsoft/agent-academy`) are **listed for awareness but `auditable: false`** — never driven end-to-end. The legacy `event_configs` table is demoted to a **last-resort fallback only**. The single-lab picker still reads `lab_metadata.*` from `lab-config.yml` — that part is unchanged.
+
+**Consequences.**
+- New events/workshops added on the mcs-labs side (a `_events/` or `_workshops/` file with a `labs:` list) appear in the plugin with no code change.
+- The picker reflects the real, current scope set instead of the drifted legacy table; obsolete entries (mcs-in-a-day-v2) disappear and missing ones (agent-in-a-day, the academy tracks) appear.
+- External scopes are visible but can't be falsely "audited" — the catalog marks them non-auditable rather than failing mid-run when their labs aren't in this repo.
+- Two source surfaces now matter: the collections (scope catalog) and `lab_metadata` (all-labs single-lab catalog). The legacy `event_configs` table remains only as a defensive fallback for repos that predate the collections.
+
+**Alternatives considered.**
+- **Keep reading `event_configs`.** Rejected — it has demonstrably drifted; the collections are now the repo's source of truth.
+- **Merge the two collections into one "scopes" surface in the plugin.** Rejected — the event/workshop distinction is meaningful to users and is carried as a `type` tag rather than flattened away.
+- **Drop `event_configs` support entirely.** Deferred — keeping it as a last-resort fallback costs nothing and protects against an older mcs-labs checkout that lacks the collections.
+
+---
+
+## ADR-023 — Portable paths: dynamic repo resolution + plugin self-version check
+
+**Status:** Accepted (v0.6.0 addition; supersedes the audit-side hardcoded path in ADR-020).
+
+**Context.** The plugin shipped with hard-coded machine paths — `C:\Users\dewainr\.claude\plugins\mcs-lab-auditor` for plugin files, `~/.claude/plugins/mcs-lab-auditor/...` SKILL read-paths, and `C:\Users\dewainr\mcs-labs` for the labs repo (audit mode hard-coded it; build mode had only a partial candidate list). On any other contributor's machine these broke, requiring manual per-machine path edits. There was also **no update awareness**: a run could execute on a stale local copy without the user knowing a newer version existed.
+
+**Decision.** Three changes make the plugin portable and update-aware:
+
+1. **Plugin files via `$env:CLAUDE_PLUGIN_ROOT`.** Every `C:\Users\dewainr\.claude\plugins\mcs-lab-auditor` and every `~/.claude/plugins/mcs-lab-auditor/...` SKILL read-path is replaced with `$env:CLAUDE_PLUGIN_ROOT`. No machine-specific plugin path remains.
+2. **mcs-labs repo via `scripts/Resolve-LabRepo.ps1`.** Resolution order: `$env:MCS_LABS_REPO` → `judge-config.yml.build.registration.mcs_labs_repo_path_candidates` → built-in candidates under `%USERPROFILE%` → if none found, **clone** `microsoft/mcs-labs` into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs`; then **fast-forward to `origin/main`** so audits always run against the latest lab content. This applies to **both** audit and build modes (previously only build mode had partial candidate resolution; audit mode hard-coded the path).
+3. **Self-version check via `scripts/Test-PluginVersion.ps1`.** As Phase 1 step 1 (and a pre-flight line in every command), it compares local `.claude-plugin/plugin.json` against the version published on `origin/main` of `microsoft/BootcampLabTestPlugin` (`.claude-plugin/marketplace.json`) using `gh api`. Best-effort and **non-blocking**: it warns when an update is available, recommends `/plugin` to update, and is skipped silently when `gh` is unavailable or offline.
+
+**Consequences.**
+- The plugin works on any contributor's machine with **no per-machine path edits**; the obsolete "Step 5b: adjust hard-coded paths" install step is gone.
+- Audits always run against current lab content (auto-clone + fast-forward), and against a known-current plugin version (or a visible warning if not).
+- A new dependency on `git` at the labs-repo-resolution boundary (for the auto-clone + fast-forward) — degraded gracefully: a stale local copy is preferred over a hard failure when the network or `git` is unavailable.
+- The version check is one more `gh` call per run, but cheap and silently skipped when `gh` can't reach the published manifest.
+
+**Alternatives considered.**
+- **Keep per-machine path edits documented in installation.** Rejected — every new contributor hit the same setup friction, and the edits drifted from the docs.
+- **Require a manual clone of mcs-labs before first run.** Rejected — auto-clone removes a setup step and guarantees the repo is present and current; users who want a specific clone still override via `MCS_LABS_REPO` or the candidates list.
+- **Block the run when an update is available.** Rejected — a hard block on a best-effort network check would strand offline users; a non-blocking warning preserves the run while still nudging the update.
+
+---
+
 ## Cross-references
 
 - [`architecture.md`](architecture.md) — how these decisions compose at runtime.

@@ -255,9 +255,12 @@ build:
 
   # --- mcs-labs registration (B6/B7) ---
   registration:
-    # The mcs-labs repo path is NOT fixed (it moved out of ~/mcs-labs). The
-    # orchestrator tries these in order and uses the first whose
-    # _data/lab-config.yml exists.
+    # The mcs-labs repo path is NOT fixed. Both audit and build modes resolve it
+    # via scripts/Resolve-LabRepo.ps1, which tries (in order): $env:MCS_LABS_REPO,
+    # these candidates, then a built-in list under %USERPROFILE%, and finally
+    # CLONES microsoft/mcs-labs into %USERPROFILE%\.mcs-lab-auditor\mcs-labs if no
+    # local copy exists — then fast-forwards it to origin/main. Add your own clone
+    # path here (use doubled backslashes) to have it preferred over the built-ins.
     mcs_labs_repo_path_candidates:
       - "C:\\Users\\dewainr\\Projects\\mcs-labs"
       - "C:\\Users\\dewainr\\mcs-labs"
@@ -268,4 +271,4 @@ build:
     order_gap_strategy: section_midpoint           # pick a free order number mid-band (see lab-registration-spec.md §2)
 
 # --- Plugin version (written into manifest.yml and issue bodies) ---
-plugin_version: "0.5.0"
+plugin_version: "0.6.0"

@@ -22,8 +22,10 @@ The first positional argument is the lab slug (e.g. `core-concepts-analytics-eva
 
 ## Pre-flight context
 
-- all-labs catalog (id → title): !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode GrepContext -Path "C:\Users\dewainr\mcs-labs\_data\lab-config.yml" -Pattern "^lab_metadata:" -ContextAfter 20 -Fallback "MISSING - lab-config.yml not found"`
-- cached account: !`pwsh -NoProfile -File "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\scripts\Get-PathOrFallback.ps1" -Mode JsonField -Path "C:\Users\dewainr\.claude\plugins\mcs-lab-auditor\runtime\account\account.meta.json" -JsonField user_id -Fallback "(none)"`
+- plugin version: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Test-PluginVersion.ps1"`
+- mcs-labs repo (resolved + updated): !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Status`
+- all-labs catalog (id → title): !`pwsh -NoProfile -Command '$r = & "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Path -NoPull; & "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode GrepContext -Path "$r\_data\lab-config.yml" -Pattern "^lab_metadata:" -ContextAfter 20 -Fallback "MISSING - lab-config.yml not found"'`
+- cached account: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode JsonField -Path "$env:CLAUDE_PLUGIN_ROOT\runtime\account\account.meta.json" -JsonField user_id -Fallback "(none)"`
 
 ## Your task
 
@@ -35,4 +37,4 @@ Invoke the `mcs-lab-auditor` skill for the given (or interactively-picked) slug:
 4. Single-lab loop: parse → **execute steps in Playwright against the chosen account** (when `phase_mix` includes interactive) → judge → file-or-log. Connection-class failures during execution follow the network-retry policy in `judge-config.yml.execution.network_retry_count` (default 3) before halting and asking the user.
 5. Print summary: status, issue URL (if any), run-id, and which phase(s) actually ran.
 
-Follow `~/.claude/plugins/mcs-lab-auditor/skills/mcs-lab-auditor/SKILL.md` for the procedure. The single-lab path is the same as the full-event path, just with `scope: one`, `event: null`, and a scope_labs list of length 1. Cross-lab consistency findings still surface in single-lab runs — the fan-in compares this lab's fingerprints against the most recent prior-run fingerprints for every sibling lab in the catalog. Labs that have never been audited contribute nothing.
+Follow `$env:CLAUDE_PLUGIN_ROOT/skills/mcs-lab-auditor/SKILL.md` for the procedure. The single-lab path is the same as the full-event path, just with `scope: one`, `event: null`, and a scope_labs list of length 1. Cross-lab consistency findings still surface in single-lab runs — the fan-in compares this lab's fingerprints against the most recent prior-run fingerprints for every sibling lab in the catalog. Labs that have never been audited contribute nothing.
