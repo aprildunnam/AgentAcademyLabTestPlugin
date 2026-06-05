@@ -10,12 +10,14 @@ A build uses `runtime/builds/<build-id>/`, mirroring the auditor's `runtime/runs
 runtime/builds/<build-id>/
   manifest.yml         # build_id, slug, mode (guided|scenario), account user_id, mcs_labs_repo,
                        #   registration_mode (generate|direct|ambiguous), lab meta
-                       #   (title/difficulty/duration/section/journeys/order), events[], phase cursor, status
+                       #   (title/difficulty/duration/section/journeys/order), events[],
+                       #   proposal_issue {number,url,status,labels}, phase cursor, status
   session-state.yml    # RESUME cursor (see §resume)
   ledger.yml           # ordered list of CONFIRMED step records — the source of truth for B5
   draft/
     README.md          # assembled lab (rewritten on every B5; may be partial during B4)
     images/            # screenshots captured during B4 (kebab-named, see §screenshots)
+  proposal-issue.md    # rendered B3.5 issue body (type: new-lab + status: in-progress)
   snapshots/           # <step-id>-before.yml / -after.yml (context-saver; never shipped)
   audit/
     findings.json      # B6 gate findings, consumed in-loop (NOT routed to any issue-filer)
@@ -144,6 +146,12 @@ pending_decision: null     # set if a step was mid-confirmation when interrupted
 ```yaml
 build:
   interaction_mode_default: prompt        # prompt | guided | scenario
+  proposal_issue:
+    enabled: true
+    repo: "microsoft/mcs-labs"
+    labels: ["type: new-lab", "status: in-progress"]   # existing repo labels (do not invent)
+    title_pattern: "New lab proposal: {title} ({slug})"
+    link_pr_with: "Closes"                 # Closes | Refs — how the B7 PR references the issue
   audit_gate:
     enabled: true
     fail_on: [broken, unclear]

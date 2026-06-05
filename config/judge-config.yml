@@ -225,6 +225,20 @@ build:
   # proposes one step at a time. Both modes confirm EVERY step.
   interaction_mode_default: prompt        # prompt | guided | scenario
 
+  # --- New-lab proposal issue (B3.5) ---
+  # As soon as a new lab is named, build mode opens a tracking issue on the lab
+  # repo so the lab is visible to the team as an "In Progress" proposal for the
+  # whole build. Deduped per slug; reused on --resume; closed by the B7 PR.
+  # Labels match the EXISTING microsoft/mcs-labs taxonomy — do not invent new
+  # ones (type: new-lab = "Brand new lab proposal"; status: in-progress =
+  # "Someone is actively working on this").
+  proposal_issue:
+    enabled: true
+    repo: "microsoft/mcs-labs"
+    labels: ["type: new-lab", "status: in-progress"]
+    title_pattern: "New lab proposal: {title} ({slug})"
+    link_pr_with: "Closes"                # Closes | Refs — how the B7 PR references the issue
+
   # --- Audit gate (B6) ---
   # After the lab is drafted, register + materialize it and run the auditor's
   # Phase-2 judge loop against it. Findings are consumed IN-LOOP (fed back into
@@ -254,4 +268,4 @@ build:
     order_gap_strategy: section_midpoint           # pick a free order number mid-band (see lab-registration-spec.md §2)
 
 # --- Plugin version (written into manifest.yml and issue bodies) ---
-plugin_version: "0.4.0"
+plugin_version: "0.5.0"

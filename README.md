@@ -11,11 +11,11 @@ Both modes are **event/workshop-agnostic**: any workshop entry defined in `_data
 
 **The plugin will never create a duplicate _open_ issue or PR for a lab that already has one open.** Phase 1.4 of every audit run probes `gh issue list` + `gh pr list` per slug, and the per-lab disposition uses that result — new findings go into a fingerprint-deduped delta comment on the existing open issue, and a run's fixes are appended to the existing open PR. Dedup is scoped to **open** items only: a merged or closed prior issue/PR never blocks a new one, so each run with fresh findings gets its own PR on a fresh branch.
 
-**Build mode adds one more write path:** a **new-lab PR** (`skills/mcs-lab-new-lab-pr/SKILL.md`) on a run-unique branch `dewain/new-lab-<slug>-<build-id>` off fresh `origin/main`. Build mode's audit gate **files nothing on GitHub** — its findings stay local and feed the authoring loop until the lab passes.
+**Build mode adds two write paths:** (1) a **"new lab proposal" issue** opened as soon as the lab is named — labeled `type: new-lab` + `status: in-progress` so the team can see it's **In Progress** — and (2) a **new-lab PR** (`skills/mcs-lab-new-lab-pr/SKILL.md`) on a run-unique branch `dewain/new-lab-<slug>-<build-id>` off fresh `origin/main` that closes the proposal issue on merge. Build mode's audit gate itself **files nothing on GitHub** — its findings stay local and feed the authoring loop until the lab passes.
 
 ## Status
 
-`v0.4.0` — field-tested audit mode; build mode is new. The plugin has completed multiple full audit cycles against live workshop tenants. In the May 2026 audit cycle alone, it raised **24 issues** across 11 bootcamp labs and generated **19 merged fix PRs** against `microsoft/mcs-labs`. See [Real-world impact](#real-world-impact) below. The interactive lab-building mode (`/build-lab`) shipped in v0.4.0 and awaits its first full live-tenant build.
+`v0.5.0` — field-tested audit mode; build mode is new. The plugin has completed multiple full audit cycles against live workshop tenants. In the May 2026 audit cycle alone, it raised **24 issues** across 11 bootcamp labs and generated **19 merged fix PRs** against `microsoft/mcs-labs`. See [Real-world impact](#real-world-impact) below. The interactive lab-building mode (`/build-lab`) shipped in v0.4.0 (proposal-issue tracking added in v0.5.0) and awaits its first full live-tenant build.
 
 ## Real-world impact
 
@@ -57,7 +57,7 @@ All findings: [microsoft/mcs-labs issues (lab-audit label)](https://github.com/m
 Build mode reuses the account flow, Playwright cookbook, judge, and finding schema above, and adds an authoring loop (phases B0–B7 in `skills/mcs-lab-builder/SKILL.md`):
 
 1. **Preflight + interview.** Assert Opus, check `gh`, **resolve the mcs-labs path**, **detect the registration mechanism**, then pick the account and an interaction mode — **guided** (you dictate each step) or **scenario** (you describe the lab, the AI proposes each step). Both confirm every step.
-2. **Navigate** to the Copilot Studio Home page; name the lab (slug + collision check); capture metadata and optional event attachment.
+2. **Navigate** to the Copilot Studio Home page; name the lab (slug + collision check); capture metadata and optional event attachment. **Open a "new lab proposal" issue** (`type: new-lab` + `status: in-progress`) so the lab is tracked as In Progress while you build it.
 3. **Capture loop.** For each step: snapshot → step intent → execute in Playwright → screenshot → write the instruction + tips → **confirm** → checkpoint to a ledger.
 4. **Assemble** the full sibling-formatted `labs/<slug>/README.md` from the ledger.
 5. **Audit gate.** Register + materialize the lab and run the audit engine against it with **all GitHub writes suppressed**; any broken/unclear step loops back for a fix until the lab passes.

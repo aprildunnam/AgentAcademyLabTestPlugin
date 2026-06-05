@@ -249,7 +249,7 @@ Build mode authors a brand-new lab end-to-end and opens a PR adding it to `micro
 What happens:
 
 1. **Account + mode** — pick the cached account (or redeem) and choose **guided** (you dictate each step) or **scenario** (you describe the lab, the AI proposes each step). Both confirm every step.
-2. **Navigate** to the Copilot Studio Home page, then name the lab.
+2. **Navigate** to the Copilot Studio Home page, then name the lab. A **"new lab proposal" issue** is opened on `microsoft/mcs-labs` (labeled `type: new-lab` + `status: in-progress`) so the team can see the lab is In Progress; the final PR closes it.
 3. **Capture loop** — for each step: the action runs in the browser, a screenshot is taken, the instruction prose + tips are written, and you confirm before moving on.
 4. **Audit gate** — the finished lab is re-run through the audit engine; any broken/unclear steps loop back for a fix. No GitHub issue/PR is filed by the gate.
 5. **PR** — once the gate passes, a PR adds `labs/<slug>/README.md` + screenshots + the registration entry.

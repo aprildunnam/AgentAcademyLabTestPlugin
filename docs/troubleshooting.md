@@ -176,6 +176,10 @@ B3 found the derived `<slug>` already in `_data/lab-config.yml` (an `id:`) or as
 
 Build mode opens a PR (not just an issue), so `gh` needs PR-create permission on `microsoft/mcs-labs`. Check `gh repo view microsoft/mcs-labs --json viewerPermission` (`WRITE`+). Use `--no-pr` to author + gate without opening a PR.
 
+**Symptom:** The "new lab proposal" issue wasn't created (or a duplicate appeared).
+
+Build mode opens a `type: new-lab` + `status: in-progress` issue at B3.5. If it was skipped, check: (a) `gh` has issue-create permission on `microsoft/mcs-labs` (`gh repo view … --json viewerPermission`); (b) `judge-config.yml.build.proposal_issue.enabled` is `true`; (c) the labels in `build.proposal_issue.labels` exist on the repo (it warns and files with the labels that do rather than failing). A *duplicate* means dedup missed an existing open proposal — it matches by `type: new-lab` label + slug-in-title, so a prior proposal with a different title won't be found; close the extra one. On `--resume`, the issue from `manifest.proposal_issue` is reused, never reopened.
+
 **Symptom:** A build was interrupted; how do I continue?
 
 `/build-lab --resume <build-id>`. It re-runs preflight + the account prompt, returns to where the browser left off, and resumes at the first unconfirmed step. Confirmed steps in `runtime/builds/<build-id>/ledger.yml` (and their screenshots) are preserved. The `<build-id>` is printed at build start and stored in `runtime/builds/<build-id>/manifest.yml`.

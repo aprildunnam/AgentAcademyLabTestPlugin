@@ -2,7 +2,7 @@
 
 `mcs-lab-auditor` handles workshop-issued test account credentials and drives a logged-in browser through several Microsoft product portals. This document spells out exactly what is sensitive, where each sensitive item lives, what protects it, and what the residual risks are.
 
-> **Build mode (`/build-lab`, v0.4.0+) introduces no new secrets.** It reuses the same workshop account + DPAPI credential cache and the same logged-in browser session described here. Its only additional at-rest artifacts are the build workspace under `runtime/builds/<build-id>/` (draft markdown, captured screenshots, accessibility snapshots) — same protections and residual risks as the `runtime/runs/` artifacts below. Its only GitHub write is the new-lab PR (the audit gate writes nothing to GitHub).
+> **Build mode (`/build-lab`) introduces no new secrets.** It reuses the same workshop account + DPAPI credential cache and the same logged-in browser session described here. Its only additional at-rest artifacts are the build workspace under `runtime/builds/<build-id>/` (draft markdown, captured screenshots, accessibility snapshots, the rendered proposal-issue body) — same protections and residual risks as the `runtime/runs/` artifacts below. Build mode makes **two** GitHub writes, both intentional: the B3.5 **proposal issue** (`type: new-lab` + `status: in-progress`) and the B7 **new-lab PR**. The proposal-issue body contains only lab metadata (title, slug, what it teaches) — no credentials. The audit gate writes nothing to GitHub.
 
 If you find a flaw in this model, **do not file a public GitHub issue** — report it via MSRC per [`SECURITY.md`](../SECURITY.md).
 
