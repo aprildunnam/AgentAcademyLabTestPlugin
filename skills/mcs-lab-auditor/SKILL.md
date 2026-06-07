@@ -88,7 +88,12 @@ Read whichever you need before doing the corresponding step. Don't try to keep a
      ```
      pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Path
      ```
-     This finds the repo (via `$env:MCS_LABS_REPO`, the `judge-config.yml.build.registration.mcs_labs_repo_path_candidates`, or a built-in candidate list), **clones `microsoft/mcs-labs` into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs` if no local copy exists**, fast-forwards it to `origin/main`, and prints the resolved absolute path. Capture that path as `$REPO` and use it for every subsequent read of `_labs/`, `_events/`, `_workshops/`, `_data/`. On `--dry-run` or static-only runs you may pass `-NoPull` to skip the fetch. If resolution fails (clone error, no git), halt with the script's error message.
+     This finds the repo (via `$env:MCS_LABS_REPO`, the `judge-config.yml.build.registration.mcs_labs_repo_path_candidates`, or a built-in candidate list), **clones `microsoft/mcs-labs` into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs` if no local copy exists**, and **pins the working tree to `origin/main`** (it checks out `origin/main` even if the clone was left on a stale feature branch — a clean tree only; a dirty tree is left untouched and surfaced loudly). It prints the resolved absolute path. Capture that path as `$REPO` and use it for every subsequent read of `_labs/`, `_events/`, `_workshops/`, `_data/`. On `--dry-run` or static-only runs you may pass `-NoPull` to skip the fetch. If resolution fails (clone error, no git), halt with the script's error message.
+   - **ASSERT the audited revision is `origin/main` (MANDATORY unless `-NoPull`).** A lab audit is only meaningful against the *current* instructions. After capturing `$REPO`, confirm the working tree is exactly `origin/main`:
+     ```
+     pwsh -NoProfile -Command "git -C '$REPO' fetch --quiet origin; if ((git -C '$REPO' rev-parse HEAD) -ne (git -C '$REPO' rev-parse origin/main)) { 'MISMATCH' } else { 'ok' }"
+     ```
+     If this prints `MISMATCH` (the clone is on a stale branch, behind `origin/main`, or has uncommitted changes blocking the pin), **halt** with a clear message that names the diverging-commit count and tells the user to commit/stash and re-run — do NOT proceed to parse labs against non-`origin/main` content. Record the audited commit SHA (`git -C $REPO rev-parse --short origin/main`) in `manifest.yml` so every finding is traceable to an exact instruction revision, and reference that SHA in issue/PR bodies. (Auditing a stale branch silently produces findings that are already fixed on `main` — issue #41.)
 
 4. **Load configs**:
    - `config/workshop.yml`
@@ -659,6 +664,27 @@ The orchestrator hands each per-UC subagent a self-contained prompt with:
   - **The browser is already signed in and on a URL related to the prior
     UC (or the lab's landing URL for UC#1).** Navigate as the first
     step requires; never call sign-in flow.
+  - **Execute the lab by following the written steps and clicking the
+    actual UI controls — NEVER navigate by URL to shortcut a step, and
+    NEVER treat a URL seen in a screenshot as a navigation target
+    (issue #40).** Lab screenshots (`![...](images/*.png)`) illustrate
+    the *expected result*; they are not instructions. The only legitimate
+    `_browser_navigate` calls are the ones the step text explicitly tells
+    the learner to make (e.g. "go to make.powerapps.com"). Reaching a
+    later page via a synthesized deep-link hides the very instruction
+    drift the audit exists to catch (a renamed/moved/missing control), so
+    if the named control can't be found, record a **finding**
+    (expected-vs-actual) instead of working around it with a URL.
+  - **Verify identity on every new first-party surface (issue #39).**
+    Before driving Copilot Studio, Power Apps, the Power Platform admin
+    center, Teams, or Outlook, confirm the page is signed in as the
+    *exact redeemed workshop user* (`account.user_id`), not merely "signed
+    in" — the audit browser can silently SSO into a different
+    OS-broker/Windows account. If the surface shows a different user
+    (e.g. Power Apps defaulting to a prior run's `DEV - User XXXX`), halt
+    that UC with `error, reason: account_mismatch` and let the
+    orchestrator resolve it (full logout → re-login as the redeemed user)
+    rather than URL-hacking into the right environment.
   - **Save snapshots to disk by default** —
     `_browser_snapshot({filename: "snapshots/<step-id>-before.yml"})`
     instead of returning inline. The judge reads from disk. This is the

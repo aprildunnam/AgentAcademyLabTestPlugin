@@ -14,8 +14,10 @@
       4. If none contain _data/lab-config.yml, clone microsoft/mcs-labs into the
          managed cache ($env:USERPROFILE\.mcs-lab-auditor\mcs-labs).
 
-    Once resolved, it fast-forwards the repo to origin/main (unless -NoPull),
-    so screenshots and step text are always compared against the latest labs.
+    Once resolved, it PINS the working tree to origin/main (unless -NoPull) so
+    screenshots and step text are always compared against the latest labs -
+    even if the clone was left on a stale feature branch. A dirty tree is never
+    clobbered; it is surfaced loudly so the orchestrator halts (issue #41).
 
 .PARAMETER Mode
     Path   - emit ONLY the resolved absolute repo root (default; for capture).
@@ -118,16 +120,41 @@ if (-not $resolved) {
 
 # Always pull latest unless suppressed (best-effort; a stale local copy is
 # better than a hard failure mid-run).
+# An audit MUST compare the live product against the CURRENT labs on
+# origin/main — never whatever branch happens to be checked out in the
+# operator's clone. The previous logic only fast-forwarded when HEAD was
+# already 'main' and otherwise *skipped the pull entirely*, so a clone left on
+# a stale (even merged) feature branch silently audited outdated lab text
+# (issue #41). We now actively PIN the working tree to origin/main.
 if (-not $NoPull -and (Get-Command git -ErrorAction SilentlyContinue)) {
     try {
         git -C $resolved fetch --quiet origin 2>&1 | Out-Null
-        $branch = (git -C $resolved rev-parse --abbrev-ref HEAD 2>$null)
-        if ($branch -eq 'main') {
-            git -C $resolved merge --ff-only origin/main 2>&1 | Out-Null
-            if ($LASTEXITCODE -eq 0) { if (-not $status) { $status = 'pulled' } }
-            else { $status = 'pull-skipped (not fast-forwardable)' }
-        } else {
-            $status = "pull-skipped (on '$branch', not main)"
+        $originMain = (git -C $resolved rev-parse --verify --quiet origin/main 2>$null)
+        $dirty = [bool] (git -C $resolved status --porcelain 2>$null)
+        if (-not $originMain) {
+            $status = 'pull-skipped (no origin/main)'
+        }
+        elseif ($dirty) {
+            # Never clobber uncommitted work. Surface loudly so the orchestrator
+            # halts (its Phase 1 HEAD==origin/main assertion) instead of
+            # auditing the wrong content.
+            $branch = (git -C $resolved rev-parse --abbrev-ref HEAD 2>$null)
+            $status = "DIRTY: left on '$branch' (NOT pinned to origin/main) - commit or stash and re-run"
+        }
+        else {
+            # Clean tree: reset local main to origin/main and check it out so the
+            # operator is left on a normal main branch. If that fails (e.g. main
+            # protected/diverged), detach exactly onto origin/main as a fallback.
+            git -C $resolved switch -C main --track origin/main 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                git -C $resolved checkout --detach origin/main 2>&1 | Out-Null
+            }
+            $head = (git -C $resolved rev-parse HEAD 2>$null)
+            if ($head -eq $originMain) {
+                $status = "pinned to origin/main @ $($originMain.Substring(0, 7))"
+            } else {
+                $status = 'pull-failed (HEAD != origin/main)'
+            }
         }
     } catch {
         $status = 'pull-failed (using local copy)'

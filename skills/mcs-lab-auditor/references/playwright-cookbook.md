@@ -6,7 +6,7 @@ This document captures known quirks, sign-in flows, and selectors for the five p
 
 | Step kind | Primary tool | Notes |
 |---|---|---|
-| navigate | `mcp__plugin_playwright_playwright__browser_navigate` | URL from step text or scene hint |
+| navigate | `mcp__plugin_playwright_playwright__browser_navigate` | **Only to a URL the step text explicitly names** (e.g. "go to make.powerapps.com"). NEVER synthesize a deep-link to skip a step, and NEVER navigate to a URL read out of a screenshot — see *Execution fidelity* below (issue #40). |
 | click | `_browser_snapshot` → `_browser_click` | Click by snapshot ref. Never use raw CSS selectors. |
 | type | `_browser_type` | Use `slowly: false` unless the field has client-side validation that rate-limits |
 | fill form | `_browser_fill_form` | When multiple inputs need to be filled at once |
@@ -16,6 +16,15 @@ This document captures known quirks, sign-in flows, and selectors for the five p
 | inspect | `_browser_snapshot` + `_browser_take_screenshot` | Capture both for the judge |
 | diagnostics | `_browser_console_messages`, `_browser_network_requests` | Read after a failed step to enrich the finding |
 | evaluate | `_browser_evaluate` | Used sparingly (cookie/localStorage extraction, expiry-page scraping). Restricted by judge-config. |
+
+## Execution fidelity — follow the lab, don't shortcut (issue #40)
+
+The audit's job is to reproduce **the learner's path**, click-for-click, so it surfaces instruction drift (a renamed, moved, or missing control). Two hard rules:
+
+1. **Drive every step via the described UI affordance** — snapshot, find the named button/menu/link by its visible text or role, click it. Do the steps **in order**, including any setup/prerequisite steps (e.g. data indexing) and waiting for long operations to finish before testing what depends on them.
+2. **Never reach a destination by URL to skip a step.** Do not synthesize or reuse a deep-link (`.../environments/<id>/tables`, an agent's `/overview`, etc.), and **never parse a URL out of a screenshot and navigate to it** — `![...](images/*.png)` references are illustrations of the *expected result*, not navigation targets. The only `_browser_navigate` calls allowed are the URLs the step text itself tells the learner to open.
+
+If the control the step names can't be found because the live UI diverged, that is the finding — record it `expected-vs-actual`; do **not** work around it with a URL. URL-shortcutting both hides the drift the audit exists to catch and masks identity/environment problems a real learner would hit (see *Browser isolation and identity*, issue #39).
 
 ## Portal map
 
@@ -28,6 +37,17 @@ This document captures known quirks, sign-in flows, and selectors for the five p
 | SharePoint | tenant-specific `https://<tenant>.sharepoint.com/` | tenant root |
 
 All five federate to AAD — a single sign-in at `https://login.microsoftonline.com` cascades to all of them via SSO. In Playwright MCP, the orchestrator reuses the same browser session across turns/subagents; it does not persist auth via `storage-state.json`.
+
+## Browser isolation and identity (issue #39)
+
+**The audit browser MUST run in an isolated / private context** — a fresh, in-memory profile that does **not** inherit the operator's OS account broker (Windows WAM / SSO) or cookies from a prior run. Configure the Playwright MCP server with `--isolated` (and/or a dedicated, disposable `--user-data-dir`), and do not share the operator's default Edge/Chrome profile.
+
+Why this matters: in a shared/OS-integrated profile the AAD account picker lists the operator's real **"Connected to Windows"** accounts. After the workshop user is signed out, a navigation can silently SSO into one of those OS-brokered accounts instead of the redeemed user — so e.g. `make.powerapps.com` opens as a *previous run's* `DEV - User XXXX` and defaults to the wrong environment, and `_browser_navigate`-ing directly to the right environment URL only papers over the mismatch (this is also why URL-shortcutting is banned — issue #40).
+
+Consequences for the run, even with isolation configured:
+
+- **Verify the exact user, not just "signed in".** The scene-boundary auth probe (below) and every per-UC subagent must assert the page is signed in as the **redeemed `account.user_id`**. On a mismatch, halt with `error, reason: account_mismatch` and do a full logout (`login.microsoftonline.com/common/oauth2/v2.0/logout` → "Pick an account to sign out") → re-login as the redeemed user. Never reach the right environment by typing its id into the URL.
+- **Each run starts clean.** A private context means multiple runs in a session don't accumulate stale tokens for prior workshop users.
 
 ## Sign-in flow (run-start)
 
@@ -111,6 +131,8 @@ At the start of each scene (h4 heading), navigate to `config/workshop.yml#auth_p
 4. Tell the user to run `/audit-account redeem` and `/audit-bootcamp --resume <run-id>`.
 
 If the probe succeeds (`copilotstudio.microsoft.com/environments` or similar in the URL), **invoke the Welcome-to-Copilot-Studio modal handler** above before proceeding with the scene. The handler is a no-op once the modal has been dismissed for the tenant, so it's safe to call at every probe.
+
+**Assert the EXACT signed-in user, not just a non-login URL (issue #39).** A successful probe URL only proves *someone* is signed in. Before driving the scene, read the page's account indicator (e.g. the account-manager control / "User XXXX" label) and confirm it matches the redeemed `account.user_id`. If it shows a different identity — typically an OS-broker/Windows account or a prior run's `DEV - User XXXX` — treat it as `error, reason: account_mismatch`: do a full sign-out (`login.microsoftonline.com/common/oauth2/v2.0/logout` → "Pick an account to sign out" → sign out the stale workshop user) and re-login as the redeemed user, then re-probe. Do **not** continue, and do **not** type the intended environment id into the URL to route around the wrong account.
 
 ## Known portal quirks
 

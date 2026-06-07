@@ -6,6 +6,17 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-06-06
+
+### Fixed
+
+- **Audits now always run against `origin/main`, never a stale checked-out branch (#41).** `scripts/Resolve-LabRepo.ps1` previously only fast-forwarded when the clone was already on `main` and **skipped the pull entirely on any other branch** — so a repo left on a stale (even merged) feature branch silently audited outdated lab text, producing findings already fixed on `main` and missing ones `main` introduced. The script now actively **pins the working tree to `origin/main`** on a clean tree (resetting/checking out `origin/main`), never clobbers a dirty tree (it surfaces a loud `DIRTY:` status instead), and the orchestrator (`SKILL.md` Phase 1 step 3) now **asserts `HEAD == origin/main` and halts on mismatch**, records the audited commit SHA in `manifest.yml`, and stamps it into issue/PR bodies for traceability.
+
+### Added
+
+- **Browser-isolation + exact-identity requirements (#39).** New *Browser isolation and identity* section in `references/playwright-cookbook.md`: the audit browser must run in an **isolated/private context** (`--isolated` / disposable `--user-data-dir`) that does not inherit the operator's OS account broker, so a navigation can't silently SSO into a Windows-connected account after the workshop user is signed out (which made e.g. Power Apps open as a prior run's `DEV - User XXXX`). The scene-boundary auth probe and the per-UC subagent rules now **assert the exact redeemed `account.user_id`** (not merely "signed in") and, on mismatch, full-logout → re-login rather than routing around it.
+- **Execution-fidelity rule — follow the lab, never URL-shortcut (#40).** New *Execution fidelity* section in `references/playwright-cookbook.md` plus an explicit per-UC subagent rule in `SKILL.md`: drive every step via the named UI control, in order; the only allowed `_browser_navigate` targets are URLs the step text explicitly names. Never synthesize a deep-link to skip a step, and never navigate to a URL read out of a screenshot (`images/*.png` are illustrations, not navigation targets). A missing/renamed control is a **finding** (expected-vs-actual), not something to work around with a URL — URL-shortcutting hides the very drift the audit exists to catch and masks identity/environment problems.
+
 ## [0.6.0] - 2026-06-05
 
 ### Added
