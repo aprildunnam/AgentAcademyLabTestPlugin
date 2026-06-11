@@ -274,4 +274,4 @@ build:
     order_gap_strategy: section_midpoint           # pick a free order number mid-band (see lab-registration-spec.md §2)
 
 # --- Plugin version (written into manifest.yml and issue bodies) ---
-plugin_version: "0.6.1"
+plugin_version: "0.7.0"
