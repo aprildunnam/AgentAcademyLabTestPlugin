@@ -38,7 +38,7 @@ This file is the orchestrator. It loads the reference files below as needed:
 
 - `references/lab-parser-spec.md` — how to convert a lab's markdown into a step tree.
 - `references/lab-resources-spec.md` — Lab Resources discovery + pre-flight scrape of per-event SharePoint config values. Used when a lab references `copilotstudiotraining.sharepoint.com/.../Lab-Assets.aspx` (or similar) for connector credentials / endpoint URLs.
-- `references/plugin-self-improvement.md` — never give up on a lab without recovery attempts; when stuck file bugs and PRs against BOTH `microsoft/mcs-labs` (lab side) and `microsoft/BootcampLabTestPlugin` (plugin side) as appropriate; cascading-step failures are high-severity.
+- `references/plugin-self-improvement.md` — never give up on a lab without recovery attempts; when stuck file bugs and PRs against BOTH the active instance's lab repo `{repo}` (lab side) and `microsoft/BootcampLabTestPlugin` (plugin side) as appropriate; cascading-step failures are high-severity.
 - `references/playwright-cookbook.md` — portal sign-in flow, scene-boundary auth probe, tool mapping per step kind, known quirks.
 - `references/workshop-redemption.md` — Skillable-style workshop redemption flow.
 - `references/workshop-redemption-chatbot.md` — chatbot Adaptive Card workshop redemption flow.
@@ -82,11 +82,37 @@ Read whichever you need before doing the corresponding step. Don't try to keep a
    ```
    Do NOT proceed past Phase 1 step 2 on a non-Opus session.
 
+#### Resolve the active lab instance (FIRST, before any repo or portal access)
+
+Run once at the start of every audit/build run:
+
+```
+pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT/scripts/Resolve-LabInstance.ps1" -Mode Json -Instance "<--instance value or empty>"
+```
+
+Parse the JSON and hold these values for the whole run — every sub-skill uses them:
+
+- `{repo}`           = `.repo`           (e.g. `microsoft/mcs-labs`) — the target for ALL `gh issue` / `gh pr` / `gh repo` calls.
+- `{branch_prefix}`  = `.branch_prefix`  (e.g. `dewain`) — the prefix for ALL created branches. If `.branch_prefix_source` is `unresolved`, do NOT create any branch; halt and ask the user to set `branch_prefix` in their `lab-instances.yml` or authenticate `gh`.
+- `{clone_url}` / candidates are consumed by `Resolve-LabRepo.ps1 -Instance` (next step).
+
+Then resolve the repo, passing the instance through:
+
+```
+pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT/scripts/Resolve-LabRepo.ps1" -Mode Status -Instance "<--instance value or empty>"
+```
+
+Replace the old hardcoded `gh repo view microsoft/mcs-labs …` permission check with `gh repo view {repo} …`.
+
+#### Materialize the active portal
+
+Write the resolved `.portal` object to `runtime/account/active-portal.yml` (create the dir if needed). All redemption flows read THIS file, never `config/workshop.yml` directly. For the default `mcs-labs` instance this file is a copy of `config/workshop.yml`, so redemption behaves identically.
+
 3. **Resolve the plugin directory and the mcs-labs repo (NO hard-coded paths).**
    - The plugin's own files are reached via the `${CLAUDE_PLUGIN_ROOT}` environment variable Claude Code sets for this plugin — never a hard-coded `C:\Users\...\.claude\plugins\...` path. All script invocations below use `"$env:CLAUDE_PLUGIN_ROOT\scripts\<name>.ps1"`.
    - The mcs-labs repo location is **resolved, not assumed**. Run:
      ```
-     pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Path
+     pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Path -Instance "<--instance value or empty>"
      ```
      This finds the repo (via `$env:MCS_LABS_REPO`, the `judge-config.yml.build.registration.mcs_labs_repo_path_candidates`, or a built-in candidate list), **clones `microsoft/mcs-labs` into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs` if no local copy exists**, and **pins the working tree to `origin/main`** (it checks out `origin/main` even if the clone was left on a stale feature branch — a clean tree only; a dirty tree is left untouched and surfaced loudly). It prints the resolved absolute path. Capture that path as `$REPO` and use it for every subsequent read of `_labs/`, `_events/`, `_workshops/`, `_data/`. On `--dry-run` or static-only runs you may pass `-NoPull` to skip the fetch. If resolution fails (clone error, no git), halt with the script's error message.
    - **ASSERT the audited revision is `origin/main` (MANDATORY unless `-NoPull`).** A lab audit is only meaningful against the *current* instructions. After capturing `$REPO`, confirm the working tree is exactly `origin/main`:
@@ -96,13 +122,13 @@ Read whichever you need before doing the corresponding step. Don't try to keep a
      If this prints `MISMATCH` (the clone is on a stale branch, behind `origin/main`, or has uncommitted changes blocking the pin), **halt** with a clear message that names the diverging-commit count and tells the user to commit/stash and re-run — do NOT proceed to parse labs against non-`origin/main` content. Record the audited commit SHA (`git -C $REPO rev-parse --short origin/main`) in `manifest.yml` so every finding is traceable to an exact instruction revision, and reference that SHA in issue/PR bodies. (Auditing a stale branch silently produces findings that are already fixed on `main` — issue #41.)
 
 4. **Load configs**:
-   - `config/workshop.yml`
+   - `runtime/account/active-portal.yml`
    - `config/judge-config.yml`
 
 5. **Check `gh` auth**:
    ```
    gh auth status
-   gh repo view microsoft/mcs-labs --json viewerPermission
+   gh repo view {repo} --json viewerPermission
    ```
    If either fails, halt with a clear message before doing anything else.
 
@@ -168,13 +194,13 @@ Option semantics:
 
 If the user picks one of the two redemption options:
 
-1. Read `config/workshop.yml.portal_kind` (`chatbot | skillable | email`).
+1. Read `runtime/account/active-portal.yml.portal_kind` (`chatbot | skillable | email`).
 2. **Determine where the workshop code comes from**:
    - If the user picked `Redeem a new user from the cached workshop code`, decrypt `runtime/account/workshop_code.enc` via DPAPI. No `AskUserQuestion` prompt is needed.
    - Otherwise, prompt the user via `AskUserQuestion`:
      - Question: `What is the workshop code?`
      - Options: `Cancel — use cached account` (if cache exists), `Abort the run`. The user types the actual code via the auto-provided "Other" free-text path.
-3. Dispatch the portal-specific redemption flow. Each flow consumes the workshop code (if required by `workshop_code_required: true`) and the deterministic config values from `config/workshop.yml.chatbot_account_request_form` and `config/workshop.yml.account_new_password_pattern` — **no further `AskUserQuestion` calls during redemption**:
+3. Dispatch the portal-specific redemption flow. Each flow consumes the workshop code (if required by `workshop_code_required: true`) and the deterministic config values from `runtime/account/active-portal.yml.chatbot_account_request_form` and `runtime/account/active-portal.yml.account_new_password_pattern` — **no further `AskUserQuestion` calls during redemption**:
    - `chatbot` → follow `references/workshop-redemption-chatbot.md` (Cards 1–5 + AAD sign-in + first-login password change).
    - `skillable` (or missing) → follow `references/workshop-redemption.md`.
    - `email` → submit code on the portal, detect "check your email", then use `AskUserQuestion` to collect username/password (optional tenant), then continue.
@@ -184,9 +210,9 @@ If the user picks one of the two redemption options:
    - Write `runtime/account/account.meta.json` with `user_id`, `tenant_hint`, `workshop_code_hint` (first 4 chars only), `cached_at`, `expires_at`, `run_id`, `signed_in_at`, `password_changed_on_first_login: true`.
 
 The redemption flow is responsible for first-run portal setup too: if
-`config/workshop.yml.workshop_portal_url` is still
+`runtime/account/active-portal.yml.workshop_portal_url` is still
 `REPLACE_ME_ON_FIRST_RUN`, it must prompt for `Workshop portal URL`, validate
-`^https?://`, persist the URL to `config/workshop.yml`, then continue to the
+`^https?://`, persist the URL to the active instance's source — the user's `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml` inline `portal:` when the instance came from the user file, otherwise `config/workshop.yml` — and re-materialize `runtime/account/active-portal.yml`, then continue to the
 workshop-code prompt.
 
 When skipping under a non-default `account_prompt_mode`, record the
