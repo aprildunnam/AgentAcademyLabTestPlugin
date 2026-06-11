@@ -31,7 +31,7 @@ Expected when it can't reach the published manifest — `gh` isn't installed/aut
 
 | Cause | Fix |
 |---|---|
-| `config/workshop.yml.workshop_portal_url` still set to `REPLACE_ME_ON_FIRST_RUN` | Edit it to your actual workshop event URL. |
+| `config/workshop.yml.workshop_portal_url` still set to `REPLACE_ME_ON_FIRST_RUN` (or your active instance's portal is mis-configured) | Edit it to your actual workshop event URL — or check the portal URL in your active instance (see `runtime/account/active-portal.yml`). |
 | Workshop portal has a non-Skillable layout | See [`extending.md`](extending.md) for how to adapt the selectors and scraping logic in `references/workshop-redemption.md`. |
 | Workshop code already redeemed | Get a fresh code; portal will show "Already redeemed" on submit. |
 | Workshop code is for a different event than the portal URL | Match the code to the portal it was issued for. |
@@ -117,11 +117,11 @@ Check `transcript.md` for the judge invocation. If the model is failing repeated
 **Symptom:** `gh issue create` returns 403.
 
 ```bash
-gh auth status                                                # confirm logged-in account
-gh repo view microsoft/mcs-labs --json viewerPermission       # confirm permission
+gh auth status                                                             # confirm logged-in account
+gh repo view microsoft/mcs-labs --json viewerPermission                   # confirm permission (or your active instance's repo)
 ```
 
-If your account doesn't have permission to file issues on `microsoft/mcs-labs`, ask for triage access or use a different `gh` identity (`gh auth login --user <other>`).
+If your account doesn't have permission to file issues on the target repo (`microsoft/mcs-labs` or your active instance's repo), ask for triage access or use a different `gh` identity (`gh auth login --user <other>`).
 
 **Symptom:** New issue opened even though an existing one should have matched.
 
@@ -224,6 +224,47 @@ Run `Install-Module powershell-yaml -Scope CurrentUser -Force`, then retry.
 The `--instance` / `$env:LAB_INSTANCE` name does not match any instance in the
 shipped registry or your `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml`. Run
 `pwsh -File scripts/Resolve-LabInstance.ps1 -Mode Status` and check the spelling.
+
+### Plugin is operating on the wrong repo or portal
+
+The active instance controls which repo is audited and which training portal is used.
+To see exactly what the resolver picked and why:
+
+```powershell
+pwsh -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabInstance.ps1" -Mode Status
+# Shows: active instance name, repo, portal, and how the instance was selected
+```
+
+Resolution order is: `--instance` flag → `$env:LAB_INSTANCE` → `default_instance` in
+`%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml` → `default_instance` in the shipped
+`config/lab-instances.yml` → built-in `mcs-labs`. A field set in your user
+`lab-instances.yml` overrides the same field in the shipped registry for that instance.
+The portal in use is materialized at run start into `runtime/account/active-portal.yml`;
+for the default `mcs-labs` instance it is a copy of `config/workshop.yml`.
+
+### branch_prefix unresolved — no PR is created
+
+The active instance has no `branch_prefix` set, and the fallback (`gh api user` login)
+also failed because `gh` is not authenticated. The resolver logs an error and halts
+the run before any branch or PR is created.
+
+Fix either:
+
+- Set `branch_prefix` on the instance in `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml`, **or**
+- Authenticate `gh` so the automatic login fallback works: `gh auth login`.
+
+### My custom instance isn't being used / "Failed to parse lab-instances file"
+
+Two possible causes:
+
+1. **`powershell-yaml` not installed** — the module is required to load any custom
+   `lab-instances.yml`. Install it: `Install-Module powershell-yaml -Scope CurrentUser -Force`.
+
+2. **YAML syntax error** in `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml` — the
+   resolver hard-errors on a parse failure and prints `Failed to parse lab-instances file`.
+   It does **not** silently fall back to the shipped registry, to avoid auditing the wrong
+   repo. Validate your file (e.g. `ConvertFrom-Yaml (Get-Content $file -Raw)` in a
+   PowerShell session with `powershell-yaml` loaded), fix the syntax, and retry.
 
 ## When all else fails
 

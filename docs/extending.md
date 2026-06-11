@@ -14,6 +14,8 @@ The redemption flow is selected by `config/workshop.yml.portal_kind`:
 
 The default bootcamp configuration is `portal_kind: chatbot` at `https://aka.ms/MCSWorkshopAgent/`.
 
+> **Portals are per-instance.** `config/workshop.yml` is the mcs-labs instance's default portal and is never written by plugin updates. If you are targeting a different lab repo (your own fork), put `portal_kind` and the other portal fields in your instance's `portal:` block (inline) or point to a file with `portal_file:` — don't edit `config/workshop.yml` for a fork. At run start the active instance's portal is materialized to `runtime/account/active-portal.yml`. See [Targeting your own lab fork](#targeting-your-own-lab-fork) for the full instance schema.
+
 ### Portal emails credentials instead of displaying them
 
 1. Keep `portal_kind: email` in `config/workshop.yml`.
@@ -67,6 +69,8 @@ To add `/audit-foo`:
 
 ## Pointing at a different lab repo
 
+> **This section is about RELOCATING your local `mcs-labs` clone** (different path, different drive, CI machine, etc.). If you want to target a completely different repo with its own training portal — a fork — see [Targeting your own lab fork](#targeting-your-own-lab-fork) instead; that is the right tool for that job.
+
 > **There is no hard-coded path to bulk-replace anymore.** As of v0.6.0 (ADR-023) **both** audit and build modes resolve the mcs-labs repo at run start via `scripts/Resolve-LabRepo.ps1`, and all plugin-internal reads use `$env:CLAUDE_PLUGIN_ROOT`. The old "bulk-replace `C:\Users\dewainr\mcs-labs` across four files" procedure is obsolete and has been removed.
 
 `Resolve-LabRepo.ps1` resolves the repo in this order (first match containing `_data/lab-config.yml` wins):
@@ -93,32 +97,32 @@ and training portal WITHOUT editing plugin files, create:
 
 `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml`
 
-```yaml
-default_instance: my-fork
+Copy `docs/examples/lab-instances.sample.yml` as a starting point — it covers two portal kinds (chatbot and Skillable) plus a single-field override of the built-in mcs-labs instance, with every optional field commented out and documented inline.
 
-instances:
-  my-fork:
-    repo: "myorg/my-labs-fork"                    # where issues/PRs are filed
-    clone_url: "https://github.com/myorg/my-labs-fork.git"
-    branch_prefix: "myuser"                       # your PR/branch prefix
-    # marker + path_candidates are optional (default: _data/lab-config.yml and
-    # the usual %USERPROFILE% locations under .mcs-lab-auditor\my-fork)
-    portal:                                        # your own training portal
-      portal_kind: "chatbot"                       # chatbot | skillable | email
-      workshop_portal_url: "https://your.portal/redeem"
-      sso_anchor_url: "https://login.microsoftonline.com/"
-      auth_probe_url: "https://copilotstudio.microsoft.com/"
-      # ...any other field from config/workshop.yml you need to override...
-```
+The instance schema supports: `repo`, `clone_url`, `marker` (defaults to `_data/lab-config.yml`), `path_candidates`, `branch_prefix`, and `portal` (inline block or `portal_file` reference to an external YAML file).
 
-Your file is merged on top of the shipped registry (your values win per field)
-and is never touched by plugin updates. Verify with:
+Your file is merged on top of the shipped registry (`config/lab-instances.yml`): your values win per field, instances you add are appended, and your `default_instance` overrides the shipped default. It is never touched by plugin updates.
+
+You can define **multiple named instances** in the same file and select between them at run time:
+
+- `--instance <name>` (command flag)
+- `$env:LAB_INSTANCE` (environment variable)
+- `default_instance:` (your file's default)
+- shipped `mcs-labs` (fallback)
+
+The resolver (`scripts/Resolve-LabInstance.ps1`) applies them in that order — first match wins.
+
+> **Prerequisite:** custom instances require the `powershell-yaml` module. Install once with:
+> ```powershell
+> Install-Module powershell-yaml -Scope CurrentUser -Force
+> ```
+> The built-in mcs-labs instance works without it.
+
+Verify the active instance with:
 
 ```powershell
 pwsh -File <plugin>/scripts/Resolve-LabInstance.ps1 -Mode Status
 ```
-
-Select an instance for one run with `--instance my-fork` or `$env:LAB_INSTANCE`.
 
 ### Adding or auditing a different event or workshop
 
@@ -173,8 +177,8 @@ Most behavior changes can be made via `config/judge-config.yml` alone:
 | Disable loose-title dedup query | Set `issues.dedupe_loose_title_match: false`. Only safe once every open audit issue has the `lab:<slug>` label. |
 | Disable per-slug label backfill | Set `issues.backfill_per_slug_label: false`. |
 | Disable open-PR screenshot append by default | Set `issues.pr_append.enabled_by_default: false`. On by default; this flips the plugin to pure read-only behavior unless the per-run flag explicitly re-enables it. |
-| Change the branch name newly-opened fix-PRs are created on | Set `issues.pr_append.pr_branch_pattern` (default `dewain/fix-{slug}-content-audit-{run_id}`). Keep the `{run_id}` token so each new PR's branch is unique and can't collide with a merged PR's leftover branch. |
-| Change the head-ref prefix used to find an existing open PR to append to | Set `issues.pr_append.pr_match_head_prefix` (default `dewain/fix-{slug}-content-audit`). Must remain a prefix of `pr_branch_pattern`. |
+| Change the branch name newly-opened fix-PRs are created on | Set `issues.pr_append.pr_branch_pattern` (default `{branch_prefix}/fix-{slug}-content-audit-{run_id}`). Keep the `{run_id}` token so each new PR's branch is unique and can't collide with a merged PR's leftover branch. `{branch_prefix}` is supplied by the active instance (`dewain` for the shipped mcs-labs instance). |
+| Change the head-ref prefix used to find an existing open PR to append to | Set `issues.pr_append.pr_match_head_prefix` (default `{branch_prefix}/fix-{slug}-content-audit`). Must remain a prefix of `pr_branch_pattern`. `{branch_prefix}` comes from the active instance. |
 | Disable the Phase 1.4 existing-state probe | Set `existing_state.check_open_issues: false` and `existing_state.check_open_prs: false`. The filer will fall back to its inline dedup queries. Not recommended — costs extra `gh` calls per lab. |
 
 No code changes needed — config tweaks take effect on the next invocation.
@@ -215,8 +219,8 @@ Build mode authors a new lab end-to-end; the pieces you'll most likely adjust:
 |---|---|
 | Change the default interaction mode | `judge-config.yml.build.interaction_mode_default` (`prompt` / `guided` / `scenario`). Per-run override: `--mode`. |
 | Change what fails the audit gate, or how many fix loops it allows | `judge-config.yml.build.audit_gate.fail_on` (default `[broken, unclear]`) and `audit_gate.max_loops`. |
-| Point build mode (or audit mode) at a different mcs-labs clone | Set `$env:MCS_LABS_REPO`, or prepend your path to `mcs_labs_repo_path_candidates` in `judge-config.yml`. Both modes share `scripts/Resolve-LabRepo.ps1` (see [Pointing at a different lab repo](#pointing-at-a-different-lab-repo)). |
-| Change the new-lab PR branch name | `judge-config.yml.issues.new_lab_pr.pr_branch_pattern` (default `dewain/new-lab-{slug}-{build_id}`). |
+| Point build mode (or audit mode) at a different mcs-labs clone | Set `$env:MCS_LABS_REPO`, or prepend your path to `mcs_labs_repo_path_candidates` in `judge-config.yml`. Both modes share `scripts/Resolve-LabRepo.ps1` (see [Pointing at a different lab repo](#pointing-at-a-different-lab-repo)). To target a completely different repo and training portal, use a user `lab-instances.yml` instead (see [Targeting your own lab fork](#targeting-your-own-lab-fork)). |
+| Change the new-lab PR branch name | `judge-config.yml.issues.new_lab_pr.pr_branch_pattern` (default `{branch_prefix}/new-lab-{slug}-{build_id}`). `{branch_prefix}` is supplied by the active instance. |
 | Change the new-lab README format | Edit `skills/mcs-lab-builder/references/lab-authoring-template.md` — the canonical skeleton B5 renders against. |
 | Change how a lab is registered (config maps, `_labs` frontmatter) | Edit `skills/mcs-lab-builder/references/lab-registration-spec.md`. It documents both the `generate` and `direct` mechanisms; B0 detects which applies. |
 | Change the capture loop, ledger schema, or screenshot naming | Edit `skills/mcs-lab-builder/references/build-session-spec.md`. |
@@ -227,7 +231,7 @@ Build mode authors a new lab end-to-end; the pieces you'll most likely adjust:
 
 Some boundaries are deliberate and shouldn't be crossed without re-opening the relevant ADR (`docs/design-decisions.md`):
 
-- **Keep every write path narrow and explicit.** The plugin's writes to `microsoft/mcs-labs` are exactly: the Issues API (ADR-001), the fix-PR per audit run (ADR-015), the screenshots-only PR append (ADR-014), and the build-mode new-lab PR (ADR-018). Don't add a path that mutates the repo outside these — and don't broaden the audit fix-PR into auto-applying corrections without review.
+- **Keep every write path narrow and explicit.** The plugin's writes to the active instance's lab repo (`microsoft/mcs-labs` by default) are exactly: the Issues API (ADR-001), the fix-PR per audit run (ADR-015), the screenshots-only PR append (ADR-014), and the build-mode new-lab PR (ADR-018). Don't add a path that mutates the repo outside these — and don't broaden the audit fix-PR into auto-applying corrections without review.
 - **Don't add automatic tenant cleanup.** ADR-004 explicitly excluded this.
 - **Don't commit `runtime/` contents.** The `.gitignore` enforces it; don't relax it. This includes `runtime/builds/` (build-mode workspaces).
 - **Don't hard-code lab slugs or assume the bootcamp event.** ADR-005 / ADR-019 / ADR-022 — enumerate scope from the `_events/` + `_workshops/` collections (`Get-EventCatalog.ps1`) and read the all-labs catalog from `_data/lab-config.yml.lab_metadata`; both audit and build are event/workshop-agnostic.

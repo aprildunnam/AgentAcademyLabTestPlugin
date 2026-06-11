@@ -6,6 +6,11 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+### Documentation
+
+- **Sample fork config (`docs/examples/lab-instances.sample.yml`).** A complete, copy-ready user `lab-instances.yml` showing a chatbot-portal fork, a Skillable-portal fork, and a single-field override of the shipped `mcs-labs` instance.
+- **Documentation sweep for configurable lab instances.** `README.md`, `docs/installation.md`, `docs/extending.md`, `docs/architecture.md`, `docs/troubleshooting.md`, `docs/security.md`, `docs/design-decisions.md` (new ADR-024), and `CONTRIBUTING.md` updated for consistency: branch patterns shown as `{branch_prefix}/…`, repo/portal described as the active instance's (mcs-labs by default), the `powershell-yaml` prerequisite, the user-overlay file, and the `--instance` / `$env:LAB_INSTANCE` selectors. The stale "hardcoded `C:\Users\…\mcs-labs` default path" note in `CONTRIBUTING.md` was removed.
+
 ## [0.7.0] - 2026-06-11
 
 ### Added

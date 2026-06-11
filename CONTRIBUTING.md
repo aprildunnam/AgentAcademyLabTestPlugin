@@ -35,17 +35,27 @@ skills/
       audit-log-schema.md                  # local audit-history.yml schema
       cross-lab-consistency.md             # cross-lab drift algorithm + finding format
       pr-append-flow.md                    # screenshot-refresh carve-out guardrails
+  mcs-lab-builder/                         # build-mode orchestration skill + references/ (B0–B7)
+    SKILL.md
   mcs-lab-issue-filer/                     # sub-skill: findings → gh issue create
     SKILL.md
   mcs-lab-fix-pr-filer/                    # sub-skill: apply correction diffs → fix-PR
     SKILL.md
   mcs-lab-pr-appender/                     # sub-skill: screenshots-only commit → open PR
     SKILL.md
+  mcs-lab-new-lab-pr/                      # sub-skill (build mode): new lab → PR
+    SKILL.md
 config/
-  workshop.yml                             # workshop portal URL + selectors
+  lab-instances.yml                        # shipped lab-instance registry (default: mcs-labs)
+  workshop.yml                             # mcs-labs instance's default training portal + selectors
   judge-config.yml                         # confidence thresholds, retries, dedupe behavior
 docs/                                      # architecture, design decisions, security, troubleshooting, extending
+  examples/lab-instances.sample.yml        # copy-ready user lab-instances.yml for forks
 scripts/
+  Resolve-LabInstance.ps1                  # single source of truth: active lab instance
+  Resolve-LabRepo.ps1                      # resolve/clone the active instance's lab repo
+  Get-EventCatalog.ps1                     # enumerate event/workshop scopes from the repo
+  Test-PluginVersion.ps1                   # non-blocking plugin self-version check
   Get-PathOrFallback.ps1                   # cross-shell preflight helper
 runtime/                                   # gitignored — accounts, audit log, per-run artifacts
 ```
@@ -65,11 +75,12 @@ See [docs/architecture.md](docs/architecture.md) for the component overview and 
 2. **Confirm tooling:**
    - Windows 10/11 (DPAPI dependency).
    - PowerShell 7+.
-   - `gh` CLI authenticated against an account with **write** access to `microsoft/BootcampLabTestPlugin` (for contributions) and **issue-creating** access to `microsoft/mcs-labs` (for the plugin's own write target).
+   - `gh` CLI authenticated against an account with **write** access to `microsoft/BootcampLabTestPlugin` (for contributions) and **issue-creating** access to the active instance's lab repo (`microsoft/mcs-labs` by default — the plugin's own write target).
    - The Playwright MCP plugin enabled in Claude Code (`playwright@claude-plugins-official`).
+   - `powershell-yaml` module if you define **custom** lab instances (`Install-Module powershell-yaml -Scope CurrentUser -Force`); the default `mcs-labs` instance works without it.
 
 3. **Local clone of the source labs:**
-   The plugin reads `_labs/<slug>.md` and `_data/lab-config.yml` from a clone of `microsoft/mcs-labs`. The default path is `C:\Users\dewainr\mcs-labs`. Several files reference this path explicitly — see [docs/extending.md](docs/extending.md) for how to point at a different location.
+   The plugin reads `_labs/<slug>.md` and `_data/lab-config.yml` from a clone of the active instance's lab repo. **There is no hardcoded path** — `scripts/Resolve-LabRepo.ps1` resolves (and, if missing, auto-clones) the repo at run start, sourcing the clone URL and candidate paths from the active lab instance (`scripts/Resolve-LabInstance.ps1`). To point at a different clone location use `$env:MCS_LABS_REPO` or the candidate list; to target a different repo + training portal entirely, define a lab instance — see [docs/extending.md](docs/extending.md#targeting-your-own-lab-fork) and [`docs/examples/lab-instances.sample.yml`](docs/examples/lab-instances.sample.yml).
 
 ## Common change recipes
 
@@ -140,7 +151,7 @@ There is no automated test runner. The verification path is the end-to-end run s
 
 Bug reports, feature requests, and design questions are welcome as GitHub issues on this repo. Please **do not** file security issues here — see [SECURITY.md](SECURITY.md).
 
-The plugin files audit findings against `microsoft/mcs-labs` automatically. Those issues are about *lab content*, not the plugin itself, and they're triaged by the mcs-labs maintainers.
+The plugin files audit findings against the active instance's lab repo (`microsoft/mcs-labs` by default) automatically. Those issues are about *lab content*, not the plugin itself, and they're triaged by that repo's maintainers.
 
 ## Releasing
 

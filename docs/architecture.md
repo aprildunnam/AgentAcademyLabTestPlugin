@@ -4,7 +4,7 @@ This document describes how `mcs-lab-auditor` is structured at runtime and how d
 
 ## At a glance
 
-`mcs-lab-auditor` is a Claude Code plugin. It has no compiled code and no test runner — Claude is the runtime, and the plugin is a structured tree of markdown (commands, skills, references) plus YAML configuration. The plugin orchestrates three external systems: the user's filesystem (reading — and, in build mode, writing — the cloned `mcs-labs` repo), the Playwright MCP (driving a real browser against Microsoft product portals), and the GitHub Issues + PRs APIs.
+`mcs-lab-auditor` is a Claude Code plugin. It has no compiled code and no test runner — Claude is the runtime, and the plugin is a structured tree of markdown (commands, skills, references) plus YAML configuration. The plugin orchestrates three external systems: the user's filesystem (reading — and, in build mode, writing — the cloned `mcs-labs` repo), the Playwright MCP (driving a real browser against Microsoft product portals), and the GitHub Issues + PRs APIs. The specific repo and training portal targeted are drawn from the **active lab instance** (`mcs-labs` by default); see [Resolver layer](#resolver-layer) for how the active instance is selected.
 
 It has **two modes**, both event/workshop-agnostic (neither is limited to the bootcamp event):
 
@@ -35,6 +35,8 @@ flowchart LR
     Workshop[(Workshop portal<br/>Skillable-style)] -.->|workshop code<br/>→ credentials| PW
 ```
 
+The `microsoft/mcs-labs` nodes above reflect the default active instance; the actual repo and portal targets are resolved at run start from the active lab instance (see [Resolver layer](#resolver-layer) below).
+
 ### Resolver layer
 
 `scripts/Resolve-LabInstance.ps1` is the **single source of truth** for which lab repo, training portal, and branch prefix the plugin operates on. At run start it merges the plugin-shipped `config/lab-instances.yml` (the built-in `mcs-labs` instance) with a user-owned `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml` (user values win per field), selects the active instance (via `--instance` flag → `$env:LAB_INSTANCE` → merged `default_instance` → shipped default), and emits the resolved instance as JSON.
@@ -52,9 +54,9 @@ Every downstream component reads from this resolver rather than from hardcoded l
 - **Write boundary**:
   - *Audit mode* (three narrow paths):
     1. **Issues API** — `gh issue create | comment | edit`. Always on. Comments on existing open issues with finding-fingerprint dedup; never creates a duplicate open issue for the same lab.
-    2. **Fix-PR per run** — applies the run's `suggested_correction` diffs + screenshot replacements. If an **open** fix-PR for the lab exists (same-author, mergeable), the commit is **appended** to it; otherwise `gh pr create` opens a **new** PR on a run-unique branch `dewain/fix-<slug>-content-audit-<run-id>`. Dedup is OPEN-PR-scoped — a merged/closed prior PR never blocks a new one. Enforced in `mcs-lab-fix-pr-filer` (ADR-015).
+    2. **Fix-PR per run** — applies the run's `suggested_correction` diffs + screenshot replacements. If an **open** fix-PR for the lab exists (same-author, mergeable), the commit is **appended** to it; otherwise `gh pr create` opens a **new** PR on a run-unique branch `{branch_prefix}/fix-<slug>-content-audit-<run-id>`. Dedup is OPEN-PR-scoped — a merged/closed prior PR never blocks a new one. Enforced in `mcs-lab-fix-pr-filer` (ADR-015).
     3. **Open PR screenshot append** — `git push` of one screenshots-only commit onto an already-open fix-PR branch. **On by default**, suppress with `--no-update-screenshots`. Same-author, mergeable, unprotected-branch guardrails enforced in `mcs-lab-pr-appender`. Never creates a new branch or new PR.
-  - *Build mode* (two paths): (1) **New-lab proposal issue** — at B3.5, `gh issue create` on `microsoft/mcs-labs` labeled `type: new-lab` + `status: in-progress`, opened as soon as the lab is named so it's tracked as **In Progress** for the whole build (deduped per slug, reused on `--resume`, closed by the lab PR). (2) **New-lab PR** — adds `labs/<slug>/README.md` + screenshots + the registration entry (`_data/lab-config.yml`, and `_labs/<slug>.md`) in one commit on a run-unique branch `dewain/new-lab-<slug>-<build-id>` off fresh `origin/main`, via `mcs-lab-new-lab-pr`, linking the proposal issue with `Closes #<n>` (ADR-018). The build's **audit gate runs the audit engine with all GitHub writes suppressed** — it never files an issue or fix-PR; findings feed back into the build loop (ADR-017).
+  - *Build mode* (two paths): (1) **New-lab proposal issue** — at B3.5, `gh issue create` on `microsoft/mcs-labs` (the active instance's repo; `microsoft/mcs-labs` by default) labeled `type: new-lab` + `status: in-progress`, opened as soon as the lab is named so it's tracked as **In Progress** for the whole build (deduped per slug, reused on `--resume`, closed by the lab PR). (2) **New-lab PR** — adds `labs/<slug>/README.md` + screenshots + the registration entry (`_data/lab-config.yml`, and `_labs/<slug>.md`) in one commit on a run-unique branch `{branch_prefix}/new-lab-<slug>-<build-id>` off fresh `origin/main`, via `mcs-lab-new-lab-pr`, linking the proposal issue with `Closes #<n>` (ADR-018). The build's **audit gate runs the audit engine with all GitHub writes suppressed** — it never files an issue or fix-PR; findings feed back into the build loop (ADR-017).
 - **Secret boundary**: workshop credentials live only in `runtime/account/credential.enc` (DPAPI-encrypted) and in memory for the duration of one sign-in dispatch. Build mode reuses this same account flow unchanged. See [`security.md`](security.md).
 
 ## Run lifecycle
@@ -148,7 +150,7 @@ sequenceDiagram
                 PRFiler->>MCSRepo: gh pr checkout + apply diffs + commit + push (append)
                 PRFiler->>GH: gh pr comment (appended fixes)
             else no open PR
-                PRFiler->>MCSRepo: new branch dewain/fix-slug-content-audit-run_id + commit + push
+                PRFiler->>MCSRepo: new branch {branch_prefix}/fix-slug-content-audit-run_id + commit + push
                 PRFiler->>GH: gh pr create (Closes #issue)
             end
         else clean pass
@@ -217,7 +219,7 @@ flowchart TD
 
 **The audit gate (B6) reuses the audit engine, diverting disposition.** It stages + registers the built lab, materializes `_labs/<slug>.md`, then runs the auditor's per-UC judge loop against it — but consumes findings *in-loop* (each above-threshold `broken`/`unclear` finding loops back to B4 for a fix) instead of routing them to `mcs-lab-issue-filer`. `build.audit_gate.suppress_github_writes` guarantees no issue/PR is filed *by the gate* — the proposal issue and the new-lab PR are the only GitHub writes build mode makes.
 
-**The mcs-labs repo path is resolved (and auto-cloned) at B0** by the shared `scripts/Resolve-LabRepo.ps1` — the same resolver audit mode uses — trying `$env:MCS_LABS_REPO`, the `mcs_labs_repo_path_candidates` config list, built-in candidates under `%USERPROFILE%`, and finally cloning `microsoft/mcs-labs` into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs`; the resolved repo is fast-forwarded to `origin/main`. See ADR-023.
+**The mcs-labs repo path is resolved (and auto-cloned) at B0** by the shared `scripts/Resolve-LabRepo.ps1` — the same resolver audit mode uses — trying `$env:MCS_LABS_REPO`, the `mcs_labs_repo_path_candidates` config list, built-in candidates under `%USERPROFILE%`, and finally cloning `microsoft/mcs-labs` into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs` (the managed clone is per-instance — `%USERPROFILE%\.mcs-lab-auditor\<instance-name>`; the default `mcs-labs` instance keeps `…\mcs-labs`); the resolved repo is fast-forwarded to `origin/main`. See ADR-023.
 
 **Registration mechanism is detected at runtime** (B0). The new-lab toolchain documented in `mcs-labs/docs/NEW_LAB_CHECKLIST.md` (root `lab-config.yml` + `Generate-Labs.ps1`) is currently absent from that repo, so build mode falls back to **direct writes** of `labs/<slug>/README.md` + `_labs/<slug>.md` + the `_data/lab-config.yml` entry. If a generator returns, it edits the root config and runs it instead. See `skills/mcs-lab-builder/references/lab-registration-spec.md` and ADR-020.
 
