@@ -44,7 +44,7 @@ The file is append-only — new entries go at the end. Every run appends one ent
                                   #   files_changed: [labs/<slug>/images/<name>.png, ...]
                                   #   skipped_reason: null            # or one of the reasons in pr-append-flow.md
   plugin_version: "0.1.0"
-  tenant_hint: contoso-dev        # label from config/workshop.yml — never the tenant id
+  tenant_hint: contoso-dev        # label from the active instance's portal (`tenant_hint`) — never the tenant id
   account_user_id: dewain+test12@msftworkshops.com
   workshop_code_hint: "ABCD"      # first 4 chars only — never the full code
 ```

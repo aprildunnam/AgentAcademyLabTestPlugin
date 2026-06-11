@@ -72,7 +72,7 @@ This file is the orchestrator. It reuses the auditor's reference docs and adds i
 
 2. **Resolve the plugin directory and the mcs-labs repo path.** The plugin dir is `C:\Users\dewainr\.claude\plugins\mcs-lab-auditor`. The mcs-labs repo path is **NOT fixed** — the repo moved out of `C:\Users\dewainr\mcs-labs`. Resolve it by trying, in order, the candidates in `judge-config.yml.build.registration.mcs_labs_repo_path_candidates` (default: `C:\Users\dewainr\Projects\mcs-labs`, then `C:\Users\dewainr\mcs-labs`). The first whose `_data/lab-config.yml` exists wins. If none exist, halt: `ERROR: could not locate the mcs-labs repo. Set build.registration.mcs_labs_repo_path_candidates in config/judge-config.yml.` Record the resolved path as `manifest.mcs_labs_repo`.
 
-3. **Load configs:** `config/workshop.yml`, `config/judge-config.yml` (including the new `build:` block). If the `build:` block is absent, use the documented defaults from `references/build-session-spec.md`.
+3. **Load configs:** `runtime/account/active-portal.yml`, `config/judge-config.yml` (including the new `build:` block). If the `build:` block is absent, use the documented defaults from `references/build-session-spec.md`.
 
 4. **Check `gh` auth + repo permission** (needed for B7; verify early so a long build doesn't end at a permission wall):
    ```
@@ -97,7 +97,7 @@ This file is the orchestrator. It reuses the auditor's reference docs and adds i
 
 Two `AskUserQuestion` calls, each skipped only when a CLI flag already answered it.
 
-**Q-Account — which test account?** Use the auditor's Phase 1.5 Q1 **verbatim**: the same cache-state-conditional option matrix (use cached `<user_id>` / redeem a new user from the cached code / redeem a new workshop code / abort), governed by `judge-config.yml.execution.account_prompt_mode` (override via `--account-prompt`). On any redemption path, follow `references/workshop-redemption.md` or `…-chatbot.md` per `config/workshop.yml.portal_kind`, including first-login password change and DPAPI caching of the new password + workshop code + `account.meta.json`. Reuse it exactly — do not re-implement account handling here.
+**Q-Account — which test account?** Use the auditor's Phase 1.5 Q1 **verbatim**: the same cache-state-conditional option matrix (use cached `<user_id>` / redeem a new user from the cached code / redeem a new workshop code / abort), governed by `judge-config.yml.execution.account_prompt_mode` (override via `--account-prompt`). On any redemption path, follow `references/workshop-redemption.md` or `…-chatbot.md` per `runtime/account/active-portal.yml.portal_kind`, including first-login password change and DPAPI caching of the new password + workshop code + `account.meta.json`. Reuse it exactly — do not re-implement account handling here.
 
 **Q-Mode — how do you want to build?** Skip if `--mode` was passed. `AskUserQuestion`:
 - Question: `How do you want to drive the build?`
@@ -110,7 +110,7 @@ Record `manifest.mode: guided | scenario`.
 ### B2 — Navigate to the Copilot Studio Home page
 
 Using the chosen account (browser signed in by B1's redemption flow, or sign in now with cached credentials per `playwright-cookbook.md` §sign-in flow):
-1. Navigate to `config/workshop.yml.auth_probe_url` (default `https://copilotstudio.microsoft.com/`).
+1. Navigate to `runtime/account/active-portal.yml.auth_probe_url` (default `https://copilotstudio.microsoft.com/`).
 2. Run the **Welcome-to-Copilot-Studio modal handler** from `playwright-cookbook.md` (idempotent — forces United States region, declines marketing, clicks Get Started).
 3. `_browser_snapshot` to confirm the Copilot Studio Home / Agents left-nav is visible. If you instead land on `login.microsoftonline.com`, the cached session is dead → run the redemption/sign-in path or halt with the auditor's `auth_expired` guidance.
 

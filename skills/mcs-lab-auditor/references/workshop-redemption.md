@@ -1,3 +1,7 @@
+> Portal values come from `runtime/account/active-portal.yml`, which the
+> orchestrator materializes at run start from the active lab instance's portal
+> (the `mcs-labs` instance's portal is `config/workshop.yml`).
+
 # Workshop-code → test-account redemption (skillable portal)
 
 This document describes the Playwright flow the `/audit-account redeem` command runs to exchange a workshop code for a usable test account, and how the result is encrypted and cached on disk.
@@ -6,15 +10,15 @@ This flow is for `portal_kind: skillable` (`enter code → get credentials on co
 
 ## Inputs
 
-- `config/workshop.yml.workshop_portal_url` — the redemption portal URL.
-- `config/workshop.yml.redemption_selectors` — accessibility hints for the form and confirmation page (`portal_kind: skillable` only).
+- `runtime/account/active-portal.yml.workshop_portal_url` — the redemption portal URL.
+- `runtime/account/active-portal.yml.redemption_selectors` — accessibility hints for the form and confirmation page (`portal_kind: skillable` only).
 - The workshop code, prompted from the user via the chat (never logged or echoed back beyond the first 4 chars).
 
 ## Flow
 
 ### 1. Resolve portal URL, then open the redemption page
 
-Read `config/workshop.yml.workshop_portal_url` first.
+Read `runtime/account/active-portal.yml.workshop_portal_url` first.
 
 If it's the placeholder `REPLACE_ME_ON_FIRST_RUN`, prompt via `AskUserQuestion`
 with one free-text option labeled `Workshop portal URL`, then validate the
@@ -23,7 +27,7 @@ answer with regex `^https?://`.
 - If validation fails, re-ask with a clear error ("Please enter a full URL that
   starts with http:// or https://").
 - If validation passes, write the value back to
-  `config/workshop.yml.workshop_portal_url` and continue.
+  `runtime/account/active-portal.yml.workshop_portal_url` and continue.
 
 Use this resolved URL for navigation:
 
@@ -99,7 +103,7 @@ The result is a JSON object like:
 }
 ```
 
-If `username` or `password` is missing, abort with `reason: credentials_not_scraped` and prompt the user to update the selectors in `config/workshop.yml`.
+If `username` or `password` is missing, abort with `reason: credentials_not_scraped` and prompt the user to update the selectors in the active instance's portal config (`config/workshop.yml` for `mcs-labs`, else your `lab-instances.yml` inline `portal:`).
 
 ### 5. Sign in to AAD with the captured credentials
 
@@ -177,7 +181,7 @@ Then prints "Cleared cached test account. Run `/audit-account redeem` to set up 
 
 ## Adapting to a different workshop portal
 
-Set `config/workshop.yml.portal_kind` and dispatch accordingly:
+Set `runtime/account/active-portal.yml.portal_kind` and dispatch accordingly:
 
 1. `portal_kind: chatbot` → follow `workshop-redemption-chatbot.md`.
 2. `portal_kind: skillable` → follow this document.
