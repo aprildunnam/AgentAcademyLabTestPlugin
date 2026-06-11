@@ -46,13 +46,29 @@ param(
     [string] $Mode = 'Path',
     [string] $RepoRoot,
     [string[]] $Candidate = @(),
-    [string] $RepoUrl = 'https://github.com/microsoft/mcs-labs.git',
+    [string] $Instance,
+    [string] $RepoUrl,
     [switch] $NoPull,
     [switch] $NoClone
 )
 
 $ErrorActionPreference = 'Stop'
-$marker = Join-Path '_data' 'lab-config.yml'
+
+# Resolve the active lab instance — the source of truth for clone URL, marker,
+# candidate paths, and the managed-clone directory. Falls back to mcs-labs.
+$resolveInstance = Join-Path $PSScriptRoot 'Resolve-LabInstance.ps1'
+$inst = $null
+if (Test-Path -LiteralPath $resolveInstance) {
+    try {
+        $instJson = & $resolveInstance -Instance $Instance -Mode Json 2>$null
+        if ($LASTEXITCODE -eq 0 -and $instJson) { $inst = ($instJson | ConvertFrom-Json) }
+    } catch { $inst = $null }
+}
+if (-not $RepoUrl)  { $RepoUrl  = if ($inst) { $inst.clone_url } else { 'https://github.com/microsoft/mcs-labs.git' } }
+$markerRel          = if ($inst) { $inst.marker } else { '_data/lab-config.yml' }
+$instCandidates     = if ($inst -and $inst.path_candidates) { @($inst.path_candidates) } else { @() }
+$instManagedClone   = if ($inst) { $inst.managed_clone } else { $null }
+$marker = ($markerRel -replace '/', [System.IO.Path]::DirectorySeparatorChar)
 
 function Test-LabRepo([string] $root) {
     return $root -and (Test-Path -LiteralPath (Join-Path $root $marker))
@@ -65,7 +81,7 @@ $builtins = @(
     (Join-Path $env:USERPROFILE 'source\repos\mcs-labs'),
     (Join-Path $env:USERPROFILE '.mcs-lab-auditor\mcs-labs')
 )
-$managedClone = Join-Path $env:USERPROFILE '.mcs-lab-auditor\mcs-labs'
+$managedClone = if ($instManagedClone) { $instManagedClone } else { Join-Path $env:USERPROFILE '.mcs-lab-auditor\mcs-labs' }
 
 # Candidates recorded in config/judge-config.yml (kept in sync with docs).
 function Get-ConfigCandidates {
@@ -87,6 +103,7 @@ $ordered = @()
 if ($RepoRoot)         { $ordered += $RepoRoot }
 if ($env:MCS_LABS_REPO){ $ordered += $env:MCS_LABS_REPO }
 $ordered += $Candidate
+$ordered += $instCandidates
 $ordered += (Get-ConfigCandidates)
 $ordered += $builtins
 
