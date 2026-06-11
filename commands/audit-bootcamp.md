@@ -28,6 +28,13 @@ Parse these flags:
 - `--interactive-only` — opt out of the static analysis fan-out for this run. Assumes a previous run produced `findings-static.json` for each in-scope lab and merges them at lab completion. The interview skips the phase-mix question (Q2). Useful for re-verifying a previously-audited lab after a product release.
 - `--account-prompt <always|only_if_expired|only_if_missing>` — override `judge-config.yml.execution.account_prompt_mode` for this run. Default is whatever the config says (ships as `always`). Controls only the account question (Q1); the other interview questions are governed by their own flags.
 - `--model-preset <optimized|opus|custom>` — choose the sub-agent model preset without interactive Q2a. Orchestrator is always Opus.
+- `--instance <name>` — which lab instance to operate on (repo + clone URL +
+  training portal + branch prefix). Resolved by `scripts/Resolve-LabInstance.ps1`.
+  Order: this flag → `$env:LAB_INSTANCE` → your `lab-instances.yml`
+  `default_instance` → the shipped `mcs-labs`. Run
+  `pwsh -File scripts/Resolve-LabInstance.ps1 -Mode Status` to see the active one.
+  Note: this command pins `--event bootcamp`, but `--instance` still applies and
+  selects which lab repo + portal to use for that bootcamp run.
 
 ## Pre-flight context
 
@@ -36,13 +43,14 @@ Parse these flags:
 - mcs-labs repo (resolved + updated): !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Status`
 - bootcamp lab list: !`pwsh -NoProfile -Command '$r = & "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Path -NoPull; (& "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-EventCatalog.ps1" -RepoRoot $r -Json | ConvertFrom-Json | Where-Object id -eq "bootcamp").labs'`
 - cached account meta: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode Raw -Path "$env:CLAUDE_PLUGIN_ROOT\runtime\account\account.meta.json" -Fallback "(no cached account)"`
+- active lab instance: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabInstance.ps1" -Mode Status`
 
 ## Your task
 
 Set `event = bootcamp` and invoke the `mcs-lab-auditor` skill following its full lifecycle, exactly as `/audit-event --event bootcamp` would:
 
-1. Pre-flight (self-version check, resolve+update the mcs-labs repo, read the configs, build the events+workshops catalog from the `_events/`/`_workshops/` collections, pin the active scope to the `bootcamp` event, take its lab list from the `bootcamp` entry's `labs[]`, check `gh` auth and `microsoft/mcs-labs` viewer permission).
-2. **Run-start interview** (Phase 1.5 in `SKILL.md`): walk the user through up to four `AskUserQuestion` calls — account (Q1), phase mix (Q2), and (if Q3-skip wasn't already triggered by the bootcamp pin) Q3/Q4. **Q3 and Q3a are auto-skipped** for this command because `event=bootcamp` is pinned. Q4 only fires if `--labs` is missing and the user explicitly asks for a single lab via Q3 — which this command skips, so Q4 also doesn't fire. Each remaining question is skipped only when a CLI flag already provided the answer. If Q1 chooses redemption (or no cached account exists), the redemption flow auto-prompts for `Workshop portal URL` when `workshop_portal_url` is still `REPLACE_ME_ON_FIRST_RUN`, validates it as a URL, persists it to `config/workshop.yml`, then continues.
+1. Pre-flight (self-version check, resolve+update the mcs-labs repo, read the configs, build the events+workshops catalog from the `_events/`/`_workshops/` collections, pin the active scope to the `bootcamp` event, take its lab list from the `bootcamp` entry's `labs[]`, check `gh` auth and `{repo}` viewer permission).
+2. **Run-start interview** (Phase 1.5 in `SKILL.md`): walk the user through up to four `AskUserQuestion` calls — account (Q1), phase mix (Q2), and (if Q3-skip wasn't already triggered by the bootcamp pin) Q3/Q4. **Q3 and Q3a are auto-skipped** for this command because `event=bootcamp` is pinned. Q4 only fires if `--labs` is missing and the user explicitly asks for a single lab via Q3 — which this command skips, so Q4 also doesn't fire. Each remaining question is skipped only when a CLI flag already provided the answer. If Q1 chooses redemption (or no cached account exists), the redemption flow auto-prompts for `Workshop portal URL` when `workshop_portal_url` is still `REPLACE_ME_ON_FIRST_RUN`, validates it as a URL, persists it to the active instance's source (the user's `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml` inline `portal:`, otherwise `config/workshop.yml`), re-materializes `runtime/account/active-portal.yml`, then continues.
 3. Plan execution order (Phase 1.7): fan out static analysis across one subagent per lab, run the cross-lab consistency fan-in pass (Phase 1.7 step 1a), then topologically sort the interactive phase against `lab_dependencies`. Skip the static fan-out if the interview chose `phase_mix: interactive`; skip the interactive plan if `phase_mix: static`.
 4. **Interactive per-lab loop (runs when `phase_mix` is `interactive` or `both`)**: parse → execute steps in Playwright against the chosen account → judge each step → checkpoint per scene → file issue or log clean. Network/connection failures retry up to `network_retry_count` (default 3) with `network_retry_backoff_seconds` between attempts, then halt and ask the user via `AskUserQuestion` (retry / wait / skip lab / abort).
 5. Wrap-up: close the browser, print summary, save manifest.

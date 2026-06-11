@@ -1,3 +1,7 @@
+> Portal values come from `runtime/account/active-portal.yml`, which the
+> orchestrator materializes at run start from the active lab instance's portal
+> (the `mcs-labs` instance's portal is `config/workshop.yml`).
+
 # Workshop-code → test-account redemption (chatbot portal)
 
 This document describes the Copilot Studio chatbot redemption flow used by the MCS Workshop Agent (`https://aka.ms/MCSWorkshopAgent/`, which redirects to `https://microsoft.github.io/mcs-labs/`).
@@ -5,11 +9,11 @@ This document describes the Copilot Studio chatbot redemption flow used by the M
 > **A workshop code is required unless you're reusing a cached user account.**
 > The chatbot's "Workshop Pass Code" Adaptive Card is the **first** step: submit the code to gate the rest of the flow. After that, the chatbot transitions to an "Agent Training Assistant" greeting where you click the **"Get a User Account"** suggested-action button to continue with consent → form → credentials. Both steps are needed. Submitting the code alone does not issue credentials; clicking "Get a User Account" without first submitting the code will not work either.
 
-> **The plugin must NOT prompt the user for anything except the workshop code.** The four dropdowns and the Job title input on the account-request form are all pre-populated from `config/workshop.yml.chatbot_account_request_form`. The new password is generated from `config/workshop.yml.account_new_password_pattern`. The only user input collected during redemption is the workshop code itself (via `AskUserQuestion`), and only when there is no valid cached account to reuse.
+> **The plugin must NOT prompt the user for anything except the workshop code.** The four dropdowns and the Job title input on the account-request form are all pre-populated from `runtime/account/active-portal.yml.chatbot_account_request_form`. The new password is generated from `runtime/account/active-portal.yml.account_new_password_pattern`. The only user input collected during redemption is the workshop code itself (via `AskUserQuestion`), and only when there is no valid cached account to reuse.
 
 ## Inputs
 
-All inputs to this flow come from `config/workshop.yml`. The plugin issues **at most one** `AskUserQuestion` call during redemption — the workshop code prompt — and even that is skipped when one of these is true:
+All inputs to this flow come from `runtime/account/active-portal.yml`. The plugin issues **at most one** `AskUserQuestion` call during redemption — the workshop code prompt — and even that is skipped when one of these is true:
 
 - The user picked `Use cached: <user_id>` in Phase 1.5 Q1 (no redemption happens; we just sign in with the existing cached credentials).
 - The user picked `Redeem a new user from the cached workshop code` in Phase 1.5 Q1 — the code comes from DPAPI-decrypting `runtime/account/workshop_code.enc` instead of asking the user.
@@ -146,7 +150,7 @@ If the user prefers to abort, clicking **`I don't consent`** ends the flow. Reco
 
 ### Card 4 — Training user account request form
 
-Wait for the form card (text contains `Training user account request`). It has four required dropdowns plus one required text input. **Every value comes from `config/workshop.yml.chatbot_account_request_form`** — the plugin does not ask the user:
+Wait for the form card (text contains `Training user account request`). It has four required dropdowns plus one required text input. **Every value comes from `runtime/account/active-portal.yml.chatbot_account_request_form`** — the plugin does not ask the user:
 
 | Form field        | Config key                                            | Default                            |
 | ----------------- | ----------------------------------------------------- | ---------------------------------- |
@@ -249,11 +253,11 @@ After scraping the credentials:
 3. **Account picker.** If a "Pick an account" page appears, click `Use another account` (not the cached entry).
 4. **Email**: fill the scraped username, click Next.
 5. **Password**: fill the scraped temp password, click Sign in.
-6. **First-login password change.** The IdP requires changing the temp password on first login. Fill `currentpasswd` with the scraped temp password, `newpasswd` + `confirmnewpasswd` with a strong generated password (the plugin uses the pattern `Bootcamp-Audit-<year>!Q<digit>` as a deterministic default; override via `config/workshop.yml.account_new_password_pattern` if you need different policy).
+6. **First-login password change.** The IdP requires changing the temp password on first login. Fill `currentpasswd` with the scraped temp password, `newpasswd` + `confirmnewpasswd` with a strong generated password (the plugin uses the pattern `Bootcamp-Audit-<year>!Q<digit>` as a deterministic default; override via `runtime/account/active-portal.yml.account_new_password_pattern` if you need different policy).
 7. **Verify sign-in landed.** Wait for the M365 landing page (`m365.cloud.microsoft/chat` or similar). The page title typically contains `M365 Copilot`.
 8. **DPAPI-encrypt the NEW password** (not the temp password) to `runtime/account/credential.enc`. Write `runtime/account/account.meta.json` with:
    - `user_id` — the scraped Username
-   - `tenant_hint` — from `config/workshop.yml.tenant_hint` or the workshop name
+   - `tenant_hint` — from `runtime/account/active-portal.yml.tenant_hint` or the workshop name
    - `cached_at` — now
    - `expires_at` — now + 14 days (per the consent card's "ends 14 days after the training")
    - `run_id` — the current run-id
@@ -283,7 +287,7 @@ if ($result === 'single_card') { jumpTo Card 5 } else { continue Card 2 }
 
 - **Never** skip the Workshop Pass Code card. The code is required (the user must provide it via `AskUserQuestion`) unless a valid cached account is being reused. Skipping the card and clicking `Get a User Account` directly will not produce credentials.
 - **Never** click the page-header `Request account` button as if it were the redeem trigger — it just opens the chat (which auto-opens on page load anyway).
-- **Never** prompt the user for the form values (organization type, industry, company size, country, job title). Those come from `config/workshop.yml.chatbot_account_request_form`; surfacing them as `AskUserQuestion` choices is wasted UX.
+- **Never** prompt the user for the form values (organization type, industry, company size, country, job title). Those come from `runtime/account/active-portal.yml.chatbot_account_request_form`; surfacing them as `AskUserQuestion` choices is wasted UX.
 - **Never** log the scraped password to console output, `audit-history.yml`, `manifest.yml`, issue bodies, PR descriptions, or any file other than DPAPI-encrypted `credential.enc`. The success card text MAY be retained in `runs/<run-id>/redemption-transcript.md` ONLY if that file is excluded from any subsequent issue/PR rendering.
 - **Never** log the workshop code itself anywhere except the first 4 chars in `account.meta.json.workshop_code_hint`. The code is a per-event secret.
 - **Never** assume the rating-prompt card means credentials weren't issued. Credentials land on the success card BEFORE the rating prompt; they're independent.

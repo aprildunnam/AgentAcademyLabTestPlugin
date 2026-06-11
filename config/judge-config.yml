@@ -152,6 +152,9 @@ critique:
 # existing issue URL and write nothing). "create_anyway" is DEPRECATED and is
 # silently treated as "comment".
 issues:
+  # Repo where audit issues/PRs are filed. Sourced at run start from the active
+  # lab instance (scripts/Resolve-LabInstance.ps1 -> .repo). The literal below
+  # is only the fallback for the built-in mcs-labs instance.
   repo: "microsoft/mcs-labs"
   dedupe_by_labels: ["lab-audit"]               # required label on every audit-filed issue
   dedupe_loose_title_match: true                # also match open issues by `{slug} in:title` for back-compat with un-per-slug-labeled history
@@ -175,12 +178,12 @@ issues:
     # Branch the fix-PR filer CREATES when no open PR exists for the slug. The
     # `{run_id}` token makes every newly-opened PR's branch unique, so a run
     # never collides with a leftover branch from a merged/closed prior PR.
-    pr_branch_pattern: "dewain/fix-{slug}-content-audit-{run_id}"
+    pr_branch_pattern: "{branch_prefix}/fix-{slug}-content-audit-{run_id}"
     # Head-ref PREFIX used to find an existing OPEN fix-PR for a slug, regardless
     # of the run-id suffix the branch was created with. This is how dedup finds
     # the open PR to append to (and the appender's fallback match if the title
     # query misses). Must stay a prefix of `pr_branch_pattern`.
-    pr_match_head_prefix: "dewain/fix-{slug}-content-audit"
+    pr_match_head_prefix: "{branch_prefix}/fix-{slug}-content-audit"
     scope: "screenshots_only"                   # "screenshots_only" — no other value supported yet
     require_same_author: true                   # current `gh` user must match PR author
     require_mergeable: true                     # `mergeable: MERGEABLE` required
@@ -192,7 +195,7 @@ issues:
   # run-unique, so re-building the same slug never collides with a merged or
   # closed prior PR.
   new_lab_pr:
-    pr_branch_pattern: "dewain/new-lab-{slug}-{build_id}"
+    pr_branch_pattern: "{branch_prefix}/new-lab-{slug}-{build_id}"
     require_same_author: true
 
 # --- Existing-state probe (Phase 1.4) ---
@@ -234,7 +237,7 @@ build:
   # "Someone is actively working on this").
   proposal_issue:
     enabled: true
-    repo: "microsoft/mcs-labs"
+    repo: "microsoft/mcs-labs"   # sourced from the active instance; literal = mcs-labs fallback
     labels: ["type: new-lab", "status: in-progress"]
     title_pattern: "New lab proposal: {title} ({slug})"
     link_pr_with: "Closes"                # Closes | Refs — how the B7 PR references the issue
@@ -271,4 +274,4 @@ build:
     order_gap_strategy: section_midpoint           # pick a free order number mid-band (see lab-registration-spec.md §2)
 
 # --- Plugin version (written into manifest.yml and issue bodies) ---
-plugin_version: "0.6.1"
+plugin_version: "0.7.0"

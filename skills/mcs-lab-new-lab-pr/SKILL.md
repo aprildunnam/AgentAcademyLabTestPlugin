@@ -1,7 +1,7 @@
 ---
 name: mcs-lab-new-lab-pr
 description: |
-  Open a PR on microsoft/mcs-labs that adds a NEW lab built by mcs-lab-builder. Stages the assembled `labs/<slug>/README.md` + screenshots, applies the registration entry (root `lab-config.yml` + generator, or direct `_data/lab-config.yml` + `_labs/<slug>.md` writes — per the detected mechanism), commits everything in one commit on a run-unique branch off `origin/main`, and opens the PR. Invoked by mcs-lab-builder at B7 — NOT directly by the user. Do not use this for audit fixes (that is mcs-lab-fix-pr-filer, which patches an existing lab).
+  Open a PR on the active instance's lab repo (microsoft/mcs-labs by default) that adds a NEW lab built by mcs-lab-builder. Stages the assembled `labs/<slug>/README.md` + screenshots, applies the registration entry (root `lab-config.yml` + generator, or direct `_data/lab-config.yml` + `_labs/<slug>.md` writes — per the detected mechanism), commits everything in one commit on a run-unique branch off `origin/main`, and opens the PR. Invoked by mcs-lab-builder at B7 — NOT directly by the user. Do not use this for audit fixes (that is mcs-lab-fix-pr-filer, which patches an existing lab).
 allowed-tools:
   - Read
   - Glob
@@ -32,7 +32,7 @@ Open the PR for a freshly-built lab. You are called by `mcs-lab-builder` at B7 w
 
 2. **Create the branch (run-unique, off fresh main).**
    ```
-   branch = build.issues.new_lab_pr.pr_branch_pattern   # default "dewain/new-lab-{slug}-{build_id}"
+   branch = build.issues.new_lab_pr.pr_branch_pattern   # default "{branch_prefix}/new-lab-{slug}-{build_id}"
    git checkout -b "<branch>" origin/main
    ```
    The `{build_id}` suffix makes the branch unique — re-running build for the same slug yields a fresh build_id and a fresh branch, so a merged/closed prior PR never collides. (No open-PR append path: a new lab is one-shot.)
@@ -63,7 +63,7 @@ Open the PR for a freshly-built lab. You are called by `mcs-lab-builder` at B7 w
 7. **Push and open the PR.**
    ```
    git push -u origin <branch>
-   gh pr create --repo microsoft/mcs-labs --base main --head <branch> \
+   gh pr create --repo {repo} --base main --head <branch> \
      --title "<slug>: add new lab" \
      --body-file "runtime/builds/<build_id>/pr-body.md"
    ```

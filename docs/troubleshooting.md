@@ -215,6 +215,16 @@ Some long-running process (often a shell or editor) has the path open. Close it,
 
 Filesystem permissions changed. Run `icacls "%USERPROFILE%\.claude\plugins\mcs-lab-auditor\runtime"` to inspect. The default user-profile permissions are sufficient; if you've explicitly tightened them, restore inheritance.
 
+## Lab instance resolution
+
+### "The 'powershell-yaml' module is required to resolve lab instances"
+Run `Install-Module powershell-yaml -Scope CurrentUser -Force`, then retry.
+
+### "Unknown lab instance '<name>'"
+The `--instance` / `$env:LAB_INSTANCE` name does not match any instance in the
+shipped registry or your `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml`. Run
+`pwsh -File scripts/Resolve-LabInstance.ps1 -Mode Status` and check the spelling.
+
 ## When all else fails
 
 1. Read `runtime/runs/<run-id>/labs/<slug>/transcript.md` end-to-end.

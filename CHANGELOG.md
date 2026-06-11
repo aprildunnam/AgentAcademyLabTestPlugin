@@ -6,6 +6,24 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-11
+
+### Added
+
+- **Configurable lab instances — shipped registry (`config/lab-instances.yml`).** A new `config/lab-instances.yml` ships with the plugin and defines the built-in `mcs-labs` instance (repo `microsoft/mcs-labs`, clone URL, branch prefix `dewain`, chatbot portal). This is the single authoritative declaration of the default instance; no per-machine edits are ever needed.
+- **User-owned instance overlay (`%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml`).** Users can add custom instances (or override individual fields of built-in ones) by placing a `lab-instances.yml` in their `%USERPROFILE%\.mcs-lab-auditor\` directory. User fields win per-key; the shipped registry fills any gaps. The file is never created or modified by the plugin.
+- **`scripts/Resolve-LabInstance.ps1` — single source of truth for instance resolution.** Merges the shipped and user registries, selects the active instance (`-Instance` flag → `$env:LAB_INSTANCE` → merged `default_instance` → shipped `mcs-labs`), resolves `branch_prefix` and training portal, and emits the resolved instance as JSON (or a human-readable status line in `-Mode Status`). All other scripts and skills call this resolver instead of carrying hardcoded repo/portal values.
+- **`--instance` flag and `$env:LAB_INSTANCE` environment variable.** Every audit and build command now accepts `--instance <name>` to select a named instance for that run. The environment variable provides the same override without touching the command line, suitable for CI or scripted use.
+- **Per-instance training portal and branch prefix.** Each instance declares its own `portal` block (portal kind + URL) and `branch_prefix`. Fix-PR branches and new-lab PR branches are derived from the active instance's `branch_prefix`, so a fork-owner's PRs land in their own namespace automatically.
+- **`powershell-yaml` prerequisite for custom instances.** The resolver requires the `powershell-yaml` module (`ConvertFrom-Yaml`) to parse YAML instance files. If the module is not importable, the resolver hard-errors with the exact install command (`Install-Module powershell-yaml -Scope CurrentUser -Force`). The module is already present in the standard dev environment; the requirement is documented in `docs/installation.md`.
+
+### Changed
+
+- **`scripts/Resolve-LabRepo.ps1` sources repo, clone URL, branch prefix, and managed-clone path from the active instance.** The hardcoded `microsoft/mcs-labs` repo reference and `dewain/` branch-prefix literal are replaced by values resolved from `Resolve-LabInstance.ps1`. For the default `mcs-labs` instance the resolved values are identical to the former hardcoded ones, so existing clones are reused and behavior is unchanged.
+- **`config/judge-config.yml` documents `issues.repo` and `proposal_issue.repo` as instance-sourced.** Branch patterns now reference `{branch_prefix}` rather than a literal owner prefix. Version bump to `0.7.0`.
+- **Skills and commands source repo, clone URL, branch prefix, and portal from the active instance.** The orchestrator (`mcs-lab-auditor`), sub-skills (`mcs-lab-issue-filer`, `mcs-lab-fix-pr-filer`, `mcs-lab-new-lab-pr`, `mcs-lab-pr-appender`, `mcs-lab-builder`), and every audit/build command now resolve these values at run start via the resolver rather than embedding `microsoft/mcs-labs` or `dewain/` literals.
+- **Redemption references read the training portal from `runtime/account/active-portal.yml`.** The orchestrator materializes the active instance's resolved portal block to `runtime/account/active-portal.yml` at run start. `workshop-redemption.md`, `workshop-redemption-chatbot.md`, and `playwright-cookbook.md` read this path instead of `config/workshop.yml`. For the default `mcs-labs` instance the materialized file is a copy of `config/workshop.yml`, so default redemption behavior is byte-for-byte unchanged.
+
 ## [0.6.1] - 2026-06-06
 
 ### Fixed
@@ -268,7 +286,10 @@ Initial scaffold. The plugin is structurally complete: every file referenced by 
 - Single workshop-portal flow assumed (Skillable-style).
 - Screenshots aren't attached inline to issues (`gh` CLI limitation); they're referenced by local path in the issue body.
 
-[Unreleased]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.6.1...v0.7.0
+[0.6.1]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.2.1...v0.3.0

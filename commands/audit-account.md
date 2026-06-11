@@ -35,7 +35,7 @@ The first positional argument is the mode (default: `show` if no args).
 
 - cached account meta: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode Raw -Path "$env:CLAUDE_PLUGIN_ROOT\runtime\account\account.meta.json" -Fallback "(no cached account)"`
 - credential.enc present: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode SizeBytes -Path "$env:CLAUDE_PLUGIN_ROOT\runtime\account\credential.enc" -Fallback "no"`
-- workshop portal configured: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode GrepContext -Path "$env:CLAUDE_PLUGIN_ROOT\config\workshop.yml" -Pattern "^workshop_portal_url" -ContextAfter 0 -Fallback "(workshop.yml not found)"`
+- workshop portal configured: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabInstance.ps1" -Mode Status`
 
 ## Your task
 
@@ -55,12 +55,12 @@ Workshop code hint:  <workshop_code_hint>****
 
 ### Mode: redeem
 
-Dispatch by `config/workshop.yml.portal_kind`:
+Dispatch by the active instance's portal `portal_kind` (read from `runtime/account/active-portal.yml` if present, else `config/workshop.yml`):
 - `chatbot` → `references/workshop-redemption-chatbot.md`
 - `skillable` (or missing) → `references/workshop-redemption.md`
 - `email` → submit code, detect "check your email", ask user for username/password, then continue with sign-in/cache steps.
 
-1. Check `config/workshop.yml.workshop_portal_url` and `portal_kind`. If `workshop_portal_url` is still `REPLACE_ME_ON_FIRST_RUN`, prompt the user via `AskUserQuestion` for the workshop event URL, then write it back to `workshop.yml` before proceeding.
+1. Check the active instance's portal `workshop_portal_url` and `portal_kind`. If `workshop_portal_url` is still `REPLACE_ME_ON_FIRST_RUN`, prompt the user via `AskUserQuestion` for the workshop event URL, then write it back to the instance source — the user's `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml` inline `portal:` when the instance came from the user file, otherwise `config/workshop.yml` — and re-materialize `runtime/account/active-portal.yml` before proceeding.
 
 2. Prompt the user for the workshop code (`AskUserQuestion` with one option labeled "Enter workshop code" plus the user's free-text). Never echo the code back; only the first 4 chars become `workshop_code_hint`.
 
@@ -72,7 +72,7 @@ Dispatch by `config/workshop.yml.portal_kind`:
 
 6. Encrypt the `{username, password, tenant_id}` JSON via PowerShell DPAPI (`ConvertTo-SecureString -AsPlainText -Force | ConvertFrom-SecureString`) into `runtime/account/credential.enc`. User-scoped — never machine-scoped.
 
-7. Write `runtime/account/account.meta.json` with `user_id`, `tenant_hint` (from workshop.yml), `workshop_code_hint` (first 4 chars), `cached_at` (ISO timestamp), `expires_at` (if scraped, else null).
+7. Write `runtime/account/account.meta.json` with `user_id`, `tenant_hint` (from the active instance's portal), `workshop_code_hint` (first 4 chars), `cached_at` (ISO timestamp), `expires_at` (if scraped, else null).
 
 8. Confirm to the user:
    > "Cached test account `<user_id>` (expires <expires_at>). Run `/audit-bootcamp` or `/audit-lab <slug>` to use it."

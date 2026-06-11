@@ -170,6 +170,6 @@ build:
     order_gap_strategy: section_midpoint
   issues:
     new_lab_pr:
-      pr_branch_pattern: "dewain/new-lab-{slug}-{build_id}"
+      pr_branch_pattern: "{branch_prefix}/new-lab-{slug}-{build_id}"
       require_same_author: true
 ```

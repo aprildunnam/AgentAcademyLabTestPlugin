@@ -2,7 +2,7 @@
 
 The auditor's target is **100% coverage of every lab**. A run that returns `cannot_verify` on a step without first exhausting recovery options is an under-performing run. The auditor must push hard to drive every step through, and when it cannot, it must produce **both** outputs for that step:
 
-1. A **lab finding** in `microsoft/mcs-labs` (if the lab is the problem — wrong instructions, broken sequence, UI drift the lab should update) + a fix PR.
+1. A **lab finding** in the active instance's lab repo (`{repo}`) (if the lab is the problem — wrong instructions, broken sequence, UI drift the lab should update) + a fix PR.
 2. A **plugin bug** in `microsoft/BootcampLabTestPlugin` (if the auditor is the problem — Playwright limitation, missing reference, unhandled UI pattern, absent input source) + a fix PR when the gap is mechanical.
 
 Most stuck steps are caused by exactly one side. Some — like a lab that references a value not surfaced anywhere the auditor knows how to read — are caused by both, and warrant findings on both repos.
@@ -148,7 +148,7 @@ A bug is "mechanical" if the fix is confined to files under `skills/`, `referenc
 
 Procedure:
 
-1. **Branch off `origin/main`**: `dewain/fix-plugin-<short-slug>` matching the bug slug.
+1. **Branch off `origin/main`**: `{branch_prefix}/fix-plugin-<short-slug>` matching the bug slug.
 2. **Apply the proposed fix.** Keep the diff minimal — one logical change per PR.
 3. **Commit** with `<short-slug>: <one-line>` + `Closes #N` in the body. NEVER include a Claude co-author trailer.
 4. **`gh pr create`** against `microsoft/BootcampLabTestPlugin:main` with body that:
@@ -198,8 +198,8 @@ A run where `J > 0` is incomplete coverage. The follow-up should target each `ca
 
 Step says "click the **+ New** button". Live UI shows "**New**" (no leading "+"). Auditor:
 
-- Files lab finding on mcs-labs (`gh issue create --repo microsoft/mcs-labs ...`).
-- Opens lab fix PR on mcs-labs (`gh pr create --repo microsoft/mcs-labs ...`).
+- Files lab finding on mcs-labs (`gh issue create --repo {repo} ...`).
+- Opens lab fix PR on mcs-labs (`gh pr create --repo {repo} ...`).
 - Continues the lab using the corrected button label.
 - No plugin bug.
 

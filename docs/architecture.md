@@ -35,6 +35,17 @@ flowchart LR
     Workshop[(Workshop portal<br/>Skillable-style)] -.->|workshop code<br/>→ credentials| PW
 ```
 
+### Resolver layer
+
+`scripts/Resolve-LabInstance.ps1` is the **single source of truth** for which lab repo, training portal, and branch prefix the plugin operates on. At run start it merges the plugin-shipped `config/lab-instances.yml` (the built-in `mcs-labs` instance) with a user-owned `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml` (user values win per field), selects the active instance (via `--instance` flag → `$env:LAB_INSTANCE` → merged `default_instance` → shipped default), and emits the resolved instance as JSON.
+
+Every downstream component reads from this resolver rather than from hardcoded literals:
+
+- **`Resolve-LabRepo.ps1`** sources the clone URL, candidate paths, and managed-clone directory from the resolver, so each instance gets its own isolated working tree under `%USERPROFILE%\.mcs-lab-auditor\<instance-name>`.
+- **`judge-config.yml`** branch patterns use `{branch_prefix}` and the `issues.repo` value is sourced from the active instance at run start.
+- **Skills and commands** receive `{repo}` and `{branch_prefix}` from the orchestrator, which resolves them once at run start and substitutes them into every `gh` command.
+- **`runtime/account/active-portal.yml`** is materialized at run start from the active instance's resolved portal object. All redemption flows read this file instead of `config/workshop.yml` directly. For the default `mcs-labs` instance the materialized file is a copy of `config/workshop.yml`, so behavior is byte-for-byte unchanged.
+
 ### Key boundaries
 
 - **Source-of-truth boundary**: the **scope catalog** (events *and* workshops) comes from two Jekyll collections in the mcs-labs repo — `_events/<id>.md` (formal curated events) and `_workshops/<id>.md` (on-demand workshops) — enumerated by `scripts/Get-EventCatalog.ps1`. Both collections share one front-matter schema (`title`, `description`, `event_id`, `order`, and a `labs:` list of `{ slug, label }`); the catalog tags each scope with `type` (event|workshop), `id`, `order`, `external`/`external_url`/`repository`, and `auditable`. `external: true` scopes (the Agent Academy tracks) host their labs in another repo (`microsoft/agent-academy`), so they are listed but `auditable: false` and never driven. The **all-labs catalog** for the single-lab picker still comes from `_data/lab-config.yml.lab_metadata.<id>` (unchanged). The legacy `_data/lab-config.yml.event_configs` table is only a last-resort fallback — it has drifted out of sync with the collections (missing agent-in-a-day + the academy workshops, still listing an obsolete mcs-in-a-day-v2). The run's scope is one of: (a) all labs in a chosen event/workshop, (b) a CSV subset of a scope's labs, or (c) a single lab from the all-labs catalog. The slug list is never hard-coded in this plugin.

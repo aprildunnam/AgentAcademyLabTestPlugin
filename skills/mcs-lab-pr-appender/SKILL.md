@@ -1,7 +1,7 @@
 ---
 name: mcs-lab-pr-appender
 description: |
-  Append screenshot updates from a lab audit run onto an EXISTING open fix-PR branch in microsoft/mcs-labs. Replaces matched image files in place, makes one commit, pushes, and comments on the PR. Never creates a new branch and never opens a new PR. Invoked by mcs-lab-auditor by default whenever (a) the orchestrator's existing-state probe found an open PR for the slug AND (b) the lab produced new screenshot artifacts. Suppressed by --no-update-screenshots / --no-append-to-pr (CLI) or `issues.pr_append.enabled_by_default: false` (config). Should NOT be invoked directly by the user.
+  Append screenshot updates from a lab audit run onto an EXISTING open fix-PR branch in the active instance's lab repo (microsoft/mcs-labs by default). Replaces matched image files in place, makes one commit, pushes, and comments on the PR. Never creates a new branch and never opens a new PR. Invoked by mcs-lab-auditor by default whenever (a) the orchestrator's existing-state probe found an open PR for the slug AND (b) the lab produced new screenshot artifacts. Suppressed by --no-update-screenshots / --no-append-to-pr (CLI) or `issues.pr_append.enabled_by_default: false` (config). Should NOT be invoked directly by the user.
 allowed-tools:
   - Read
   - Write
@@ -24,7 +24,7 @@ allowed-tools:
 
 # mcs-lab-pr-appender (sub-skill)
 
-Append refreshed screenshot files from one audit run to one existing open fix-PR's branch on `microsoft/mcs-labs`. One PR, one commit, one push. Image files only.
+Append refreshed screenshot files from one audit run to one existing open fix-PR's branch on the active instance's repo (`{repo}`). One PR, one commit, one push. Image files only.
 
 This sub-skill exists because the user's standing rule is: **never re-create an open PR**. When the auditor produces new screenshots and an open fix-PR for the same lab is already in flight, the natural place for those updates is that PR — not a brand-new branch and not a brand-new PR.
 
@@ -35,8 +35,8 @@ This sub-skill exists because the user's standing rule is: **never re-create an 
 - `existing_pr` — the `open_pr` block from `runs/<run-id>/existing-state.yml`:
   ```yaml
   number: 328
-  url: https://github.com/microsoft/mcs-labs/pull/328
-  branch: dewain/fix-mcs-orchestration-content-audit
+  url: https://github.com/{repo}/pull/328
+  branch: {branch_prefix}/fix-mcs-orchestration-content-audit
   author: Dewain27
   mergeable: true
   files: [_labs/mcs-orchestration.md, _data/lab-config.yml]
@@ -52,9 +52,9 @@ This sub-skill exists because the user's standing rule is: **never re-create an 
   ```yaml
   pr_append_result:
     pr_number: 328
-    branch: dewain/fix-mcs-orchestration-content-audit
+    branch: {branch_prefix}/fix-mcs-orchestration-content-audit
     commit_sha: <40-char>
-    commit_url: https://github.com/microsoft/mcs-labs/commit/<sha>
+    commit_url: https://github.com/{repo}/commit/<sha>
     files_changed: [labs/mcs-orchestration/images/foo.png, ...]
     skipped_reason: null
   ```
@@ -69,7 +69,7 @@ Run all of these. If any returns a "skip" verdict, stop and write the result to 
 
 1. **PR open and mergeable**:
    ```
-   gh pr view <number> --repo microsoft/mcs-labs --json state,mergeable,mergeStateStatus,headRefName,author
+   gh pr view <number> --repo {repo} --json state,mergeable,mergeStateStatus,headRefName,author
    ```
    - `state` must be `OPEN`. Otherwise skip with `reason: pr_not_open`.
    - `mergeable` must be `MERGEABLE`. `CONFLICTING` → skip with `reason: pr_has_conflicts`. `UNKNOWN` is allowed but logged.
@@ -97,7 +97,7 @@ Run all of these. If any returns a "skip" verdict, stop and write the result to 
 
 ```
 git -C <repo_path> fetch origin
-gh pr checkout <number> --repo microsoft/mcs-labs   # checks out existing_pr.branch
+gh pr checkout <number> --repo {repo}   # checks out existing_pr.branch
 ```
 
 After checkout, verify the current branch matches `existing_pr.branch`:
@@ -135,7 +135,7 @@ git -C <repo_path> rev-parse HEAD
 ### 3. Comment on the PR
 
 ```
-gh pr comment <number> --repo microsoft/mcs-labs --body-file <comment-body>
+gh pr comment <number> --repo {repo} --body-file <comment-body>
 ```
 
 Where `<comment-body>` contains:

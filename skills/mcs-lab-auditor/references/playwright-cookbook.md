@@ -123,7 +123,7 @@ The handler never emits a finding. The modal is a Microsoft product onboarding s
 
 ## Scene-boundary auth probe
 
-At the start of each scene (h4 heading), navigate to `config/workshop.yml#auth_probe_url` (default Copilot Studio environments page). If the URL ends up at `login.microsoftonline.com/...`, the session expired:
+At the start of each scene (h4 heading), navigate to `runtime/account/active-portal.yml#auth_probe_url` (default Copilot Studio environments page). If the URL ends up at `login.microsoftonline.com/...`, the session expired:
 
 1. Halt the run.
 2. Mark the current lab `status: error, reason: auth_expired` in `manifest.yml`.

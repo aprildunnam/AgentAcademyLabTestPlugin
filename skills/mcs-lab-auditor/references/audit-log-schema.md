@@ -38,13 +38,13 @@ The file is append-only — new entries go at the end. Every run appends one ent
   issue_action: null              # "created" | "commented" | "skipped_duplicate" | "skipped_no_new_findings"
   pr_append_result: null          # populated when the default-on screenshot append fires AND an open fix-PR existed (suppressed by --no-update-screenshots):
                                   #   pr_number: 328
-                                  #   branch: dewain/fix-<slug>-content-audit-<run-id>   # run-unique; older PRs may predate the suffix
+                                  #   branch: {branch_prefix}/fix-<slug>-content-audit-<run-id>   # run-unique; older PRs may predate the suffix
                                   #   commit_sha: <40-char>
                                   #   commit_url: https://github.com/microsoft/mcs-labs/commit/<sha>
                                   #   files_changed: [labs/<slug>/images/<name>.png, ...]
                                   #   skipped_reason: null            # or one of the reasons in pr-append-flow.md
   plugin_version: "0.1.0"
-  tenant_hint: contoso-dev        # label from config/workshop.yml — never the tenant id
+  tenant_hint: contoso-dev        # label from the active instance's portal (`tenant_hint`) — never the tenant id
   account_user_id: dewain+test12@msftworkshops.com
   workshop_code_hint: "ABCD"      # first 4 chars only — never the full code
 ```
