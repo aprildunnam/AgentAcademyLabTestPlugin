@@ -13,7 +13,7 @@
     Active-instance resolution order:
       1. -Instance <name>
       2. $env:LAB_INSTANCE
-      3. merged default_instance (user file overrides shipped)
+      3. merged default (user file overrides shipped)
       4. shipped default ('mcs-labs')
 
     Requires the 'powershell-yaml' module. Install once with:
@@ -96,7 +96,9 @@ foreach ($name in @($user.instances.Keys)) {
         if ($u.ContainsKey('portal'))      { $merged[$name].Remove('portal_file') }
         if ($u.ContainsKey('portal_file')) { $merged[$name].Remove('portal') }
     } else {
-        $merged[$name] = $user.instances[$name]
+        $merged[$name] = $user.instances[$name].Clone()
+        if ($merged[$name].ContainsKey('portal'))      { $merged[$name].Remove('portal_file') }
+        if ($merged[$name].ContainsKey('portal_file')) { $merged[$name].Remove('portal') }
     }
 }
 
@@ -112,8 +114,12 @@ elseif ($env:LAB_INSTANCE) { $active = $env:LAB_INSTANCE;  $source = 'env' }
 elseif ($user.default)     { $active = $user.default;      $source = 'user-default' }
 elseif ($shipped.default)  { $active = $shipped.default;   $source = 'shipped-default' }
 
-if (-not $active -or -not $merged.ContainsKey($active)) {
-    $avail = (@($merged.Keys) | Sort-Object) -join ', '
+$avail = (@($merged.Keys) | Sort-Object) -join ', '
+if (-not $active) {
+    Write-Error "No lab instance specified and no default_instance configured. Available: $avail"
+    exit 8
+}
+if (-not $merged.ContainsKey($active)) {
     Write-Error "Unknown lab instance '$active'. Available: $avail"
     exit 8
 }
@@ -132,7 +138,10 @@ $prefixSource = 'config'
 if (-not $prefix) {
     $prefix = $null
     if (Get-Command gh -ErrorAction SilentlyContinue) {
-        try { $login = (gh api user --jq '.login' 2>$null); if ($login) { $prefix = "$login".Trim(); $prefixSource = 'gh-user' } } catch { }
+        try {
+            $login = (gh api user --jq '.login' 2>$null)
+            if ($LASTEXITCODE -eq 0 -and $login) { $prefix = "$login".Trim(); $prefixSource = 'gh-user' }
+        } catch { }
     }
     if (-not $prefix) { $prefixSource = 'unresolved' }
 }
