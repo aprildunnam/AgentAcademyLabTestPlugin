@@ -12,15 +12,9 @@ Step-by-step setup for `mcs-lab-auditor`. If you hit problems, jump to [Troubles
 | **GitHub CLI (`gh`)** authenticated with an account that can file issues on `microsoft/mcs-labs` (and **open PRs**, for fix-PRs and build mode) | The plugin's GitHub write path. `READ` is insufficient. | `gh auth status` and `gh repo view microsoft/mcs-labs --json viewerPermission` |
 | **Claude Code** (Desktop, CLI, or IDE) | Hosts the plugin | Run Claude Code; check version in About/help |
 | **Playwright MCP plugin enabled in Claude Code** | Drives the browser | In Claude Code: confirm `mcp__plugin_playwright_playwright__*` tools are listed in a `/tools` or equivalent command, or that `playwright@claude-plugins-official` appears in `~/.claude/settings.json` under enabled plugins |
-| **A local clone of `microsoft/mcs-labs`** *(optional — auto-cloned if missing)* | The plugin reads lab markdown, the `_events/` + `_workshops/` collections, and `_data/lab-config.yml` from it | Not required up front: `scripts/Resolve-LabRepo.ps1` resolves an existing clone or clones one into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs` at run start. See [Repo resolution](#repo-resolution-no-path-edits-needed). |
+| **A local clone of `microsoft/mcs-labs`** *(optional — auto-cloned if missing)* *(the active instance's repo — mcs-labs by default)* | The plugin reads lab markdown, the `_events/` + `_workshops/` collections, and `_data/lab-config.yml` from it | Not required up front: `scripts/Resolve-LabRepo.ps1` resolves an existing clone or clones one into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs` at run start. See [Repo resolution](#repo-resolution-no-path-edits-needed). |
 | **An unredeemed workshop code** | One per audit run, used during `/audit-account redeem` | Obtained from your workshop organizer; expires after one redemption |
-
-- **PowerShell module `powershell-yaml`** (only needed if you define custom lab
-  instances; the resolver errors with this exact command if it is missing):
-
-  ```powershell
-  Install-Module powershell-yaml -Scope CurrentUser -Force
-  ```
+| **PowerShell module `powershell-yaml`** *(custom instances only)* | Required when defining custom lab instances in a user `lab-instances.yml`; not needed for the default mcs-labs path. The resolver prints the exact install command if it is missing. | `Get-Module -ListAvailable powershell-yaml` — if nothing returned: `Install-Module powershell-yaml -Scope CurrentUser -Force` |
 
 > Heads-up: workshop accounts typically expire within 24–48 hours. Don't redeem the code days before you intend to start an audit run.
 
@@ -42,10 +36,10 @@ Pick **GitHub.com**, **HTTPS**, **Login with a web browser**, and follow the pro
 
 ```powershell
 gh auth status                              # confirm logged in
-gh repo view microsoft/mcs-labs --json viewerPermission
+gh repo view microsoft/mcs-labs --json viewerPermission   # or your instance's repo
 ```
 
-The `viewerPermission` should be `TRIAGE`, `WRITE`, `MAINTAIN`, or `ADMIN`. `READ` is insufficient to file issues — request triage access from the `microsoft/mcs-labs` maintainers if needed.
+The `viewerPermission` should be `TRIAGE`, `WRITE`, `MAINTAIN`, or `ADMIN`. `READ` is insufficient to file issues — request triage access from the `microsoft/mcs-labs` maintainers (or your instance's repo maintainers) if needed.
 
 ## Step 2 — Clone the labs repo (optional)
 
@@ -125,6 +119,8 @@ If those don't appear, see [Troubleshooting](#troubleshooting).
 
 ## Step 5 — Configure the workshop portal
 
+This step configures the portal for the **default mcs-labs instance**. The active instance's portal definition is materialized into `runtime/account/active-portal.yml` at run start; for the default mcs-labs instance that source is `config/workshop.yml`.
+
 Open `config/workshop.yml`:
 
 ```powershell
@@ -147,11 +143,43 @@ tenant_hint: "your-workshop-label-here"
 
 If your workshop portal isn't Skillable-style (i.e. doesn't display credentials on a confirmation page), also adjust `redemption_selectors` — see [`extending.md`](extending.md#adapting-to-a-different-workshop-portal).
 
+### Targeting your own fork (optional)
+
+If you want to audit a **different lab repo** (your own fork, a partner's repo, or any other source), create a user overlay instead of editing plugin files. The overlay lives at `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml`, survives plugin updates, and is merged on top of the shipped `config/lab-instances.yml` (your values win per field).
+
+A copy-ready starting point is at [`docs/examples/lab-instances.sample.yml`](examples/lab-instances.sample.yml). The minimum fields for a custom instance:
+
+```yaml
+instances:
+  my-fork:
+    repo: "org/my-lab-fork"
+    clone_url: "https://github.com/org/my-lab-fork.git"
+    branch_prefix: "audit/"
+    portal:
+      workshop_portal_url: "https://my-portal.example.com/launch"
+      tenant_hint: "my-org"
+```
+
+See [`docs/extending.md#targeting-your-own-lab-fork`](extending.md#targeting-your-own-lab-fork) for all available fields and advanced options.
+
+After creating the file, verify the active instance resolves correctly:
+
+```powershell
+pwsh "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabInstance.ps1" -Mode Status
+```
+
+Then select the instance for your run with `--instance my-fork` on any command (or set `$env:LAB_INSTANCE=my-fork` for the session). Leave it out to use the default mcs-labs instance as before.
+
 ### Repo resolution (no path edits needed)
 
 > **There is nothing to edit here.** As of v0.6.0 the plugin has **no hard-coded machine paths** — the old "Step 5b: adjust hard-coded paths" procedure is obsolete and has been removed. Both audit and build modes resolve the mcs-labs repo at run start via `scripts/Resolve-LabRepo.ps1`, and all plugin-internal reads use `$env:CLAUDE_PLUGIN_ROOT`.
 
-The resolver tries these in order and uses the first that contains `_data/lab-config.yml`:
+**Two separate mechanisms — don't confuse them:**
+
+- **`$env:MCS_LABS_REPO` / `mcs_labs_repo_path_candidates`** — control *where on disk* the **mcs-labs clone** lives. Use these when you have mcs-labs checked out in a non-standard location.
+- **User `lab-instances.yml`** (`%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml`) — selects a *different repo and portal entirely* (your own fork, partner org, etc.). This is the lab-instances mechanism described in the subsection above.
+
+The resolver (for the active instance's repo) tries these in order and uses the first that contains `_data/lab-config.yml`:
 
 1. **`$env:MCS_LABS_REPO`** — set this if you want to force a specific clone:
    ```powershell
@@ -204,6 +232,8 @@ The cheapest verification — no browser activity, no auth, just exercises the m
 /audit-lab core-concepts-analytics-evaluations --dry-run
 ```
 
+> To target a non-default instance, add `--instance <name>` to any command (e.g. `/audit-lab core-concepts-analytics-evaluations --dry-run --instance my-fork`). Omit it to use the default mcs-labs instance.
+
 You should see a confirmation that `steps.json` was written. Open it:
 
 ```powershell
@@ -223,7 +253,7 @@ Once `--dry-run` looks right:
 This drives the browser through the entire lab. Expect 5–10 minutes. The plugin will either:
 
 - Append a clean-pass entry to `runtime/audit-history.yml` and print a success summary; or
-- File a single GitHub issue against `microsoft/mcs-labs` (one issue total for all findings in this lab), with the URL printed in the summary.
+- File a single GitHub issue against the active instance's lab repo (`microsoft/mcs-labs` by default) — one issue total for all findings in this lab — with the URL printed in the summary.
 
 ## Step 9 — Full event sweep (when ready)
 
@@ -248,7 +278,7 @@ Expect 3–8 hours for the bootcamp's 11 labs (other events vary by lab count). 
 
 ## Building a new lab (`/build-lab`, v0.4.0+)
 
-Build mode authors a brand-new lab end-to-end and opens a PR adding it to `microsoft/mcs-labs`. It reuses the same cached workshop account, so Steps 6 (cache a test account) and the `gh` PR permission above are the only prerequisites.
+Build mode authors a brand-new lab end-to-end and opens a PR adding it to the active instance's lab repo (`microsoft/mcs-labs` by default). It reuses the same cached workshop account, so Steps 6 (cache a test account) and the `gh` PR permission above are the only prerequisites.
 
 ```text
 /build-lab "Build a Returns Triage Agent"          # full build → audit gate → PR
@@ -259,7 +289,7 @@ Build mode authors a brand-new lab end-to-end and opens a PR adding it to `micro
 What happens:
 
 1. **Account + mode** — pick the cached account (or redeem) and choose **guided** (you dictate each step) or **scenario** (you describe the lab, the AI proposes each step). Both confirm every step.
-2. **Navigate** to the Copilot Studio Home page, then name the lab. A **"new lab proposal" issue** is opened on `microsoft/mcs-labs` (labeled `type: new-lab` + `status: in-progress`) so the team can see the lab is In Progress; the final PR closes it.
+2. **Navigate** to the Copilot Studio Home page, then name the lab. A **"new lab proposal" issue** is opened on the active instance's lab repo (`microsoft/mcs-labs` by default), labeled `type: new-lab` + `status: in-progress`, so the team can see the lab is In Progress; the final PR closes it.
 3. **Capture loop** — for each step: the action runs in the browser, a screenshot is taken, the instruction prose + tips are written, and you confirm before moving on.
 4. **Audit gate** — the finished lab is re-run through the audit engine; any broken/unclear steps loop back for a fix. No GitHub issue/PR is filed by the gate.
 5. **PR** — once the gate passes, a PR adds `labs/<slug>/README.md` + screenshots + the registration entry.

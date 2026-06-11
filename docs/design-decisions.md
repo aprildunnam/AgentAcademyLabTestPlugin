@@ -302,7 +302,7 @@ No new branches. No new PRs. No edits to markdown or any non-image file. No `Co-
 
 **Status:** Accepted (v0.3 addition).
 
-**Context.** ADR-014 and the original `mcs-lab-fix-pr-filer` design keyed everything to a single, fixed per-slug branch `dewain/fix-{slug}-content-audit` and an explicit "one PR per lab, never open a new PR" rule. That rule is wrong once time passes: prior fix-PRs get **merged**. A later audit run that finds new problems must be able to open a **new** PR — reusing the same fixed branch name as a just-merged PR is fragile (leftover local/remote branches, wrong base, confusing history), and "never open a new PR" would mean new findings have nowhere to land except the issue thread.
+**Context.** ADR-014 and the original `mcs-lab-fix-pr-filer` design keyed everything to a single, fixed per-slug branch `{branch_prefix}/fix-{slug}-content-audit` and an explicit "one PR per lab, never open a new PR" rule. That rule is wrong once time passes: prior fix-PRs get **merged**. A later audit run that finds new problems must be able to open a **new** PR — reusing the same fixed branch name as a just-merged PR is fragile (leftover local/remote branches, wrong base, confusing history), and "never open a new PR" would mean new findings have nowhere to land except the issue thread.
 
 The user's standing rule (`feedback_fresh_branch_per_pr`) is the opposite: never commit to a branch whose PR is merged/closed; always open a fresh branch + new PR. The only thing dedup should prevent is **two open PRs for the same lab at once**.
 
@@ -310,9 +310,9 @@ The user's standing rule (`feedback_fresh_branch_per_pr`) is the opposite: never
 
 1. Find whether an *open* fix-PR for the slug exists — via the Phase 1.4 `existing-state.yml.labs[<slug>].open_pr` probe, or a direct `gh pr list --state open --search "head:<prefix>"` query (head-ref **prefix** match, so it finds the PR regardless of its run-id suffix), with a title-match fallback.
 2. **If an open PR exists** and it's authored by the current `gh` user and mergeable → `gh pr checkout` it and **append** this run's commit. Never open a second open PR. If the author/mergeable guardrail fails, abort the PR step (soft failure) rather than opening a competitor.
-3. **If no open PR exists** (none ever, or all prior ones merged/closed) → open a **new** PR on a **run-unique** branch `dewain/fix-{slug}-content-audit-{run_id}`. The `{run_id}` suffix guarantees the branch can't collide with a merged PR's leftover branch, so no stale-branch rename/delete dance is needed.
+3. **If no open PR exists** (none ever, or all prior ones merged/closed) → open a **new** PR on a **run-unique** branch `{branch_prefix}/fix-{slug}-content-audit-{run_id}`. The `{run_id}` suffix guarantees the branch can't collide with a merged PR's leftover branch, so no stale-branch rename/delete dance is needed.
 
-Two config keys replace the single fixed pattern: `issues.pr_append.pr_branch_pattern` (now `dewain/fix-{slug}-content-audit-{run_id}`, the **create** name) and `issues.pr_append.pr_match_head_prefix` (`dewain/fix-{slug}-content-audit`, the **match** prefix).
+Two config keys replace the single fixed pattern: `issues.pr_append.pr_branch_pattern` (now `{branch_prefix}/fix-{slug}-content-audit-{run_id}`, the **create** name) and `issues.pr_append.pr_match_head_prefix` (`{branch_prefix}/fix-{slug}-content-audit`, the **match** prefix). The `{branch_prefix}` token is sourced from the active lab instance (`dewain` for the shipped `mcs-labs` instance) — see ADR-024.
 
 **Consequences.**
 - Each audit run with fresh findings produces its own reviewable PR; a merged PR from a prior cycle never silently swallows or blocks new fixes.
@@ -368,7 +368,7 @@ Two config keys replace the single fixed pattern: `issues.pr_append.pr_branch_pa
 
 **Context.** Build mode ends by opening a PR that adds a whole new lab. The plugin already has `mcs-lab-fix-pr-filer`, which opens/append PRs for audit *fixes*.
 
-**Decision.** Add a dedicated `mcs-lab-new-lab-pr` sub-skill rather than overloading the fix-PR filer. A new lab is a one-shot PR (folder + registration entry + generated/`_labs` output) on a run-unique branch `dewain/new-lab-{slug}-{build_id}` off fresh `origin/main`; it has no `suggested_correction` diffs and no open-PR-append/dedup semantics.
+**Decision.** Add a dedicated `mcs-lab-new-lab-pr` sub-skill rather than overloading the fix-PR filer. A new lab is a one-shot PR (folder + registration entry + generated/`_labs` output) on a run-unique branch `{branch_prefix}/new-lab-{slug}-{build_id}` off fresh `origin/main`; it has no `suggested_correction` diffs and no open-PR-append/dedup semantics.
 
 **Consequences.**
 - Each filer keeps a crisp contract: fix-filer patches an existing lab from findings diffs with OPEN-PR dedup; new-lab filer adds a lab with no dedup (re-builds get a fresh `build_id` → fresh branch).
@@ -459,7 +459,7 @@ Two config keys replace the single fixed pattern: `issues.pr_append.pr_branch_pa
 
 ## ADR-023 — Portable paths: dynamic repo resolution + plugin self-version check
 
-**Status:** Accepted (v0.6.0 addition; supersedes the audit-side hardcoded path in ADR-020).
+**Status:** Accepted (v0.6.0 addition; supersedes the audit-side hardcoded path in ADR-020). Extended by ADR-024, which makes the labs-repo target itself configurable per named instance.
 
 **Context.** The plugin shipped with hard-coded machine paths — `C:\Users\dewainr\.claude\plugins\mcs-lab-auditor` for plugin files, `~/.claude/plugins/mcs-lab-auditor/...` SKILL read-paths, and `C:\Users\dewainr\mcs-labs` for the labs repo (audit mode hard-coded it; build mode had only a partial candidate list). On any other contributor's machine these broke, requiring manual per-machine path edits. There was also **no update awareness**: a run could execute on a stale local copy without the user knowing a newer version existed.
 
@@ -479,6 +479,36 @@ Two config keys replace the single fixed pattern: `issues.pr_append.pr_branch_pa
 - **Keep per-machine path edits documented in installation.** Rejected — every new contributor hit the same setup friction, and the edits drifted from the docs.
 - **Require a manual clone of mcs-labs before first run.** Rejected — auto-clone removes a setup step and guarantees the repo is present and current; users who want a specific clone still override via `MCS_LABS_REPO` or the candidates list.
 - **Block the run when an update is available.** Rejected — a hard block on a best-effort network check would strand offline users; a non-blocking warning preserves the run while still nudging the update.
+
+---
+
+## ADR-024 — Configurable lab instances (user-overlay registry)
+
+**Status:** Accepted (v0.7.0 addition; extends ADR-023's labs-repo resolution).
+
+**Context.** Before v0.7.0 the lab target was effectively hardcoded to `microsoft/mcs-labs` and the bootcamp training portal. The repo slug, git clone URL, local path candidates, PR/branch author prefix (`dewain/`), and the workshop portal URL were scattered across `config/judge-config.yml`, `scripts/Resolve-LabRepo.ps1`, and `config/workshop.yml`. A user wanting to audit a fork of `mcs-labs` with their own training portal had no sanctioned path: they had to edit plugin files directly, and those edits were clobbered every time the plugin updated from the marketplace cache.
+
+**Decision.** Introduce named **lab instances**. A lab instance bundles the following fields into a single named entry: `repo` (owner/name slug), `clone_url`, `marker` (the file whose presence confirms a valid checkout; default `_data/lab-config.yml`), `path_candidates` (ordered list of local paths to try before auto-cloning), `branch_prefix` (for fix-PRs and new-lab branches), and a training `portal` (either an inline block or a `portal_file` path). The resolution lifecycle is:
+
+1. **Shipped registry** — `config/lab-instances.yml` is bundled with the plugin and defines the built-in `mcs-labs` instance. The key `default_instance: mcs-labs` makes it the active instance when nothing else is specified.
+2. **User-owned overlay** — `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml` is loaded on top of the shipped registry; user-supplied fields win per field. This file lives outside the plugin cache directory and therefore **survives plugin updates**.
+3. **Instance selection** — active instance is resolved in priority order: `--instance <name>` flag → `$env:LAB_INSTANCE` environment variable → `default_instance` key → shipped `mcs-labs` fallback.
+4. **`scripts/Resolve-LabInstance.ps1`** is the single source of truth for the merge, selection, and field resolution. It resolves `branch_prefix` (instance value → `gh api user` login → left unresolved) and the portal (inline block or loaded from `portal_file`), then emits JSON consumed by every downstream caller.
+
+Downstream integration: `Resolve-LabRepo.ps1` sources clone URL, marker, path candidates, and the per-instance managed-clone path (`%USERPROFILE%\.mcs-lab-auditor\<instance-name>`) from `Resolve-LabInstance.ps1`'s output; `judge-config.yml`, the skills, and the commands use `{repo}` and `{branch_prefix}` tokens; and at run start the active portal is materialized to `runtime/account/active-portal.yml` (for the default `mcs-labs` instance this equals `config/workshop.yml` verbatim, so no behavioral change).
+
+**Consequences.**
+- Custom instances require the `powershell-yaml` module for YAML merging. The default `mcs-labs` path continues to work without it via graceful fallback in `Resolve-LabRepo.ps1` (it re-uses its pre-v0.7.0 resolution logic when no user overlay is present).
+- Each instance gets an isolated managed clone under `%USERPROFILE%\.mcs-lab-auditor\<instance-name>` so a custom fork's clone never collides with the built-in mcs-labs clone.
+- Fully backward compatible — a user with zero overlay config targets `microsoft/mcs-labs` exactly as before; no migration step is required.
+- The mcs-labs-specific built-in candidate paths (enumerated in `config/lab-instances.yml`) are only searched when the active instance is `mcs-labs`, preventing a custom instance from accidentally resolving to an unrelated mcs-labs checkout.
+- See `docs/examples/lab-instances.sample.yml` for an annotated user overlay example, and `docs/extending.md#targeting-your-own-lab-fork` for the end-to-end walkthrough.
+
+**Alternatives considered.**
+- **Edit a single global config in place.** Rejected — the plugin cache (`~/.claude/plugins/cache/BootcampLabTestPlugin/mcs-lab-auditor/<version>`) is overwritten on every marketplace update; any in-place edit would be silently lost.
+- **One environment variable per configurable field.** Rejected — unwieldy to set for multi-field customization, and provides no support for defining and switching between multiple named instances.
+- **JSON instead of YAML for the user overlay.** Rejected — JSON does not support comments, which are important for a hand-maintained configuration file where explaining each field's purpose inline is practical and expected.
+- **Minimal "repo-only" parameterization keeping a single global portal.** Rejected — a fork of `mcs-labs` must be able to point at its own training portal; sharing the portal config from the built-in instance would cause a custom fork to redeem workshop codes against the wrong portal and receive credentials for the wrong tenant.
 
 ---
 

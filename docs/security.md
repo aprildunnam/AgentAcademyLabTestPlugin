@@ -18,6 +18,8 @@ If you find a flaw in this model, **do not file a public GitHub issue** — repo
 | Screenshots | `runtime/runs/<id>/labs/<slug>/screenshots/*.png` | Filesystem permissions only | Indefinite | May incidentally capture PII visible in the test account's tenant (test data, lab artifacts) |
 | Accessibility snapshots | `runtime/runs/<id>/labs/<slug>/snapshots/*.yml` | Filesystem permissions only | Indefinite | Captured DOM text — same concerns as screenshots |
 | Audit log | `runtime/audit-history.yml` | Filesystem permissions only | Indefinite | Contains `account_user_id` (workshop account email) and timestamps; no passwords, no tokens, no tenant IDs |
+| Active-portal config | `runtime/account/active-portal.yml` | Filesystem permissions only (gitignored under `runtime/`) | Regenerated each run from the active lab instance | **Configuration only — no credentials.** Contains portal URL, portal kind, redemption selectors, account-request form pre-fills, and (if present) `account_new_password_pattern`. That field is a *pattern* (e.g. `MyFork-Audit-{year}!Q9`), not a stored password. Equivalent to `config/workshop.yml` for the default instance; produced by `scripts/Resolve-LabInstance.ps1`. |
+| Lab-instances config | `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml` (optional, user-managed, outside plugin) | Filesystem permissions only | User-maintained | **Configuration only — no credentials.** Describes custom lab instances: `repo`, `clone_url`, `marker`, `path_candidates`, `branch_prefix`, and per-instance portal config (same non-secret fields as above). Workshop credentials remain solely in `credential.enc`. |
 
 ## DPAPI: what it does and doesn't protect against
 
@@ -47,7 +49,7 @@ ConvertTo-SecureString -String $plaintext -AsPlainText -Force `
 ### Logged (cleartext, in `runtime/audit-history.yml`)
 
 - `account_user_id` — the workshop account email.
-- `tenant_hint` — a human-readable label like `contoso-dev`, configured in `config/workshop.yml`.
+- `tenant_hint` — a human-readable label like `contoso-dev`, configured in `config/workshop.yml` (default instance) or in the user `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml` (custom instances). Same non-secret nature in both locations.
 - `workshop_code_hint` — first 4 chars of the workshop code.
 - Run-id, timestamps, lab slugs, statuses, finding counts, filed issue URLs.
 
@@ -94,7 +96,7 @@ If `account_user_id` is sensitive in your context (e.g., the workshop account's 
 - **Run `/audit-account clear` after a multi-day audit cycle ends.** Cached credentials past their `expires_at` are useless to the plugin but still potentially harvestable.
 - **Set tight filesystem permissions on `~/.claude/plugins/mcs-lab-auditor/runtime/`.** On a multi-user machine, ensure other accounts cannot read this directory. (DPAPI protects `credential.enc`; screenshots and other run artifacts are not encrypted.)
 - **Audit `runtime/runs/<old-id>/` periodically.** Old run artifacts (screenshots, transcripts) can be deleted without affecting future runs. The audit log entries remain intact.
-- **Do not check `runtime/` into any version control system.** The root `.gitignore` enforces this for this repo, but be careful if you copy the plugin elsewhere.
+- **Do not check `runtime/` into any version control system.** The root `.gitignore` enforces this for this repo, but be careful if you copy the plugin elsewhere. This covers `runtime/account/active-portal.yml` (portal config, no credentials) as well as run artifacts.
 - **If a workshop account is compromised mid-audit, run `/audit-account clear`** and notify the workshop issuer to revoke. The plugin has no revocation power of its own.
 
 ## Reporting flaws in this model
