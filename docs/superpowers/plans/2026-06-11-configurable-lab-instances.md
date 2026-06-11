@@ -1,0 +1,1051 @@
+# Configurable Lab Instances Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Let a user point this plugin at their own fork of the lab repo and their own training portal — selected per-run from named "lab instances" — without ever editing plugin-cache files.
+
+**Architecture:** A new `scripts/Resolve-LabInstance.ps1` is the single source of truth. It merges a plugin-shipped `config/lab-instances.yml` (carrying the built-in `mcs-labs` instance) with a user-owned `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml` (user wins per field), selects the active instance (`-Instance` flag → `$env:LAB_INSTANCE` → merged `default_instance` → shipped `mcs-labs`), resolves `branch_prefix` and the training portal, and emits the resolved instance as JSON. `Resolve-LabRepo.ps1`, `judge-config.yml`, the skills, and the commands all read repo / clone-url / branch-prefix / portal from this resolver instead of hardcoded `microsoft/mcs-labs` and `dewain/` literals.
+
+**Tech Stack:** PowerShell 7 (pwsh), `powershell-yaml` module (`ConvertFrom-Yaml`), `gh` CLI, Markdown skill/command/doc files, JSON plugin manifests.
+
+---
+
+## Decisions locked for this plan (read first)
+
+1. **YAML parser dependency.** Instance config is YAML (consistent with the rest of the plugin, supports comments — important for a user-maintained file). The resolver requires the `powershell-yaml` module. If it is not importable, the resolver hard-errors with the exact install command. This adds a one-time prerequisite (`Install-Module powershell-yaml -Scope CurrentUser -Force`) documented in `installation.md`.
+2. **No test framework.** The repo has none, and the installed Pester is 3.4.0 (incompatible `Should Be` syntax with Pester 5). Tests are **framework-free** `.ps1` scripts that assert and exit non-zero on failure.
+3. **Portal switching via a materialized runtime file.** The orchestrator writes the active instance's resolved portal to `runtime/account/active-portal.yml` at run start. Redemption references read that path instead of `config/workshop.yml`. For the default `mcs-labs` instance the materialized file is a copy of `config/workshop.yml`, so behavior is byte-for-byte unchanged.
+4. **`workshop.yml` stays in place.** The shipped `mcs-labs` instance references it via `portal_file: workshop.yml`. No file move.
+5. **Per-instance managed clone.** `Resolve-LabRepo.ps1` clones into `%USERPROFILE%\.mcs-lab-auditor\<instance-name>`. For `mcs-labs` that is `…\.mcs-lab-auditor\mcs-labs` — the historical path — so existing clones are reused.
+
+---
+
+## File structure
+
+**Created:**
+- `config/lab-instances.yml` — shipped instance registry; defines the `mcs-labs` default. ~30 lines.
+- `scripts/Resolve-LabInstance.ps1` — resolver / single source of truth. ~160 lines.
+- `tests/Test-ResolveLabInstance.ps1` — framework-free assertion tests. ~110 lines.
+- `tests/fixtures/` — temp dirs created by tests at runtime (git-ignored).
+
+**Modified:**
+- `scripts/Resolve-LabRepo.ps1` — source clone-url / marker / candidates / managed-clone from the resolver via a new `-Instance` param.
+- `config/judge-config.yml` — `issues.repo` & `proposal_issue.repo` documented as instance-sourced; branch patterns use `{branch_prefix}`; version bump.
+- `skills/mcs-lab-auditor/SKILL.md` — resolve instance at run start, materialize portal, define `{repo}`/`{branch_prefix}` handed to sub-skills.
+- `skills/mcs-lab-issue-filer/SKILL.md`, `skills/mcs-lab-fix-pr-filer/SKILL.md`, `skills/mcs-lab-new-lab-pr/SKILL.md`, `skills/mcs-lab-pr-appender/SKILL.md`, `skills/mcs-lab-builder/SKILL.md` — tokenize repo + branch-prefix literals.
+- `skills/mcs-lab-auditor/references/workshop-redemption.md`, `workshop-redemption-chatbot.md`, `playwright-cookbook.md` — read portal from the materialized runtime file.
+- `commands/audit-lab.md`, `commands/audit-event.md`, `commands/audit-bootcamp.md`, `commands/build-lab.md`, `commands/audit-account.md` — document `--instance`; portal write-back target.
+- `docs/installation.md`, `docs/extending.md`, `docs/architecture.md`, `docs/troubleshooting.md`, `README.md`, `CHANGELOG.md`.
+- `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` — version 0.7.0.
+- `.gitignore` — ignore `tests/fixtures/`.
+
+---
+
+## Phase 1 — Resolver foundation
+
+### Task 1: Shipped instance registry
+
+**Files:**
+- Create: `config/lab-instances.yml`
+
+- [ ] **Step 1: Create `config/lab-instances.yml`**
+
+```yaml
+# Lab instance registry (plugin-shipped defaults).
+#
+# A "lab instance" bundles everything that identifies one lab target: the
+# GitHub repo where issues/PRs are filed, the git clone URL + local search
+# paths for the lab content, the PR/branch author prefix, and the training
+# portal used to redeem a test account.
+#
+# DO NOT EDIT THIS FILE TO ADD YOUR OWN INSTANCE — it lives inside the plugin
+# and is overwritten on every plugin update. Instead create:
+#
+#     %USERPROFILE%\.mcs-lab-auditor\lab-instances.yml
+#
+# and define your fork's instance there. Your file is merged ON TOP of this
+# one (your values win per field) and survives plugin updates. See
+# docs/extending.md "Targeting your own lab fork".
+#
+# Active-instance resolution order:
+#   1. --instance <name>   (command flag)
+#   2. $env:LAB_INSTANCE
+#   3. default_instance     (your user file overrides the shipped value below)
+#   4. the shipped default  (mcs-labs)
+
+default_instance: mcs-labs
+
+instances:
+  mcs-labs:
+    repo: "microsoft/mcs-labs"
+    clone_url: "https://github.com/microsoft/mcs-labs.git"
+    marker: "_data/lab-config.yml"
+    branch_prefix: "dewain"
+    path_candidates:
+      - "%USERPROFILE%\\Projects\\mcs-labs"
+      - "%USERPROFILE%\\mcs-labs"
+      - "%USERPROFILE%\\source\\repos\\mcs-labs"
+      - "%USERPROFILE%\\.mcs-lab-auditor\\mcs-labs"
+    portal_file: "workshop.yml"
+```
+
+- [ ] **Step 2: Verify it parses**
+
+Run:
+```powershell
+pwsh -NoProfile -Command "Import-Module powershell-yaml; (ConvertFrom-Yaml (Get-Content -Raw config/lab-instances.yml)).instances.'mcs-labs'.repo"
+```
+Expected output: `microsoft/mcs-labs`
+
+- [ ] **Step 3: Commit**
+
+```powershell
+git add config/lab-instances.yml
+git commit -m "Add shipped lab-instances registry with mcs-labs default"
+```
+
+---
+
+### Task 2: Resolver tests (failing first)
+
+**Files:**
+- Create: `tests/Test-ResolveLabInstance.ps1`
+- Modify: `.gitignore`
+
+- [ ] **Step 1: Add fixtures ignore to `.gitignore`**
+
+Append this line to `.gitignore`:
+```
+tests/fixtures/
+```
+
+- [ ] **Step 2: Write the test script**
+
+Create `tests/Test-ResolveLabInstance.ps1` with exactly this content:
+
+```powershell
+#Requires -Version 7
+# Framework-free tests for scripts/Resolve-LabInstance.ps1.
+# Exits 0 if every assertion passes, 1 otherwise. Run:
+#   pwsh -NoProfile -File tests/Test-ResolveLabInstance.ps1
+$ErrorActionPreference = 'Stop'
+
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$resolver = Join-Path $repoRoot 'scripts/Resolve-LabInstance.ps1'
+$fixtures = Join-Path $PSScriptRoot 'fixtures'
+$fail = 0
+
+function New-TempUserDir { $d = Join-Path $fixtures ([System.IO.Path]::GetRandomFileName()); New-Item -ItemType Directory -Force -Path $d | Out-Null; return $d }
+function Invoke-Resolver([string[]] $extra) {
+    $out = & pwsh -NoProfile -File $resolver @extra 2>$null
+    return @{ out = ($out -join "`n"); code = $LASTEXITCODE }
+}
+function Assert([bool] $cond, [string] $name) {
+    if ($cond) { Write-Host "PASS  $name" -ForegroundColor Green }
+    else { Write-Host "FAIL  $name" -ForegroundColor Red; $script:fail++ }
+}
+
+# 1. No user file -> shipped mcs-labs default.
+$u = New-TempUserDir
+$r = Invoke-Resolver @('-Mode','Json','-UserConfigDir',$u)
+$j = $r.out | ConvertFrom-Json
+Assert ($r.code -eq 0) 'default: exit 0'
+Assert ($j.name -eq 'mcs-labs') 'default: name is mcs-labs'
+Assert ($j.repo -eq 'microsoft/mcs-labs') 'default: repo'
+Assert ($j.branch_prefix -eq 'dewain') 'default: branch_prefix'
+Assert ($j.marker -eq '_data/lab-config.yml') 'default: marker'
+Assert ($j.portal.portal_kind -eq 'chatbot') 'default: portal loaded from workshop.yml'
+
+# 2. User file adds an instance and sets default_instance.
+$u = New-TempUserDir
+@'
+default_instance: contoso
+instances:
+  contoso:
+    repo: "contoso/labs-fork"
+    clone_url: "https://github.com/contoso/labs-fork.git"
+    branch_prefix: "alice"
+    portal:
+      portal_kind: "skillable"
+      workshop_portal_url: "https://labs.contoso.com/redeem"
+'@ | Set-Content -LiteralPath (Join-Path $u 'lab-instances.yml')
+$r = Invoke-Resolver @('-Mode','Json','-UserConfigDir',$u)
+$j = $r.out | ConvertFrom-Json
+Assert ($j.name -eq 'contoso') 'user-default: name'
+Assert ($j.repo -eq 'contoso/labs-fork') 'user-default: repo'
+Assert ($j.branch_prefix -eq 'alice') 'user-default: prefix'
+Assert ($j.portal.workshop_portal_url -eq 'https://labs.contoso.com/redeem') 'user-default: inline portal'
+
+# 3. Unknown instance -> non-zero exit.
+$u = New-TempUserDir
+$r = Invoke-Resolver @('-Mode','Json','-Instance','nope','-UserConfigDir',$u)
+Assert ($r.code -ne 0) 'unknown: non-zero exit'
+
+# 4. User overrides ONE field of a shipped instance (field-level merge).
+$u = New-TempUserDir
+@'
+instances:
+  mcs-labs:
+    branch_prefix: "zzz"
+'@ | Set-Content -LiteralPath (Join-Path $u 'lab-instances.yml')
+$r = Invoke-Resolver @('-Mode','Json','-Instance','mcs-labs','-UserConfigDir',$u)
+$j = $r.out | ConvertFrom-Json
+Assert ($j.branch_prefix -eq 'zzz') 'merge: overridden field wins'
+Assert ($j.repo -eq 'microsoft/mcs-labs') 'merge: un-overridden field kept'
+
+# 5. $env:LAB_INSTANCE selects the instance when no flag is given.
+$u = New-TempUserDir
+@'
+instances:
+  contoso:
+    repo: "contoso/labs-fork"
+    clone_url: "https://github.com/contoso/labs-fork.git"
+    branch_prefix: "alice"
+    portal: { portal_kind: "email", workshop_portal_url: "https://x" }
+'@ | Set-Content -LiteralPath (Join-Path $u 'lab-instances.yml')
+$env:LAB_INSTANCE = 'contoso'
+$r = Invoke-Resolver @('-Mode','Json','-UserConfigDir',$u)
+$env:LAB_INSTANCE = $null
+$j = $r.out | ConvertFrom-Json
+Assert ($j.name -eq 'contoso') 'env: LAB_INSTANCE selects instance'
+
+if (Test-Path $fixtures) { Remove-Item -Recurse -Force $fixtures }
+if ($fail -gt 0) { Write-Host "`n$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
+Write-Host "`nAll assertions passed." -ForegroundColor Green
+exit 0
+```
+
+- [ ] **Step 3: Run the tests — verify they FAIL (resolver does not exist yet)**
+
+Run:
+```powershell
+pwsh -NoProfile -File tests/Test-ResolveLabInstance.ps1
+```
+Expected: failures / errors because `scripts/Resolve-LabInstance.ps1` does not exist yet (every `Invoke-Resolver` returns a non-zero code and empty output, so `ConvertFrom-Json` throws or assertions fail). Exit code 1.
+
+- [ ] **Step 4: Commit the failing test**
+
+```powershell
+git add tests/Test-ResolveLabInstance.ps1 .gitignore
+git commit -m "Add failing tests for Resolve-LabInstance"
+```
+
+---
+
+### Task 3: Implement the resolver
+
+**Files:**
+- Create: `scripts/Resolve-LabInstance.ps1`
+
+- [ ] **Step 1: Write `scripts/Resolve-LabInstance.ps1`**
+
+Create the file with exactly this content:
+
+```powershell
+<#
+.SYNOPSIS
+    Resolve the active "lab instance" — the named bundle describing which lab
+    repo (+ training portal + branch prefix) the plugin operates on.
+
+.DESCRIPTION
+    Merges the plugin-shipped config/lab-instances.yml with the user-owned
+    %USERPROFILE%\.mcs-lab-auditor\lab-instances.yml (user wins per field),
+    selects the active instance, resolves branch_prefix and the portal, and
+    emits the resolved instance as JSON (default), a one-line status, or the
+    name only.
+
+    Active-instance resolution order:
+      1. -Instance <name>
+      2. $env:LAB_INSTANCE
+      3. merged default_instance (user file overrides shipped)
+      4. shipped default ('mcs-labs')
+
+    Requires the 'powershell-yaml' module. Install once with:
+      Install-Module powershell-yaml -Scope CurrentUser -Force
+
+.PARAMETER Instance
+    Explicit instance name. Highest priority.
+
+.PARAMETER Mode
+    Json (default) | Status | Name.
+
+.PARAMETER UserConfigDir
+    Directory holding the user-owned lab-instances.yml. Defaults to
+    %USERPROFILE%\.mcs-lab-auditor. (Also a test seam.)
+
+.OUTPUTS
+    Json   : the resolved instance object on stdout.
+    Status : one human-readable line.
+    Name   : the active instance name only.
+#>
+[CmdletBinding()]
+param(
+    [string] $Instance,
+    [ValidateSet('Json', 'Status', 'Name')]
+    [string] $Mode = 'Json',
+    [string] $UserConfigDir = (Join-Path $env:USERPROFILE '.mcs-lab-auditor')
+)
+
+$ErrorActionPreference = 'Stop'
+
+if (-not (Get-Command ConvertFrom-Yaml -ErrorAction SilentlyContinue)) {
+    try { Import-Module powershell-yaml -ErrorAction Stop }
+    catch {
+        Write-Error ("The 'powershell-yaml' module is required to resolve lab instances. " +
+            "Install it once with:  Install-Module powershell-yaml -Scope CurrentUser -Force")
+        exit 5
+    }
+}
+
+$pluginConfigDir = Join-Path (Split-Path -Parent $PSScriptRoot) 'config'
+
+function Read-InstanceFile([string] $path, [string] $configDir) {
+    # Returns @{ default = <name|null>; instances = @{ name -> hashtable } }.
+    # A relative portal_file is resolved to an absolute path against THIS
+    # file's config dir, so a user instance that inherits a shipped portal_file
+    # still resolves after the merge.
+    if (-not (Test-Path -LiteralPath $path)) {
+        return @{ default = $null; instances = @{} }
+    }
+    try {
+        $doc = ConvertFrom-Yaml (Get-Content -LiteralPath $path -Raw)
+    } catch {
+        Write-Error "Failed to parse lab-instances file '$path': $($_.Exception.Message)"
+        exit 6
+    }
+    $instances = @{}
+    if ($doc.instances) {
+        foreach ($name in @($doc.instances.Keys)) {
+            $inst = $doc.instances[$name]
+            if ($inst.portal_file -and -not [System.IO.Path]::IsPathRooted($inst.portal_file)) {
+                $inst.portal_file = (Join-Path $configDir $inst.portal_file)
+            }
+            $instances[$name] = $inst
+        }
+    }
+    return @{ default = $doc.default_instance; instances = $instances }
+}
+
+$shipped = Read-InstanceFile (Join-Path $pluginConfigDir 'lab-instances.yml') $pluginConfigDir
+$userPath = Join-Path $UserConfigDir 'lab-instances.yml'
+$user = Read-InstanceFile $userPath $UserConfigDir
+
+# Merge: start from shipped, overlay user per field.
+$merged = @{}
+foreach ($name in @($shipped.instances.Keys)) { $merged[$name] = $shipped.instances[$name].Clone() }
+foreach ($name in @($user.instances.Keys)) {
+    if ($merged.ContainsKey($name)) {
+        $u = $user.instances[$name]
+        foreach ($k in @($u.Keys)) { $merged[$name][$k] = $u[$k] }
+        if ($u.ContainsKey('portal'))      { $merged[$name].Remove('portal_file') }
+        if ($u.ContainsKey('portal_file')) { $merged[$name].Remove('portal') }
+    } else {
+        $merged[$name] = $user.instances[$name]
+    }
+}
+
+if ($merged.Count -eq 0) {
+    Write-Error "No lab instances defined in shipped or user config."
+    exit 7
+}
+
+# Select active instance.
+$active = $null; $source = $null
+if     ($Instance)         { $active = $Instance;          $source = 'flag' }
+elseif ($env:LAB_INSTANCE) { $active = $env:LAB_INSTANCE;  $source = 'env' }
+elseif ($user.default)     { $active = $user.default;      $source = 'user-default' }
+elseif ($shipped.default)  { $active = $shipped.default;   $source = 'shipped-default' }
+
+if (-not $active -or -not $merged.ContainsKey($active)) {
+    $avail = (@($merged.Keys) | Sort-Object) -join ', '
+    Write-Error "Unknown lab instance '$active'. Available: $avail"
+    exit 8
+}
+
+$inst = $merged[$active]
+
+$marker = if ($inst.marker) { $inst.marker } else { '_data/lab-config.yml' }
+$candidates = @()
+if ($inst.path_candidates) {
+    $candidates = @($inst.path_candidates | ForEach-Object { [Environment]::ExpandEnvironmentVariables([string]$_) })
+}
+
+# branch_prefix: instance value -> gh login -> unresolved (consumers error later).
+$prefix = $inst.branch_prefix
+$prefixSource = 'config'
+if (-not $prefix) {
+    $prefix = $null
+    if (Get-Command gh -ErrorAction SilentlyContinue) {
+        try { $login = (gh api user --jq '.login' 2>$null); if ($login) { $prefix = "$login".Trim(); $prefixSource = 'gh-user' } } catch { }
+    }
+    if (-not $prefix) { $prefixSource = 'unresolved' }
+}
+
+# Per-instance managed clone path (two instances never share one working tree).
+$managedClone = Join-Path $UserConfigDir $active
+
+# Resolve portal: inline block wins, else load the referenced file.
+$portal = $null
+if ($inst.portal) {
+    $portal = $inst.portal
+} elseif ($inst.portal_file) {
+    if (-not (Test-Path -LiteralPath $inst.portal_file)) {
+        Write-Error "Instance '$active' references portal_file '$($inst.portal_file)' which does not exist."
+        exit 9
+    }
+    $portal = ConvertFrom-Yaml (Get-Content -LiteralPath $inst.portal_file -Raw)
+}
+
+$result = [ordered]@{
+    name                 = $active
+    repo                 = $inst.repo
+    clone_url            = $inst.clone_url
+    marker               = $marker
+    branch_prefix        = $prefix
+    branch_prefix_source = $prefixSource
+    path_candidates      = $candidates
+    managed_clone        = $managedClone
+    portal               = $portal
+    source               = $source
+}
+
+switch ($Mode) {
+    'Name'   { Write-Output $active }
+    'Status' {
+        $pk = if ($portal.portal_kind) { $portal.portal_kind } else { 'n/a' }
+        Write-Output ("lab-instance: $active [repo=$($inst.repo) prefix=$prefix portal=$pk] (via $source)")
+    }
+    'Json'   { Write-Output ($result | ConvertTo-Json -Depth 10) }
+}
+```
+
+- [ ] **Step 2: Run the tests — verify they PASS**
+
+Run:
+```powershell
+pwsh -NoProfile -File tests/Test-ResolveLabInstance.ps1
+```
+Expected: every line `PASS …`, final `All assertions passed.`, exit 0.
+
+- [ ] **Step 3: Smoke-test Status + Name modes**
+
+Run:
+```powershell
+pwsh -NoProfile -File scripts/Resolve-LabInstance.ps1 -Mode Status
+pwsh -NoProfile -File scripts/Resolve-LabInstance.ps1 -Mode Name
+```
+Expected: a `lab-instance: mcs-labs [repo=microsoft/mcs-labs prefix=dewain portal=chatbot] (via shipped-default)` line, then `mcs-labs`.
+
+- [ ] **Step 4: Commit**
+
+```powershell
+git add scripts/Resolve-LabInstance.ps1
+git commit -m "Implement Resolve-LabInstance resolver"
+```
+
+---
+
+## Phase 2 — Repo resolution wiring
+
+### Task 4: Thread `-Instance` into `Resolve-LabRepo.ps1`
+
+**Files:**
+- Modify: `scripts/Resolve-LabRepo.ps1`
+
+- [ ] **Step 1: Add the `-Instance` parameter**
+
+In the `param(...)` block (around line 44-52), change the `$RepoUrl` line and add `$Instance`. Replace:
+```powershell
+    [string[]] $Candidate = @(),
+    [string] $RepoUrl = 'https://github.com/microsoft/mcs-labs.git',
+    [switch] $NoPull,
+```
+with:
+```powershell
+    [string[]] $Candidate = @(),
+    [string] $Instance,
+    [string] $RepoUrl,
+    [switch] $NoPull,
+```
+
+- [ ] **Step 2: Resolve the instance and derive url/marker/candidates/clone from it**
+
+Immediately after `$ErrorActionPreference = 'Stop'` (line 54) and before `$marker = Join-Path '_data' 'lab-config.yml'` (line 55), insert:
+```powershell
+
+# Resolve the active lab instance — the source of truth for clone URL, marker,
+# candidate paths, and the managed-clone directory. Falls back to mcs-labs.
+$resolveInstance = Join-Path $PSScriptRoot 'Resolve-LabInstance.ps1'
+$inst = $null
+if (Test-Path -LiteralPath $resolveInstance) {
+    try {
+        $instJson = & $resolveInstance -Instance $Instance -Mode Json 2>$null
+        if ($LASTEXITCODE -eq 0 -and $instJson) { $inst = ($instJson | ConvertFrom-Json) }
+    } catch { $inst = $null }
+}
+if (-not $RepoUrl)  { $RepoUrl  = if ($inst) { $inst.clone_url } else { 'https://github.com/microsoft/mcs-labs.git' } }
+$markerRel          = if ($inst) { $inst.marker } else { '_data/lab-config.yml' }
+$instCandidates     = if ($inst -and $inst.path_candidates) { @($inst.path_candidates) } else { @() }
+$instManagedClone   = if ($inst) { $inst.managed_clone } else { $null }
+```
+
+- [ ] **Step 3: Use the instance marker**
+
+Replace line 55:
+```powershell
+$marker = Join-Path '_data' 'lab-config.yml'
+```
+with:
+```powershell
+$marker = ($markerRel -replace '/', [System.IO.Path]::DirectorySeparatorChar)
+```
+
+- [ ] **Step 4: Use the instance managed-clone path**
+
+Replace the `$managedClone` definition (line 68):
+```powershell
+$managedClone = Join-Path $env:USERPROFILE '.mcs-lab-auditor\mcs-labs'
+```
+with:
+```powershell
+$managedClone = if ($instManagedClone) { $instManagedClone } else { Join-Path $env:USERPROFILE '.mcs-lab-auditor\mcs-labs' }
+```
+
+- [ ] **Step 5: Feed instance candidates into the ordered list**
+
+Replace the candidate-assembly block (lines 86-91):
+```powershell
+$ordered = @()
+if ($RepoRoot)         { $ordered += $RepoRoot }
+if ($env:MCS_LABS_REPO){ $ordered += $env:MCS_LABS_REPO }
+$ordered += $Candidate
+$ordered += (Get-ConfigCandidates)
+$ordered += $builtins
+```
+with:
+```powershell
+$ordered = @()
+if ($RepoRoot)         { $ordered += $RepoRoot }
+if ($env:MCS_LABS_REPO){ $ordered += $env:MCS_LABS_REPO }
+$ordered += $Candidate
+$ordered += $instCandidates
+$ordered += (Get-ConfigCandidates)
+$ordered += $builtins
+```
+
+- [ ] **Step 6: Verify the mcs-labs default is unchanged**
+
+Run:
+```powershell
+pwsh -NoProfile -File scripts/Resolve-LabRepo.ps1 -Mode Status -NoPull -NoClone
+```
+Expected: a status line pointing at an mcs-labs path (or a "not found … -NoClone" error if you have no local clone — that is fine; it must still reference the mcs-labs candidates, not crash on the instance lookup).
+
+Run the resolver tests again to confirm nothing regressed:
+```powershell
+pwsh -NoProfile -File tests/Test-ResolveLabInstance.ps1
+```
+Expected: `All assertions passed.`
+
+- [ ] **Step 7: Commit**
+
+```powershell
+git add scripts/Resolve-LabRepo.ps1
+git commit -m "Source clone URL, marker, candidates, and clone path from the active instance"
+```
+
+---
+
+## Phase 3 — judge-config tokenization
+
+### Task 5: Tokenize repo + branch patterns in `judge-config.yml`
+
+**Files:**
+- Modify: `config/judge-config.yml`
+
+- [ ] **Step 1: Make `issues.repo` instance-sourced**
+
+Replace (line 154-155):
+```yaml
+issues:
+  repo: "microsoft/mcs-labs"
+```
+with:
+```yaml
+issues:
+  # Repo where audit issues/PRs are filed. Sourced at run start from the active
+  # lab instance (scripts/Resolve-LabInstance.ps1 -> .repo). The literal below
+  # is only the fallback for the built-in mcs-labs instance.
+  repo: "microsoft/mcs-labs"
+```
+
+- [ ] **Step 2: Tokenize the fix-PR branch patterns**
+
+Replace (lines 178 and 183):
+```yaml
+    pr_branch_pattern: "dewain/fix-{slug}-content-audit-{run_id}"
+```
+with:
+```yaml
+    pr_branch_pattern: "{branch_prefix}/fix-{slug}-content-audit-{run_id}"
+```
+and
+```yaml
+    pr_match_head_prefix: "dewain/fix-{slug}-content-audit"
+```
+with:
+```yaml
+    pr_match_head_prefix: "{branch_prefix}/fix-{slug}-content-audit"
+```
+
+- [ ] **Step 3: Tokenize the new-lab branch pattern**
+
+Replace (line 195):
+```yaml
+    pr_branch_pattern: "dewain/new-lab-{slug}-{build_id}"
+```
+with:
+```yaml
+    pr_branch_pattern: "{branch_prefix}/new-lab-{slug}-{build_id}"
+```
+
+- [ ] **Step 4: Make `proposal_issue.repo` instance-sourced**
+
+Replace (line 237):
+```yaml
+    repo: "microsoft/mcs-labs"
+```
+(the one nested under `proposal_issue:`) with:
+```yaml
+    repo: "microsoft/mcs-labs"   # sourced from the active instance; literal = mcs-labs fallback
+```
+
+- [ ] **Step 5: Verify the file still parses**
+
+Run:
+```powershell
+pwsh -NoProfile -Command "Import-Module powershell-yaml; (ConvertFrom-Yaml (Get-Content -Raw config/judge-config.yml)).issues.pr_append.pr_branch_pattern"
+```
+Expected: `{branch_prefix}/fix-{slug}-content-audit-{run_id}`
+
+- [ ] **Step 6: Commit**
+
+```powershell
+git add config/judge-config.yml
+git commit -m "Tokenize repo + branch-prefix in judge-config for instance sourcing"
+```
+
+---
+
+## Phase 4 — Skills
+
+> The skill `.md` files are agent instructions. The orchestrator resolves the
+> active instance once, then substitutes `{repo}` and `{branch_prefix}` (and the
+> materialized portal path) into the literal `gh` commands the sub-skills run —
+> the same substitution mechanism already used for `{slug}`, `{run_id}`, etc.
+
+### Task 6: Orchestrator resolves the instance and materializes the portal
+
+**Files:**
+- Modify: `skills/mcs-lab-auditor/SKILL.md`
+
+- [ ] **Step 1: Read the current Phase 1 / pre-flight section**
+
+Open `skills/mcs-lab-auditor/SKILL.md` and read lines 85-200 to locate the run-start pre-flight (the `Resolve-LabRepo.ps1` call and the `config/workshop.yml` read around lines 99 and 171).
+
+- [ ] **Step 2: Insert an instance-resolution step at run start**
+
+Find the pre-flight step that resolves the repo (the `gh repo view microsoft/mcs-labs` line, ~line 105, and the `Resolve-LabRepo.ps1` usage). Immediately before the repo is resolved, insert this instruction block:
+
+```markdown
+#### Resolve the active lab instance (FIRST, before any repo or portal access)
+
+Run once at the start of every audit/build run:
+
+```
+pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT/scripts/Resolve-LabInstance.ps1" -Mode Json -Instance "<--instance value or empty>"
+```
+
+Parse the JSON and hold these values for the whole run — every sub-skill uses them:
+
+- `{repo}`           = `.repo`           (e.g. `microsoft/mcs-labs`) — the target for ALL `gh issue` / `gh pr` / `gh repo` calls.
+- `{branch_prefix}`  = `.branch_prefix`  (e.g. `dewain`) — the prefix for ALL created branches. If `.branch_prefix_source` is `unresolved`, do NOT create any branch; halt and ask the user to set `branch_prefix` in their `lab-instances.yml` or authenticate `gh`.
+- `{clone_url}` / candidates are consumed by `Resolve-LabRepo.ps1 -Instance` (next step).
+
+Then resolve the repo, passing the instance through:
+
+```
+pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT/scripts/Resolve-LabRepo.ps1" -Mode Status -Instance "<--instance value or empty>"
+```
+
+Replace the old hardcoded `gh repo view microsoft/mcs-labs …` permission check with `gh repo view {repo} …`.
+
+#### Materialize the active portal
+
+Write the resolved `.portal` object to `runtime/account/active-portal.yml` (create the dir if needed). All redemption flows read THIS file, never `config/workshop.yml` directly. For the default `mcs-labs` instance this file is a copy of `config/workshop.yml`, so redemption behaves identically.
+```
+
+- [ ] **Step 3: Repoint the portal reads in this file**
+
+In `skills/mcs-lab-auditor/SKILL.md`, replace each `config/workshop.yml` occurrence in the redemption section (lines ~99, 171, 177, 187, 189) with `runtime/account/active-portal.yml`. For the URL write-back at line ~189 ("persist the URL to `config/workshop.yml`"), change it to:
+
+> persist the URL to the active instance's source — the user's `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml` inline `portal:` when the instance came from the user file, otherwise `config/workshop.yml` — and re-materialize `runtime/account/active-portal.yml`.
+
+- [ ] **Step 4: Update the self-improvement reference pointer**
+
+At line ~41 the prose mentions filing against `microsoft/mcs-labs`. Change "file bugs and PRs against BOTH `microsoft/mcs-labs` (lab side)" to "file bugs and PRs against BOTH the active instance's lab repo `{repo}` (lab side)".
+
+- [ ] **Step 5: Verify no stray hardcoded portal/repo reads remain in this file**
+
+Run:
+```powershell
+pwsh -NoProfile -Command "Select-String -Path skills/mcs-lab-auditor/SKILL.md -Pattern 'config/workshop\.yml|microsoft/mcs-labs' | ForEach-Object { $_.LineNumber.ToString() + ': ' + $_.Line }"
+```
+Expected: only intentional mentions remain (e.g. the materialize note saying "copy of `config/workshop.yml`", and the write-back fallback). No `gh … microsoft/mcs-labs` command lines, no redemption `config/workshop.yml` reads.
+
+- [ ] **Step 6: Commit**
+
+```powershell
+git add skills/mcs-lab-auditor/SKILL.md
+git commit -m "Orchestrator: resolve instance, materialize portal, tokenize repo"
+```
+
+---
+
+### Task 7: Tokenize repo + branch literals in the filer/builder skills
+
+**Files:**
+- Modify: `skills/mcs-lab-issue-filer/SKILL.md`
+- Modify: `skills/mcs-lab-fix-pr-filer/SKILL.md`
+- Modify: `skills/mcs-lab-new-lab-pr/SKILL.md`
+- Modify: `skills/mcs-lab-pr-appender/SKILL.md`
+- Modify: `skills/mcs-lab-builder/SKILL.md`
+
+Apply the SAME two rules to each file:
+
+- **Rule A:** In every executable `gh` command, replace `--repo microsoft/mcs-labs` with `--repo {repo}`. (`{repo}` is supplied by the orchestrator — Task 6.)
+- **Rule B:** Replace the branch-name literal prefix `dewain/` with `{branch_prefix}/` everywhere it appears in a branch name (`dewain/fix-…`, `dewain/new-lab-…`). In example URLs that show a literal branch (e.g. `github.com/microsoft/mcs-labs/pull/328` with branch `dewain/fix-…`), reword to `{repo}` / `{branch_prefix}/fix-…`.
+- **Keep:** Explanatory prose that names mcs-labs as the *default example* may stay, but reword "on `microsoft/mcs-labs`" that describes the *operation target* to "on the active instance's repo (`{repo}`)".
+
+- [ ] **Step 1: `mcs-lab-issue-filer/SKILL.md`** — apply Rule A to the `--repo microsoft/mcs-labs` lines (29, 130, 141, 175, 201, 233, 251). Reword line 29 ("New or updated issue at `github.com/microsoft/mcs-labs/issues/<n>`") to "…at `github.com/{repo}/issues/<n>`".
+
+- [ ] **Step 2: `mcs-lab-fix-pr-filer/SKILL.md`** — apply Rule A (lines 75, 84, 174) and Rule B (lines 31, 40-41, 49, 74, 89). Line 43 ("`C:\Users\dewainr\mcs-labs\` — clone of microsoft/mcs-labs") → "the resolved clone of `{repo}` (from `Resolve-LabRepo.ps1 -Instance`)".
+
+- [ ] **Step 3: `mcs-lab-new-lab-pr/SKILL.md`** — apply Rule A (line 66) and Rule B (line 35 default comment).
+
+- [ ] **Step 4: `mcs-lab-pr-appender/SKILL.md`** — apply Rule A (lines 72, 100, 138) and Rule B (lines 27, 38-39, 55, 57). Example URLs (38-39, 55, 57) → use `{repo}` / `{branch_prefix}`.
+
+- [ ] **Step 5: `mcs-lab-builder/SKILL.md`** — apply Rule A (lines 80, 134, 141) and Rule B (line 228 branch). Reword "open a tracking issue on `microsoft/mcs-labs`" (129, 226) and "A PR on `microsoft/mcs-labs`" (228) to use `{repo}`. Keep the label-taxonomy note (150) but change "match the existing `microsoft/mcs-labs` labels" to "match the labels defined on `{repo}` (the mcs-labs taxonomy by default)".
+
+- [ ] **Step 6: Verify only intentional mcs-labs/dewain mentions remain**
+
+Run:
+```powershell
+pwsh -NoProfile -Command "Select-String -Path skills/mcs-lab-*/SKILL.md -Pattern '--repo microsoft/mcs-labs|dewain/' | ForEach-Object { $_.Path + ':' + $_.LineNumber + ': ' + $_.Line }"
+```
+Expected: no matches (every command target and branch prefix is now tokenized).
+
+- [ ] **Step 7: Commit**
+
+```powershell
+git add skills/mcs-lab-issue-filer/SKILL.md skills/mcs-lab-fix-pr-filer/SKILL.md skills/mcs-lab-new-lab-pr/SKILL.md skills/mcs-lab-pr-appender/SKILL.md skills/mcs-lab-builder/SKILL.md
+git commit -m "Tokenize repo and branch prefix across filer/builder skills"
+```
+
+---
+
+### Task 8: Repoint portal reads in the redemption references
+
+**Files:**
+- Modify: `skills/mcs-lab-auditor/references/workshop-redemption.md`
+- Modify: `skills/mcs-lab-auditor/references/workshop-redemption-chatbot.md`
+- Modify: `skills/mcs-lab-auditor/references/playwright-cookbook.md`
+- Modify: `skills/mcs-lab-builder/SKILL.md`
+- Modify: `skills/mcs-lab-auditor/references/audit-log-schema.md`
+
+- [ ] **Step 1: Replace `config/workshop.yml` with the materialized portal path**
+
+In `workshop-redemption.md` (lines 9, 10, 17, 26, 102, 180), `workshop-redemption-chatbot.md` (lines 8, 12, 252, 256, 286), and `playwright-cookbook.md` (line 126): replace every read of `config/workshop.yml` (and `config/workshop.yml#auth_probe_url`, `config/workshop.yml.X`) with `runtime/account/active-portal.yml` (and `runtime/account/active-portal.yml.X`).
+
+- [ ] **Step 2: Add a one-line orientation note at the top of each redemption reference**
+
+At the top of `workshop-redemption.md` and `workshop-redemption-chatbot.md`, add:
+```markdown
+> Portal values come from `runtime/account/active-portal.yml`, which the
+> orchestrator materializes at run start from the active lab instance's portal
+> (the `mcs-labs` instance's portal is `config/workshop.yml`).
+```
+
+- [ ] **Step 3: Fix the write-back instruction**
+
+In `workshop-redemption.md` line 102 ("prompt the user to update the selectors in `config/workshop.yml`") change to "…update the selectors in the active instance's portal config (`config/workshop.yml` for `mcs-labs`, else your `lab-instances.yml` inline `portal:`)".
+
+- [ ] **Step 4: audit-log-schema.md** — line 47 comment "label from config/workshop.yml" → "label from the active instance's portal (`tenant_hint`)".
+
+- [ ] **Step 5: builder portal reads** — `mcs-lab-builder/SKILL.md` lines 75 and 113 read `config/workshop.yml`. Change to `runtime/account/active-portal.yml`.
+
+- [ ] **Step 6: Verify**
+
+Run:
+```powershell
+pwsh -NoProfile -Command "Select-String -Path skills/mcs-lab-auditor/references/*.md, skills/mcs-lab-builder/SKILL.md -Pattern 'config/workshop\.yml' | ForEach-Object { $_.Path + ':' + $_.LineNumber }"
+```
+Expected: only the orientation notes / write-back fallbacks that intentionally name `config/workshop.yml` as the mcs-labs default remain.
+
+- [ ] **Step 7: Commit**
+
+```powershell
+git add skills/mcs-lab-auditor/references/ skills/mcs-lab-builder/SKILL.md
+git commit -m "Read portal from materialized active-portal.yml instead of workshop.yml"
+```
+
+---
+
+## Phase 5 — Commands
+
+### Task 9: Document `--instance` and the portal write-back target
+
+**Files:**
+- Modify: `commands/audit-lab.md`
+- Modify: `commands/audit-event.md`
+- Modify: `commands/audit-bootcamp.md`
+- Modify: `commands/build-lab.md`
+- Modify: `commands/audit-account.md`
+
+- [ ] **Step 1: Add an `--instance` flag note to each audit/build command**
+
+In `audit-lab.md`, `audit-event.md`, `audit-bootcamp.md`, and `build-lab.md`, add this bullet to the flags/arguments section of each:
+```markdown
+- `--instance <name>` — which lab instance to operate on (repo + clone URL +
+  training portal + branch prefix). Resolved by `scripts/Resolve-LabInstance.ps1`.
+  Order: this flag → `$env:LAB_INSTANCE` → your `lab-instances.yml`
+  `default_instance` → the shipped `mcs-labs`. Run
+  `pwsh -File scripts/Resolve-LabInstance.ps1 -Mode Status` to see the active one.
+```
+For `audit-bootcamp.md`, also note that it pins `--event bootcamp` but `--instance` still applies.
+
+- [ ] **Step 2: Add an instance pre-flight line to each command**
+
+In each of the four commands, in the pre-flight/context block where it already shows resolved state, add a backticked status line:
+```markdown
+- active lab instance: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabInstance.ps1" -Mode Status`
+```
+
+- [ ] **Step 3: `audit-account.md` portal source**
+
+Lines 38, 58, 63, 75 read/write `config/workshop.yml`. Change line 38 pre-flight grep to read the materialized portal if present, else workshop.yml:
+```markdown
+- workshop portal configured: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabInstance.ps1" -Mode Status`
+```
+Change lines 58/63/75 references from `config/workshop.yml` to "the active instance's portal" and route the first-run URL write-back to the instance source (user `lab-instances.yml` inline portal, else `config/workshop.yml`), then re-materialize `runtime/account/active-portal.yml`.
+
+- [ ] **Step 4: Verify the pre-flight commands run**
+
+Run:
+```powershell
+pwsh -NoProfile -File scripts/Resolve-LabInstance.ps1 -Mode Status
+```
+Expected: the one-line status (proves the new pre-flight lines will resolve).
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add commands/
+git commit -m "Document --instance flag and instance-sourced portal in commands"
+```
+
+---
+
+## Phase 6 — Docs and version
+
+### Task 10: Documentation
+
+**Files:**
+- Modify: `docs/installation.md`
+- Modify: `docs/extending.md`
+- Modify: `docs/architecture.md`
+- Modify: `docs/troubleshooting.md`
+- Modify: `README.md`
+
+- [ ] **Step 1: `installation.md` — add the prerequisite**
+
+Add a "Prerequisites" item:
+```markdown
+- **PowerShell module `powershell-yaml`** (only needed if you define custom lab
+  instances; the resolver errors with this exact command if it is missing):
+
+  ```powershell
+  Install-Module powershell-yaml -Scope CurrentUser -Force
+  ```
+```
+
+- [ ] **Step 2: `extending.md` — add "Targeting your own lab fork"**
+
+Add a section with a complete walkthrough:
+```markdown
+## Targeting your own lab fork
+
+The plugin ships pointed at `microsoft/mcs-labs`. To point it at your own fork
+and training portal WITHOUT editing plugin files, create:
+
+`%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml`
+
+```yaml
+default_instance: my-fork
+
+instances:
+  my-fork:
+    repo: "myorg/my-labs-fork"                    # where issues/PRs are filed
+    clone_url: "https://github.com/myorg/my-labs-fork.git"
+    branch_prefix: "myuser"                       # your PR/branch prefix
+    # marker + path_candidates are optional (default: _data/lab-config.yml and
+    # the usual %USERPROFILE% locations under .mcs-lab-auditor\my-fork)
+    portal:                                        # your own training portal
+      portal_kind: "chatbot"                       # chatbot | skillable | email
+      workshop_portal_url: "https://your.portal/redeem"
+      sso_anchor_url: "https://login.microsoftonline.com/"
+      auth_probe_url: "https://copilotstudio.microsoft.com/"
+      # ...any other field from config/workshop.yml you need to override...
+```
+
+Your file is merged on top of the shipped registry (your values win per field)
+and is never touched by plugin updates. Verify with:
+
+```powershell
+pwsh -File <plugin>/scripts/Resolve-LabInstance.ps1 -Mode Status
+```
+
+Select an instance for one run with `--instance my-fork` or `$env:LAB_INSTANCE`.
+```
+
+- [ ] **Step 3: `architecture.md` — document the resolver layer**
+
+Add a short subsection describing: `Resolve-LabInstance.ps1` as the single source of truth; the shipped-vs-user layering; that `Resolve-LabRepo.ps1`, `judge-config.yml`, skills, and commands all read `{repo}` / `{branch_prefix}` / clone-url / portal from it; and the `runtime/account/active-portal.yml` materialization.
+
+- [ ] **Step 4: `troubleshooting.md` — add two entries**
+
+```markdown
+### "The 'powershell-yaml' module is required to resolve lab instances"
+Run `Install-Module powershell-yaml -Scope CurrentUser -Force`, then retry.
+
+### "Unknown lab instance '<name>'"
+The `--instance` / `$env:LAB_INSTANCE` name does not match any instance in the
+shipped registry or your `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml`. Run
+`pwsh -File scripts/Resolve-LabInstance.ps1 -Mode Status` and check the spelling.
+```
+
+- [ ] **Step 5: `README.md` — note multi-instance support**
+
+Change the opening description so it no longer implies mcs-labs is the only target. After the first paragraph add one sentence: "Defaults to `microsoft/mcs-labs`; point it at your own fork + training portal via a user `lab-instances.yml` — see docs/extending.md."
+
+- [ ] **Step 6: Commit**
+
+```powershell
+git add docs/ README.md
+git commit -m "Document configurable lab instances and the powershell-yaml prerequisite"
+```
+
+---
+
+### Task 11: CHANGELOG and version bump to 0.7.0
+
+**Files:**
+- Modify: `CHANGELOG.md`
+- Modify: `config/judge-config.yml`
+- Modify: `.claude-plugin/plugin.json`
+- Modify: `.claude-plugin/marketplace.json`
+
+- [ ] **Step 1: Add a `0.7.0` CHANGELOG entry (Keep a Changelog format)**
+
+Add under the top of the changelog (above `0.6.1`), a new dated `## [0.7.0]` section with `### Added` (configurable lab instances: `config/lab-instances.yml`, user overlay at `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml`, `scripts/Resolve-LabInstance.ps1`, `--instance` flag / `$env:LAB_INSTANCE`, per-instance training portal + branch prefix, `powershell-yaml` prerequisite) and `### Changed` (`Resolve-LabRepo.ps1`, `judge-config.yml`, skills, and commands now source repo/clone-url/branch-prefix/portal from the active instance; redemption reads `runtime/account/active-portal.yml`). Add the `[0.7.0]` compare link at the bottom.
+
+- [ ] **Step 2: Bump `plugin_version` in `judge-config.yml`**
+
+Replace (line ~274):
+```yaml
+plugin_version: "0.6.1"
+```
+with:
+```yaml
+plugin_version: "0.7.0"
+```
+
+- [ ] **Step 3: Bump `.claude-plugin/plugin.json`**
+
+Replace `"version": "0.6.1"` with `"version": "0.7.0"`.
+
+- [ ] **Step 4: Bump `.claude-plugin/marketplace.json`**
+
+Replace `"version": "0.6.1"` with `"version": "0.7.0"`.
+
+- [ ] **Step 5: Verify versions are consistent**
+
+Run:
+```powershell
+pwsh -NoProfile -Command "Select-String -Path .claude-plugin/plugin.json, .claude-plugin/marketplace.json, config/judge-config.yml -Pattern '0\.7\.0' | Measure-Object | ForEach-Object Count"
+```
+Expected: `3` (one match per file).
+
+- [ ] **Step 6: Commit**
+
+```powershell
+git add CHANGELOG.md config/judge-config.yml .claude-plugin/plugin.json .claude-plugin/marketplace.json
+git commit -m "Release 0.7.0: configurable lab instances"
+```
+
+---
+
+## Phase 7 — Final verification
+
+### Task 12: Full sweep and smoke test
+
+- [ ] **Step 1: Resolver tests pass**
+
+Run:
+```powershell
+pwsh -NoProfile -File tests/Test-ResolveLabInstance.ps1
+```
+Expected: `All assertions passed.` exit 0.
+
+- [ ] **Step 2: No un-tokenized operation targets remain**
+
+Run:
+```powershell
+pwsh -NoProfile -Command "Select-String -Path skills/**/*.md, commands/*.md -Pattern '--repo microsoft/mcs-labs|dewain/fix-|dewain/new-lab-' | ForEach-Object { $_.Path + ':' + $_.LineNumber + ': ' + $_.Line }"
+```
+Expected: no matches.
+
+- [ ] **Step 3: End-to-end resolver smoke with a temp fork instance**
+
+Run:
+```powershell
+$tmp = Join-Path $env:TEMP 'lab-inst-smoke'; New-Item -ItemType Directory -Force $tmp | Out-Null
+"default_instance: smoke`ninstances:`n  smoke:`n    repo: `"x/y`"`n    clone_url: `"https://github.com/x/y.git`"`n    branch_prefix: `"me`"`n    portal: { portal_kind: chatbot, workshop_portal_url: 'https://p' }" | Set-Content (Join-Path $tmp 'lab-instances.yml')
+pwsh -NoProfile -File scripts/Resolve-LabInstance.ps1 -Mode Status -UserConfigDir $tmp
+Remove-Item -Recurse -Force $tmp
+```
+Expected: `lab-instance: smoke [repo=x/y prefix=me portal=chatbot] (via user-default)`.
+
+- [ ] **Step 4: Default instance still resolves with zero user config**
+
+Run:
+```powershell
+pwsh -NoProfile -File scripts/Resolve-LabInstance.ps1 -Mode Status -UserConfigDir (Join-Path $env:TEMP 'definitely-empty-dir')
+```
+Expected: `lab-instance: mcs-labs [repo=microsoft/mcs-labs prefix=dewain portal=chatbot] (via shipped-default)`.
+
+- [ ] **Step 5: Final commit if any verification fix was needed**
+
+```powershell
+git status
+# commit only if the sweep surfaced a missed literal that you fixed
+```
+
+---
+
+## Notes for the implementer
+
+- **Do not** auto-install `powershell-yaml`; the resolver only errors with the install command (Decision 1). The module is already present in this dev environment.
+- The shipped `mcs-labs` `branch_prefix` is intentionally `dewain` to preserve current branch names exactly. Do not change it.
+- When tokenizing skill prose, prefer leaving a human-readable "(mcs-labs by default)" aside so the docs still read naturally — only the *operation targets* (`gh --repo …`, branch names) must become tokens.
+- Commit after every task; never squash phases together.
