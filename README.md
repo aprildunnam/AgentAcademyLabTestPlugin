@@ -1,11 +1,13 @@
 # BootcampLabTestPlugin (`mcs-lab-auditor`)
 
-A Claude Code plugin that **audits and builds** labs in the [`microsoft/mcs-labs`](https://github.com/microsoft/mcs-labs) repository end-to-end, driving the live product UI with Playwright.
+A Claude Code plugin that **audits and builds** labs in a target lab repository end-to-end, driving the live product UI with Playwright.
 
 - **Audit mode** (`/audit-*`) drives an existing lab's steps, has an LLM judge compare observed behavior to each written instruction, and files **one GitHub issue per lab** (plus a matching fix-PR) whenever steps are broken or unclear. Clean labs produce a local-only audit-history entry — no GitHub activity when nothing's wrong.
 - **Build mode** (`/build-lab`, v0.4.0+) **interactively authors a new lab**: it gets a workshop account, drives to the Copilot Studio Home page, captures the lab step-by-step (instructions + tips + screenshots, confirming every step), assembles a sibling-formatted `labs/<slug>/README.md`, re-runs it through the same audit engine as a quality gate, and opens a PR adding the lab.
 
 Both modes are **event/workshop-agnostic**. The audit scope is enumerated from two Jekyll collections in the mcs-labs repo — `_events/<id>.md` (formal curated events: bootcamp, the buildathons) and `_workshops/<id>.md` (on-demand workshops: the Azure AI workshop, MCS-in-a-Day, Agent-in-a-Day, the Agent Academy tracks) — via `scripts/Get-EventCatalog.ps1`. **Events and workshops are both first-class audit scopes.** Single labs can still be audited individually against the full `lab_metadata` catalog, and a built lab is created standalone with optional event/workshop attachment — nothing is hardcoded to bootcamp. (The legacy `_data/lab-config.yml.event_configs` table is now only a last-resort fallback; it has drifted out of sync with the collections.)
+
+Defaults to `microsoft/mcs-labs`; point it at your own fork + training portal via a user `lab-instances.yml` — see docs/extending.md.
 
 **The plugin writes to the mcs-labs repo through three narrow paths.** (a) `gh issue create | comment | edit` for issues + label hygiene (always on). (b) A **fix-PR per audit run** with findings: it applies the `suggested_correction` diffs + screenshot replacements and opens a new PR on a run-unique branch `dewain/fix-<slug>-content-audit-<run-id>` — *unless* an open fix-PR for that lab already exists, in which case the run's commit is appended to that PR instead of opening a duplicate. See `skills/mcs-lab-fix-pr-filer/SKILL.md`. (c) A screenshots-only commit appended to an **already-open** fix-PR (same-author, mergeable) for the lighter re-audit case — on by default, suppressed with `--no-update-screenshots` / `--no-append-to-pr` (CLI) or `issues.pr_append.enabled_by_default: false` (config). See `skills/mcs-lab-pr-appender/SKILL.md`.
 

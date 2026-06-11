@@ -86,6 +86,40 @@ After resolution the repo is fast-forwarded to `origin/main` (unless it's on a n
 pwsh "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Status
 ```
 
+## Targeting your own lab fork
+
+The plugin ships pointed at `microsoft/mcs-labs`. To point it at your own fork
+and training portal WITHOUT editing plugin files, create:
+
+`%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml`
+
+```yaml
+default_instance: my-fork
+
+instances:
+  my-fork:
+    repo: "myorg/my-labs-fork"                    # where issues/PRs are filed
+    clone_url: "https://github.com/myorg/my-labs-fork.git"
+    branch_prefix: "myuser"                       # your PR/branch prefix
+    # marker + path_candidates are optional (default: _data/lab-config.yml and
+    # the usual %USERPROFILE% locations under .mcs-lab-auditor\my-fork)
+    portal:                                        # your own training portal
+      portal_kind: "chatbot"                       # chatbot | skillable | email
+      workshop_portal_url: "https://your.portal/redeem"
+      sso_anchor_url: "https://login.microsoftonline.com/"
+      auth_probe_url: "https://copilotstudio.microsoft.com/"
+      # ...any other field from config/workshop.yml you need to override...
+```
+
+Your file is merged on top of the shipped registry (your values win per field)
+and is never touched by plugin updates. Verify with:
+
+```powershell
+pwsh -File <plugin>/scripts/Resolve-LabInstance.ps1 -Mode Status
+```
+
+Select an instance for one run with `--instance my-fork` or `$env:LAB_INSTANCE`.
+
 ### Adding or auditing a different event or workshop
 
 Event **and** workshop scopes are **first-class** (ADR-022). The scope catalog is enumerated at run start from two Jekyll collections in the mcs-labs repo by `scripts/Get-EventCatalog.ps1`:

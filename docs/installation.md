@@ -15,6 +15,13 @@ Step-by-step setup for `mcs-lab-auditor`. If you hit problems, jump to [Troubles
 | **A local clone of `microsoft/mcs-labs`** *(optional — auto-cloned if missing)* | The plugin reads lab markdown, the `_events/` + `_workshops/` collections, and `_data/lab-config.yml` from it | Not required up front: `scripts/Resolve-LabRepo.ps1` resolves an existing clone or clones one into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs` at run start. See [Repo resolution](#repo-resolution-no-path-edits-needed). |
 | **An unredeemed workshop code** | One per audit run, used during `/audit-account redeem` | Obtained from your workshop organizer; expires after one redemption |
 
+- **PowerShell module `powershell-yaml`** (only needed if you define custom lab
+  instances; the resolver errors with this exact command if it is missing):
+
+  ```powershell
+  Install-Module powershell-yaml -Scope CurrentUser -Force
+  ```
+
 > Heads-up: workshop accounts typically expire within 24–48 hours. Don't redeem the code days before you intend to start an audit run.
 
 ## Step 1 — Install `gh` and authenticate
