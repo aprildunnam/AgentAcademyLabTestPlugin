@@ -28,6 +28,13 @@ Parse these flags:
 - `--interactive-only` — opt out of the static analysis fan-out for this run. Assumes a previous run produced `findings-static.json` for each in-scope lab and merges them at lab completion. The interview skips the phase-mix question (Q2). Useful for re-verifying a previously-audited lab after a product release.
 - `--account-prompt <always|only_if_expired|only_if_missing>` — override `judge-config.yml.execution.account_prompt_mode` for this run. Default is whatever the config says (ships as `always`). Controls only the account question (Q1); the other interview questions are governed by their own flags.
 - `--model-preset <optimized|opus|custom>` — choose the sub-agent model preset without interactive Q2a. Orchestrator is always Opus.
+- `--instance <name>` — which lab instance to operate on (repo + clone URL +
+  training portal + branch prefix). Resolved by `scripts/Resolve-LabInstance.ps1`.
+  Order: this flag → `$env:LAB_INSTANCE` → your `lab-instances.yml`
+  `default_instance` → the shipped `mcs-labs`. Run
+  `pwsh -File scripts/Resolve-LabInstance.ps1 -Mode Status` to see the active one.
+  Note: this command pins `--event bootcamp`, but `--instance` still applies and
+  selects which lab repo + portal to use for that bootcamp run.
 
 ## Pre-flight context
 
@@ -36,6 +43,7 @@ Parse these flags:
 - mcs-labs repo (resolved + updated): !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Status`
 - bootcamp lab list: !`pwsh -NoProfile -Command '$r = & "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Path -NoPull; (& "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-EventCatalog.ps1" -RepoRoot $r -Json | ConvertFrom-Json | Where-Object id -eq "bootcamp").labs'`
 - cached account meta: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode Raw -Path "$env:CLAUDE_PLUGIN_ROOT\runtime\account\account.meta.json" -Fallback "(no cached account)"`
+- active lab instance: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabInstance.ps1" -Mode Status`
 
 ## Your task
 

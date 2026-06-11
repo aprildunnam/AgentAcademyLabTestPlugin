@@ -24,6 +24,11 @@ Parse these flags:
 - `--no-update-screenshots` (alias `--no-append-to-pr`) — opt out of the **default-on** screenshot refresh onto any open fix-PR. Screenshot files only; same-author only; mergeable PRs only; never creates a new branch or PR.
 - `--account-prompt <always|only_if_expired|only_if_missing>` — override `judge-config.yml.execution.account_prompt_mode` for this run. Controls only Q1.
 - `--model-preset <optimized|opus|custom>` — choose the sub-agent model preset without interactive Q2a. The orchestrator is always Opus (asserted in Phase 1). `optimized` is the recommended default (~$50 per bootcamp run, ~85% completion). `opus` forces every sub-agent to Opus (~$140, ~90% completion). `custom` halts the run so you can edit per-function overrides in `config/judge-config.yml.execution.model.*`.
+- `--instance <name>` — which lab instance to operate on (repo + clone URL +
+  training portal + branch prefix). Resolved by `scripts/Resolve-LabInstance.ps1`.
+  Order: this flag → `$env:LAB_INSTANCE` → your `lab-instances.yml`
+  `default_instance` → the shipped `mcs-labs`. Run
+  `pwsh -File scripts/Resolve-LabInstance.ps1 -Mode Status` to see the active one.
 
 ## Pre-flight context
 
@@ -32,6 +37,7 @@ Parse these flags:
 - mcs-labs repo (resolved + updated): !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Status`
 - events & workshops available: !`pwsh -NoProfile -Command '$r = & "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Path -NoPull; & "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-EventCatalog.ps1" -RepoRoot $r'`
 - cached account meta: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode Raw -Path "$env:CLAUDE_PLUGIN_ROOT\runtime\account\account.meta.json" -Fallback "(no cached account)"`
+- active lab instance: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabInstance.ps1" -Mode Status`
 
 ## Your task
 

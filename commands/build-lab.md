@@ -19,6 +19,11 @@ The first positional argument is an **optional** free-text lab name (e.g. `"Buil
 - `--no-pr` — run B0–B6 (build + audit gate) but stop before B7. Leaves the assembled draft + screenshots under `runtime/builds/<build-id>/draft/` and prints the registration steps. The mcs-labs working tree is never modified.
 - `--account-prompt <always|only_if_expired|only_if_missing>` — override `judge-config.yml.execution.account_prompt_mode` for this build.
 - `--model-preset <optimized|opus|custom>` — choose the sub-agent model preset (used by the B6 audit gate) without the interactive prompt. Orchestrator is always Opus.
+- `--instance <name>` — which lab instance to operate on (repo + clone URL +
+  training portal + branch prefix). Resolved by `scripts/Resolve-LabInstance.ps1`.
+  Order: this flag → `$env:LAB_INSTANCE` → your `lab-instances.yml`
+  `default_instance` → the shipped `mcs-labs`. Run
+  `pwsh -File scripts/Resolve-LabInstance.ps1 -Mode Status` to see the active one.
 
 ## Pre-flight context
 
@@ -26,6 +31,7 @@ The first positional argument is an **optional** free-text lab name (e.g. `"Buil
 - plugin version: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Test-PluginVersion.ps1"`
 - mcs-labs repo (resolved + updated): !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Status`
 - existing lab ids (collision check): !`pwsh -NoProfile -Command '$r = & "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Path -NoPull; & "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode GrepContext -Path "$r\_data\lab-config.yml" -Pattern "id:" -ContextAfter 0 -Fallback "MISSING - resolve mcs-labs path in B0"'`
+- active lab instance: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabInstance.ps1" -Mode Status`
 
 ## Your task
 

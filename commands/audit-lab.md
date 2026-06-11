@@ -19,6 +19,11 @@ The first positional argument is the lab slug (e.g. `core-concepts-analytics-eva
 - `--interactive-only` — skip the static fan-out; assumes a prior run produced `findings-static.json`. The interview skips the phase-mix question (Q2).
 - `--account-prompt <always|only_if_expired|only_if_missing>` — override `judge-config.yml.execution.account_prompt_mode` for this run.
 - `--model-preset <optimized|opus|custom>` — choose the sub-agent model preset without interactive Q2a. Orchestrator is always Opus.
+- `--instance <name>` — which lab instance to operate on (repo + clone URL +
+  training portal + branch prefix). Resolved by `scripts/Resolve-LabInstance.ps1`.
+  Order: this flag → `$env:LAB_INSTANCE` → your `lab-instances.yml`
+  `default_instance` → the shipped `mcs-labs`. Run
+  `pwsh -File scripts/Resolve-LabInstance.ps1 -Mode Status` to see the active one.
 
 ## Pre-flight context
 
@@ -26,6 +31,7 @@ The first positional argument is the lab slug (e.g. `core-concepts-analytics-eva
 - mcs-labs repo (resolved + updated): !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Status`
 - all-labs catalog (id → title): !`pwsh -NoProfile -Command '$r = & "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabRepo.ps1" -Mode Path -NoPull; & "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode GrepContext -Path "$r\_data\lab-config.yml" -Pattern "^lab_metadata:" -ContextAfter 20 -Fallback "MISSING - lab-config.yml not found"'`
 - cached account: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Get-PathOrFallback.ps1" -Mode JsonField -Path "$env:CLAUDE_PLUGIN_ROOT\runtime\account\account.meta.json" -JsonField user_id -Fallback "(none)"`
+- active lab instance: !`pwsh -NoProfile -File "$env:CLAUDE_PLUGIN_ROOT\scripts\Resolve-LabInstance.ps1" -Mode Status`
 
 ## Your task
 
