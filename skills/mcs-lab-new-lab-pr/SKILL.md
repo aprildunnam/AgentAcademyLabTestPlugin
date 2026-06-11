@@ -32,7 +32,7 @@ Open the PR for a freshly-built lab. You are called by `mcs-lab-builder` at B7 w
 
 2. **Create the branch (run-unique, off fresh main).**
    ```
-   branch = build.issues.new_lab_pr.pr_branch_pattern   # default "dewain/new-lab-{slug}-{build_id}"
+   branch = build.issues.new_lab_pr.pr_branch_pattern   # default "{branch_prefix}/new-lab-{slug}-{build_id}"
    git checkout -b "<branch>" origin/main
    ```
    The `{build_id}` suffix makes the branch unique — re-running build for the same slug yields a fresh build_id and a fresh branch, so a merged/closed prior PR never collides. (No open-PR append path: a new lab is one-shot.)
@@ -63,7 +63,7 @@ Open the PR for a freshly-built lab. You are called by `mcs-lab-builder` at B7 w
 7. **Push and open the PR.**
    ```
    git push -u origin <branch>
-   gh pr create --repo microsoft/mcs-labs --base main --head <branch> \
+   gh pr create --repo {repo} --base main --head <branch> \
      --title "<slug>: add new lab" \
      --body-file "runtime/builds/<build_id>/pr-body.md"
    ```

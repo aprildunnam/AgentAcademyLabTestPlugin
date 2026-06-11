@@ -77,7 +77,7 @@ This file is the orchestrator. It reuses the auditor's reference docs and adds i
 4. **Check `gh` auth + repo permission** (needed for B7; verify early so a long build doesn't end at a permission wall):
    ```
    gh auth status
-   gh repo view microsoft/mcs-labs --json viewerPermission
+   gh repo view {repo} --json viewerPermission
    ```
    Halt on failure unless `--no-pr` is set (then warn and continue — the build still produces a draft).
 
@@ -126,19 +126,19 @@ The browser session established here is reused across the whole build (and by B6
 
 ### B3.5 — File the new-lab proposal issue (MANDATORY when PR target is reachable)
 
-As soon as the lab is named and scaffolded, open a tracking issue on `microsoft/mcs-labs` so the new lab is visible to the team as an **In Progress** proposal for the whole duration of the build. Governed by `judge-config.yml.build.proposal_issue` (defaults in `references/build-session-spec.md`).
+As soon as the lab is named and scaffolded, open a tracking issue on the active instance's repo (`{repo}`) so the new lab is visible to the team as an **In Progress** proposal for the whole duration of the build. Governed by `judge-config.yml.build.proposal_issue` (defaults in `references/build-session-spec.md`).
 
 1. **Skip / defer conditions.** Skip only if `build.proposal_issue.enabled: false`, or if `gh` is unauthenticated / lacks issue-create permission on the repo (then warn and continue — the build still produces a draft; record `proposal_issue.status: skipped`). On `--resume`, **reuse** the issue recorded in `manifest.proposal_issue` — never open a second one.
 2. **Dedup.** Before creating, query for an existing open proposal for this slug:
    ```
-   gh issue list --repo microsoft/mcs-labs --state open \
+   gh issue list --repo {repo} --state open \
      --label "type: new-lab" --search "<slug> in:title" \
      --json number,title,url --limit 5
    ```
    If a match exists, reuse it (record it in the manifest) instead of opening a duplicate.
 3. **Create the issue** with the repo's existing taxonomy labels (do not invent new ones):
    ```
-   gh issue create --repo microsoft/mcs-labs \
+   gh issue create --repo {repo} \
      --title "<build.proposal_issue.title_pattern>"   # default: "New lab proposal: {title} ({slug})"
      --label "type: new-lab" \
      --label "status: in-progress" \
@@ -147,7 +147,7 @@ As soon as the lab is named and scaffolded, open a tracking issue on `microsoft/
    Render `proposal-issue.md` first: the lab title + slug, a one-line summary of what it teaches (from the B3 metadata / scenario), the captured metadata (section / difficulty / duration / journeys, and any optional event attachment), the interaction mode, the build-id, and a line stating **Status: In Progress — being authored interactively by `mcs-lab-builder`.** Include a stable marker comment `<!-- mcs-lab-builder:proposal slug=<slug> -->` so re-runs and the PR step can find it.
 4. **Record** the result in `manifest.yml` under `proposal_issue: { number, url, status: open, labels: [...] }`. Print the issue URL to the user.
 
-The labels come from `build.proposal_issue.labels` (default `["type: new-lab", "status: in-progress"]`). These match the existing `microsoft/mcs-labs` labels (`type: new-lab` = "Brand new lab proposal"; `status: in-progress` = "Someone is actively working on this"). If a configured label does not exist on the repo, file with the labels that do and warn about the missing one rather than failing the build.
+The labels come from `build.proposal_issue.labels` (default `["type: new-lab", "status: in-progress"]`). These match the labels defined on `{repo}` (the mcs-labs taxonomy by default) (`type: new-lab` = "Brand new lab proposal"; `status: in-progress` = "Someone is actively working on this"). If a configured label does not exist on the repo, file with the labels that do and warn about the missing one rather than failing the build.
 
 > **This is the one GitHub write build mode makes before B7, and it is intentional.** It is separate from the B6 audit gate, which still writes nothing to GitHub (`build.audit_gate.suppress_github_writes`). The proposal issue tracks the *lab*, not findings.
 
@@ -223,7 +223,7 @@ Skipped entirely under `--no-pr` (print the registration steps + draft location 
 ## What success looks like
 
 - `runtime/builds/<build-id>/` holds `manifest.yml`, `ledger.yml`, `draft/README.md`, `draft/images/*`, `proposal-issue.md`, and `audit/findings.json`.
-- A **proposal issue** is open on `microsoft/mcs-labs` labeled `type: new-lab` + `status: in-progress`, opened at B3.5 and recorded in `manifest.proposal_issue`.
+- A **proposal issue** is open on the active instance's repo (`{repo}`) labeled `type: new-lab` + `status: in-progress`, opened at B3.5 and recorded in `manifest.proposal_issue`.
 - The built lab passed the audit gate with zero above-threshold `broken`/`unclear` findings (or the user accepted a draft PR with residuals listed).
-- A PR on `microsoft/mcs-labs` adds `labs/<slug>/README.md` + `images/` + the registration entry (+ `_labs/<slug>.md` and `_data/lab-config.yml`), branch `dewain/new-lab-<slug>-<build-id>`, linking the proposal issue (`Closes #<n>`), with no AI attribution.
+- A PR on the active instance's repo (`{repo}`) adds `labs/<slug>/README.md` + `images/` + the registration entry (+ `_labs/<slug>.md` and `_data/lab-config.yml`), branch `{branch_prefix}/new-lab-<slug>-<build-id>`, linking the proposal issue (`Closes #<n>`), with no AI attribution.
 - One-line chat summary: `Built <slug> in <duration>. Proposal issue #<n> (In Progress). Gate passed after <N> fix loop(s). PR: <url>.`

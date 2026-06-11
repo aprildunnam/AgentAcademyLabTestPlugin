@@ -651,7 +651,7 @@ topological order from Phase 1.7):
           to that PR — no duplicate is opened.
         - Otherwise (no open PR — including when prior PRs were merged or
           closed), a **new** PR is opened on a run-unique branch
-          `dewain/fix-<slug>-content-audit-<run-id>` from `main`, titled
+          `{branch_prefix}/fix-<slug>-content-audit-<run-id>` from `main`, titled
           `<slug>: fix audit findings from #<issue-number>` with body
           `Closes #<issue-number>`. A merged/closed prior PR never blocks a
           new one — each run with fresh findings gets its own PR.

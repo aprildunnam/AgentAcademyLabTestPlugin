@@ -26,7 +26,7 @@ Take the findings for one lab from one audit run and either (a) file a new GitHu
 ## Outputs
 
 - `runs/<run-id>/labs/<slug>/issue-body.md` — the rendered issue body (kept on disk for audit + retry).
-- New or updated issue at `github.com/microsoft/mcs-labs/issues/<n>`.
+- New or updated issue at `github.com/{repo}/issues/<n>`.
 - Updated `manifest.yml.labs[<slug>]`: `status: issue_filed`, `issue_url`, `issue_action: created|commented`.
 - Updated `runtime/audit-history.yml`: appended entry per `audit-log-schema.md`.
 
@@ -127,7 +127,7 @@ Otherwise, run **two queries** and union the results — issues filed before the
 Strict (per-slug label present):
 ```
 gh issue list \
-  --repo microsoft/mcs-labs \
+  --repo {repo} \
   --state open \
   --label "lab-audit" \
   --label "lab:{slug}" \
@@ -138,7 +138,7 @@ gh issue list \
 Loose (slug appears in title, only `lab-audit` label required):
 ```
 gh issue list \
-  --repo microsoft/mcs-labs \
+  --repo {repo} \
   --state open \
   --label "lab-audit" \
   --search "{slug} in:title" \
@@ -172,7 +172,7 @@ File the issue:
 
 ```
 gh issue create \
-  --repo microsoft/mcs-labs \
+  --repo {repo} \
   --title "{title}" \
   --body-file "runs/{run_id}/labs/{slug}/issue-body.md" \
   --label "{labels comma-joined}"
@@ -198,7 +198,7 @@ fingerprint = sha256(
 
 To extract existing fingerprints, fetch:
 ```
-gh issue view <issue-number> --repo microsoft/mcs-labs --json body,comments
+gh issue view <issue-number> --repo {repo} --json body,comments
 ```
 Parse the body and every `comments[].body`. Each rendered finding includes a hidden HTML marker `<!-- finding:fp:<12-char-hex> -->` placed immediately after the finding heading (see step 3 template update). Collect every fingerprint found this way.
 
@@ -230,7 +230,7 @@ Every finding heading must include the fingerprint marker so the next run can de
 
 ```
 gh issue comment <issue-number> \
-  --repo microsoft/mcs-labs \
+  --repo {repo} \
   --body-file "runs/{run_id}/labs/{slug}/issue-body.md"
 ```
 
@@ -248,7 +248,7 @@ If the orchestrator's existing-state probe resolved an `open_pr` for this slug, 
 
 After commenting, also re-apply any missing labels with:
 ```
-gh issue edit <issue-number> --repo microsoft/mcs-labs --add-label "lab:{slug}" --add-label "severity:{highest}"
+gh issue edit <issue-number> --repo {repo} --add-label "lab:{slug}" --add-label "severity:{highest}"
 ```
 This backfills the per-slug label on issues that pre-date the labeling convention, so future strict-query dedup works without needing the loose query.
 
