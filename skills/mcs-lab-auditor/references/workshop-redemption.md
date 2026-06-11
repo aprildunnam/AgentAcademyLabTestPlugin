@@ -26,8 +26,7 @@ answer with regex `^https?://`.
 
 - If validation fails, re-ask with a clear error ("Please enter a full URL that
   starts with http:// or https://").
-- If validation passes, write the value back to
-  `runtime/account/active-portal.yml.workshop_portal_url` and continue.
+- If validation passes, persist the URL to the active instance's source — the user's `%USERPROFILE%\.mcs-lab-auditor\lab-instances.yml` inline `portal:` when the instance came from the user file, otherwise `config/workshop.yml` — and re-materialize `runtime/account/active-portal.yml`, then continue.
 
 Use this resolved URL for navigation:
 

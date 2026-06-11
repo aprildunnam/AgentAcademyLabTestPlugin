@@ -1,7 +1,7 @@
 ---
 name: mcs-lab-issue-filer
 description: |
-  Convert a lab's findings.json into a GitHub issue body and file it against microsoft/mcs-labs. Checks for an existing open issue with matching labels and comments on it instead of duplicating. Invoked by mcs-lab-auditor after a lab completes with at least one judge-recorded finding above the confidence threshold. Should NOT be invoked directly by the user — it expects a fully-populated run directory and assumes the orchestrator has already filtered out cannot_verify and below-threshold findings.
+  Convert a lab's findings.json into a GitHub issue body and file it against the active instance's lab repo (microsoft/mcs-labs by default). Checks for an existing open issue with matching labels and comments on it instead of duplicating. Invoked by mcs-lab-auditor after a lab completes with at least one judge-recorded finding above the confidence threshold. Should NOT be invoked directly by the user — it expects a fully-populated run directory and assumes the orchestrator has already filtered out cannot_verify and below-threshold findings.
 allowed-tools:
   - Read
   - Write

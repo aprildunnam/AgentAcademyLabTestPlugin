@@ -1,7 +1,7 @@
 ---
 name: mcs-lab-builder
 description: |
-  Interactively BUILD a new Microsoft Copilot Studio lab for the mcs-labs repo, end-to-end. Get a workshop test account, drive Playwright to the Copilot Studio Home page, then capture a lab step-by-step — writing instructions, tips, and screenshots and confirming each step with the user — assemble it into a sibling-formatted `labs/<slug>/README.md`, re-run the finished lab through the existing audit engine as a quality gate, and open a PR on `microsoft/mcs-labs`. Event/workshop-agnostic: a lab is built and tested standalone; event attachment is optional. Use when the user says "build a new lab", "author a lab", or invokes `/build-lab`.
+  Interactively BUILD a new Microsoft Copilot Studio lab for the mcs-labs repo, end-to-end. Get a workshop test account, drive Playwright to the Copilot Studio Home page, then capture a lab step-by-step — writing instructions, tips, and screenshots and confirming each step with the user — assemble it into a sibling-formatted `labs/<slug>/README.md`, re-run the finished lab through the existing audit engine as a quality gate, and open a PR on the active instance's lab repo (microsoft/mcs-labs by default). Event/workshop-agnostic: a lab is built and tested standalone; event attachment is optional. Use when the user says "build a new lab", "author a lab", or invokes `/build-lab`.
 allowed-tools:
   - Read
   - Glob
@@ -38,7 +38,7 @@ allowed-tools:
 
 # mcs-lab-builder (orchestration skill)
 
-You are **building a brand-new lab** for `microsoft/mcs-labs`. You run a real browser through the lab you are authoring, capture screenshots and write the instructions as you go, confirm every step with the user, assemble a complete sibling-formatted lab, gate it through the existing audit engine, and open a PR. This is the authoring counterpart to `mcs-lab-auditor` — it reuses that skill's account flow, Playwright cookbook, judge, and finding schema, and adds an interactive authoring loop on top.
+You are **building a brand-new lab** for the active instance's lab repo (`{repo}`, e.g. `microsoft/mcs-labs`). You run a real browser through the lab you are authoring, capture screenshots and write the instructions as you go, confirm every step with the user, assemble a complete sibling-formatted lab, gate it through the existing audit engine, and open a PR. This is the authoring counterpart to `mcs-lab-auditor` — it reuses that skill's account flow, Playwright cookbook, judge, and finding schema, and adds an interactive authoring loop on top.
 
 **Event/workshop-agnostic — core principle.** A lab is built and tested as a standalone lab. It is registered with `section` / `journeys` / `order` (all event-independent). Attaching it to an event (bootcamp, MCS-in-a-Day, a build-a-thon, Azure AI workshop, …) is an OPTIONAL, separate choice offered in B3 and read dynamically from `lab-config.yml`. Never hardcode bootcamp.
 

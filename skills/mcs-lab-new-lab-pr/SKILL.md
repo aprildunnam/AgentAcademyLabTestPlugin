@@ -1,7 +1,7 @@
 ---
 name: mcs-lab-new-lab-pr
 description: |
-  Open a PR on microsoft/mcs-labs that adds a NEW lab built by mcs-lab-builder. Stages the assembled `labs/<slug>/README.md` + screenshots, applies the registration entry (root `lab-config.yml` + generator, or direct `_data/lab-config.yml` + `_labs/<slug>.md` writes — per the detected mechanism), commits everything in one commit on a run-unique branch off `origin/main`, and opens the PR. Invoked by mcs-lab-builder at B7 — NOT directly by the user. Do not use this for audit fixes (that is mcs-lab-fix-pr-filer, which patches an existing lab).
+  Open a PR on the active instance's lab repo (microsoft/mcs-labs by default) that adds a NEW lab built by mcs-lab-builder. Stages the assembled `labs/<slug>/README.md` + screenshots, applies the registration entry (root `lab-config.yml` + generator, or direct `_data/lab-config.yml` + `_labs/<slug>.md` writes — per the detected mechanism), commits everything in one commit on a run-unique branch off `origin/main`, and opens the PR. Invoked by mcs-lab-builder at B7 — NOT directly by the user. Do not use this for audit fixes (that is mcs-lab-fix-pr-filer, which patches an existing lab).
 allowed-tools:
   - Read
   - Glob

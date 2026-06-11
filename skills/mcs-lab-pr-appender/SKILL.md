@@ -1,7 +1,7 @@
 ---
 name: mcs-lab-pr-appender
 description: |
-  Append screenshot updates from a lab audit run onto an EXISTING open fix-PR branch in microsoft/mcs-labs. Replaces matched image files in place, makes one commit, pushes, and comments on the PR. Never creates a new branch and never opens a new PR. Invoked by mcs-lab-auditor by default whenever (a) the orchestrator's existing-state probe found an open PR for the slug AND (b) the lab produced new screenshot artifacts. Suppressed by --no-update-screenshots / --no-append-to-pr (CLI) or `issues.pr_append.enabled_by_default: false` (config). Should NOT be invoked directly by the user.
+  Append screenshot updates from a lab audit run onto an EXISTING open fix-PR branch in the active instance's lab repo (microsoft/mcs-labs by default). Replaces matched image files in place, makes one commit, pushes, and comments on the PR. Never creates a new branch and never opens a new PR. Invoked by mcs-lab-auditor by default whenever (a) the orchestrator's existing-state probe found an open PR for the slug AND (b) the lab produced new screenshot artifacts. Suppressed by --no-update-screenshots / --no-append-to-pr (CLI) or `issues.pr_append.enabled_by_default: false` (config). Should NOT be invoked directly by the user.
 allowed-tools:
   - Read
   - Write

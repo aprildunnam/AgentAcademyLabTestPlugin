@@ -104,8 +104,14 @@ if ($RepoRoot)         { $ordered += $RepoRoot }
 if ($env:MCS_LABS_REPO){ $ordered += $env:MCS_LABS_REPO }
 $ordered += $Candidate
 $ordered += $instCandidates
-$ordered += (Get-ConfigCandidates)
-$ordered += $builtins
+# The judge-config candidates and built-in list are mcs-labs-specific; only
+# search them for the default mcs-labs instance (or when instance resolution
+# failed). For a custom instance, searching them risks resolving to an unrelated
+# mcs-labs clone that happens to share the default marker (split-brain).
+if (-not $inst -or $inst.name -eq 'mcs-labs') {
+    $ordered += (Get-ConfigCandidates)
+    $ordered += $builtins
+}
 
 $resolved = $null
 $status = ''
