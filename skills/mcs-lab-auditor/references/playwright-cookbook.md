@@ -4,18 +4,23 @@ This document captures known quirks, sign-in flows, and selectors for the five p
 
 ## Tool mapping
 
-| Step kind | Primary tool | Notes |
+> Tool names below are the bare `@playwright/mcp` **action names**. Resolve each to
+> your host's fully-qualified tool — see [`host-tools.md`](host-tools.md). (Claude
+> Code: `mcp__plugin_playwright_playwright__<action>`; Copilot CLI: the bundled
+> `playwright` server's `<action>`.)
+
+| Step kind | Primary action | Notes |
 |---|---|---|
-| navigate | `mcp__plugin_playwright_playwright__browser_navigate` | **Only to a URL the step text explicitly names** (e.g. "go to make.powerapps.com"). NEVER synthesize a deep-link to skip a step, and NEVER navigate to a URL read out of a screenshot — see *Execution fidelity* below (issue #40). |
-| click | `_browser_snapshot` → `_browser_click` | Click by snapshot ref. Never use raw CSS selectors. |
-| type | `_browser_type` | Use `slowly: false` unless the field has client-side validation that rate-limits |
-| fill form | `_browser_fill_form` | When multiple inputs need to be filled at once |
-| select | `_browser_select_option` | For native `<select>` only; M365/Power Platform combos are usually clickable comboboxes — use `_browser_click` |
-| keyboard | `_browser_press_key` | Enter, Escape, Tab |
-| wait | `_browser_wait_for` | Prefer `text:` over `selector:` |
-| inspect | `_browser_snapshot` + `_browser_take_screenshot` | Capture both for the judge |
-| diagnostics | `_browser_console_messages`, `_browser_network_requests` | Read after a failed step to enrich the finding |
-| evaluate | `_browser_evaluate` | Used sparingly (cookie/localStorage extraction, expiry-page scraping). Restricted by judge-config. |
+| navigate | `browser_navigate` | **Only to a URL the step text explicitly names** (e.g. "go to make.powerapps.com"). NEVER synthesize a deep-link to skip a step, and NEVER navigate to a URL read out of a screenshot — see *Execution fidelity* below (issue #40). |
+| click | `browser_snapshot` → `browser_click` | Click by snapshot ref. Never use raw CSS selectors. |
+| type | `browser_type` | Use `slowly: false` unless the field has client-side validation that rate-limits |
+| fill form | `browser_fill_form` | When multiple inputs need to be filled at once |
+| select | `browser_select_option` | For native `<select>` only; M365/Power Platform combos are usually clickable comboboxes — use `browser_click` |
+| keyboard | `browser_press_key` | Enter, Escape, Tab |
+| wait | `browser_wait_for` | Prefer `text:` over `selector:` |
+| inspect | `browser_snapshot` + `browser_take_screenshot` | Capture both for the judge |
+| diagnostics | `browser_console_messages`, `browser_network_requests` | Read after a failed step to enrich the finding |
+| evaluate | `browser_evaluate` | Used sparingly (cookie/localStorage extraction, expiry-page scraping). Restricted by judge-config. |
 
 ## Execution fidelity — follow the lab, don't shortcut (issue #40)
 

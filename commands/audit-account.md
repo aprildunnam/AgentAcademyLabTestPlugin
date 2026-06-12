@@ -55,6 +55,8 @@ Workshop code hint:  <workshop_code_hint>****
 
 ### Mode: redeem
 
+> Account redemption drives the browser too. Browser tool names differ per host — use the Playwright `browser_*` action your host exposes (see `skills/mcs-lab-auditor/references/host-tools.md`).
+
 Dispatch by the active instance's portal `portal_kind` (read from `runtime/account/active-portal.yml` if present, else `config/workshop.yml`):
 - `chatbot` → `references/workshop-redemption-chatbot.md`
 - `skillable` (or missing) → `references/workshop-redemption.md`

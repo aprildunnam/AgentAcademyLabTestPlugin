@@ -80,7 +80,19 @@ Get-ChildItem "$env:USERPROFILE\.claude\plugins\mcs-lab-auditor" | Select-Object
 
 ### Option B — GitHub Copilot CLI
 
-The plugin uses the same skill-discovery model as Claude Code (one `Skill`/`skill` tool, plugins auto-discovered from a known directory), so the install pattern is the same — clone into the Copilot CLI plugins directory. The exact directory depends on your Copilot CLI version and platform; find it with `copilot --help` (look for the *plugins* or *extensions* section) or by checking `copilot config get plugins.path` if your version supports it. Then:
+Install via the Copilot CLI marketplace (preferred):
+
+```powershell
+copilot plugin install mcs-lab-auditor@BootcampLabTestPlugin
+```
+
+To update later:
+
+```powershell
+copilot plugin update mcs-lab-auditor@BootcampLabTestPlugin
+```
+
+Alternatively, clone directly — but the marketplace form above (`mcs-lab-auditor@BootcampLabTestPlugin`) is preferred over cloning the raw repo. If you do clone manually, confirm the target directory with `copilot --help` or `copilot config get plugins.path`, then:
 
 ```powershell
 # Example - confirm $copilotPluginsPath against `copilot --help` output first
@@ -90,7 +102,7 @@ git clone https://github.com/microsoft/BootcampLabTestPlugin (Join-Path $copilot
 Caveats for Copilot CLI:
 
 - The plugin no longer hard-codes any machine paths: it reads its own files via `$env:CLAUDE_PLUGIN_ROOT` and resolves the mcs-labs repo via `scripts/Resolve-LabRepo.ps1`. If your Copilot CLI host doesn't set `CLAUDE_PLUGIN_ROOT`, export it to the plugin's install directory before launching, and (optionally) set `MCS_LABS_REPO` to point at your labs clone. See [`docs/extending.md`](extending.md#pointing-at-a-different-lab-repo).
-- Workshop-portal redemption uses Playwright via the Claude Code Playwright MCP plugin. If your Copilot CLI session doesn't have an MCP server providing equivalent `mcp__plugin_playwright_playwright__*` tools, the interactive phase won't run — use `--static-only` for doc-audit sweeps and fall back to Claude Code when you need the interactive phase.
+- The plugin bundles a **Playwright MCP** (`.github/mcp.json`, `npx -y @playwright/mcp@latest --isolated`) that is auto-loaded on install, enabling the interactive (live-browser) phase in Copilot CLI with no extra configuration. Confirm it is registered with `copilot mcp list`. The first interactive use runs `npx` and requires network access once; subsequent runs are offline-capable.
 - DPAPI credential storage is Windows-only regardless of which runtime invokes the skill.
 
 ### Both at once

@@ -21,6 +21,9 @@ allowed-tools:
   - Bash(git*)
   - PowerShell
   - AskUserQuestion
+  # Claude Code browser tools (playwright@claude-plugins-official). Copilot CLI
+  # exposes the same @playwright/mcp actions under its bundled `playwright`
+  # server — see ../mcs-lab-auditor/references/host-tools.md. Copilot ignores unknown entries.
   - mcp__plugin_playwright_playwright__browser_navigate
   - mcp__plugin_playwright_playwright__browser_snapshot
   - mcp__plugin_playwright_playwright__browser_take_screenshot
@@ -108,6 +111,20 @@ Two `AskUserQuestion` calls, each skipped only when a CLI flag already answered 
 Record `manifest.mode: guided | scenario`.
 
 ### B2 — Navigate to the Copilot Studio Home page
+
+#### Browser-MCP preflight (build mode needs the live product)
+
+Build mode authors a lab by driving the real product, so a Playwright MCP is
+required — tool names differ per host (see
+[`../mcs-lab-auditor/references/host-tools.md`](../mcs-lab-auditor/references/host-tools.md)).
+Before B2:
+
+1. Check your available tools for the Playwright `browser_*` actions.
+2. **If present** → proceed, calling each by its host-qualified name.
+3. **If absent** → **halt** with a clear message (build mode cannot run
+   static-only). Tell the user to enable the browser MCP for their host — Claude:
+   `playwright@claude-plugins-official`; Copilot: the bundled `playwright` server
+   (`copilot mcp list` to confirm; needs `npx` + network on first use).
 
 Using the chosen account (browser signed in by B1's redemption flow, or sign in now with cached credentials per `playwright-cookbook.md` §sign-in flow):
 1. Navigate to `runtime/account/active-portal.yml.auth_probe_url` (default `https://copilotstudio.microsoft.com/`).
@@ -197,7 +214,7 @@ The lab must be a real `_labs/<slug>.md` for the auditor's parser to consume. Pe
 Skipped entirely under `--no-pr` (print the registration steps + draft location instead; the proposal issue stays open as **In Progress** for a human to pick up). Otherwise invoke the **`mcs-lab-new-lab-pr`** sub-skill with: `build-id`, resolved `mcs_labs_repo`, `slug`, the staged files, the registration mode, the optional `events`, and the **`proposal_issue.number`** from `manifest.yml`. It branches off fresh `origin/main`, commits the new-lab files + registration changes (+ generator output if generate mode) in one commit, and opens the PR (`<slug>: add new lab`). When a proposal issue exists, the PR body links it per `build.proposal_issue.link_pr_with` (default `Closes`, so merging the lab auto-closes the proposal). Record `pr_url` in `manifest.yml`.
 
 ### Wrap-up
-1. Close the browser (`mcp__plugin_playwright_playwright__browser_close`).
+1. Close the browser (`mcp__plugin_playwright_playwright__browser_close` (or your host's browser tool — see `../mcs-lab-auditor/references/host-tools.md`)).
 2. Print a summary: slug, build-id, gate result (loops run, residual findings), PR URL (or "draft saved, --no-pr").
 3. Write final `manifest.yml` (status `pr_filed` | `draft_only` | `aborted`).
 

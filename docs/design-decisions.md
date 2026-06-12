@@ -512,6 +512,38 @@ Downstream integration: `Resolve-LabRepo.ps1` sources clone URL, marker, path ca
 
 ---
 
+## ADR-025 — Copilot CLI interactive parity via a bundled Playwright MCP
+
+**Status:** Accepted (v0.8.0 addition).
+
+**Context.** The plugin installs and its skills are discovered in GitHub Copilot CLI — `$env:CLAUDE_PLUGIN_ROOT` is provided by Copilot, standard shell/PowerShell discovery works, and the static audit path runs correctly there. The interactive (live-browser) phase did not work for two reasons:
+
+1. Copilot had no Playwright MCP configured, so no browser tool was available at all.
+2. The skills and `playwright-cookbook.md` hard-coded Claude Code's namespaced Playwright tool names (`mcp__plugin_playwright_playwright__browser_*`, ~43 references). Copilot identifies MCP tools by `(serverName, toolName)` under a different prefix; none of those Claude Code-namespaced names resolved, so every live-browser call failed silently.
+
+The underlying `@playwright/mcp` action names (e.g., `browser_navigate`, `browser_click`, `browser_snapshot`) are identical across hosts; only the client-assigned prefix differs.
+
+**Decision.** Four coordinated changes restore full interactive parity on Copilot without disturbing the Claude Code path:
+
+1. **Copilot-only Playwright MCP at `.github/mcp.json`.** Ship `npx -y @playwright/mcp@latest --isolated` as a plugin-bundled MCP declaration. Copilot loads plugin MCP configuration from `.mcp.json` or `.github/mcp.json`; Claude Code does **not** scan `.github/`, so its tool list is entirely unchanged and the existing `playwright@claude-plugins-official` registration and its `mcp__plugin_playwright_playwright__*` names remain in place.
+2. **Host-agnostic tool references in the cookbook.** `playwright-cookbook.md` is rewritten to use bare `@playwright/mcp` action names (`browser_navigate`, `browser_snapshot`, etc.) rather than any host-prefixed form. A new reference file `skills/mcs-lab-auditor/references/host-tools.md` documents the per-host prefix mapping and the binding rule: "use the browser tool your host actually exposes, resolved from your available-tools list at runtime."
+3. **Interactive-phase browser-MCP preflight.** Before any live-browser step the orchestrator checks for a working browser tool. On absence: audit mode falls back to `--static-only`; build mode halts with an actionable message. This prevents silent mid-run failures and gives Copilot users a clear signal when the MCP injection did not take effect.
+4. **`allowed-tools` entries retained.** The `mcp__plugin_playwright_playwright__*` entries in Claude Code `allowed-tools` lists are left as-is. Copilot tolerates entries it does not recognize; Claude Code still needs them.
+
+**Consequences.**
+- First interactive use on a Copilot installation runs `npx @playwright/mcp` (one-time network fetch); subsequent runs use the npm cache.
+- `--isolated` is required for identity isolation (see issue #39 in `@playwright/mcp`).
+- Graceful fallback (`--static-only`) means a missing browser MCP degrades to a read-only audit rather than a hard failure.
+- Zero additional configuration for Copilot users — `.github/mcp.json` is picked up automatically.
+- Claude Code behavior is entirely unchanged: same server, same tool names, same `allowed-tools` entries.
+- Cross-reference: the `{branch_prefix}` token used in new-lab PR branches is resolved via the lab instance (see ADR-024).
+
+**Alternatives considered.**
+- **Unify both hosts onto a single plugin-shipped Playwright MCP.** Rejected — this would change the tool names Claude Code currently resolves (`mcp__plugin_playwright_playwright__*` → the new server's prefix), risk registering a duplicate Playwright server in Claude Code (the bundled one on top of the existing `claude-plugins-official` one), and churn a path that has been tested and proven. The two-MCP approach keeps each host on its own server with zero cross-contamination.
+- **Deterministic host detection with a hardcoded per-host tool-name map.** Rejected — brittle: any Copilot naming change would silently break the map, and maintaining a static mapping requires the most rewriting of all options. The model can instead consult its actual available-tools list at runtime to resolve the correct name, making the approach self-healing.
+
+---
+
 ## Cross-references
 
 - [`architecture.md`](architecture.md) — how these decisions compose at runtime.

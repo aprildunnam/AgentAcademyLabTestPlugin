@@ -6,6 +6,20 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-12
+
+### Added
+
+- **Copilot CLI interactive-phase support — bundled Playwright MCP (`.github/mcp.json`).** A new `.github/mcp.json` ships with the plugin and declares a `playwright` MCP server (`npx -y @playwright/mcp@latest --isolated`) that GitHub Copilot CLI picks up automatically. Claude Code does not scan `.github/`, so no duplicate server appears there; the Claude path is entirely unchanged.
+- **`skills/mcs-lab-auditor/references/host-tools.md` — cross-host browser-tool naming reference.** Documents the per-host tool-name conventions (Claude Code: `mcp__plugin_playwright_playwright__*`; Copilot CLI: bare `@playwright/mcp` action names) and the "use what your host exposes" rule, so skill instructions stay host-agnostic without brittle env detection.
+- **Interactive-phase browser-MCP preflight with `--static-only` (audit) / halt (build) fallback.** The audit orchestrator (`mcs-lab-auditor` SKILL.md) now probes for a live browser MCP at run start and falls back to `--static-only` when none is available. The build orchestrator (`mcs-lab-builder` SKILL.md) halts with guidance rather than attempting a browser phase with no tool.
+
+### Changed
+
+- **`playwright-cookbook.md` tool-mapping table uses bare `@playwright/mcp` action names.** The per-step tool column now lists the generic action name (e.g. `browser_navigate`, `browser_snapshot`) with a pointer to `host-tools.md` for host-specific resolution, replacing the Claude-only `mcp__plugin_playwright_playwright__*` literals.
+- **Skill `allowed-tools` entries annotated for host neutrality.** The `allowed-tools` blocks in `mcs-lab-auditor/SKILL.md` and `mcs-lab-builder/SKILL.md` note that the listed tool names are the Claude Code form; Copilot CLI resolves the same actions under the bare names.
+- **Docs updated for Copilot CLI interactive-phase support (incl. ADR-025).** `README.md`, `docs/installation.md`, `docs/extending.md`, `docs/architecture.md`, `docs/troubleshooting.md`, `docs/design-decisions.md` (new ADR-025), and `CONTRIBUTING.md` updated to reflect that GitHub Copilot CLI now supports the live-browser audit/build phase via the bundled Playwright MCP. Claude Code path unchanged.
+
 ### Documentation
 
 - **Sample fork config (`docs/examples/lab-instances.sample.yml`).** A complete, copy-ready user `lab-instances.yml` showing a chatbot-portal fork, a Skillable-portal fork, and a single-field override of the shipped `mcs-labs` instance.
@@ -291,7 +305,8 @@ Initial scaffold. The plugin is structurally complete: every file referenced by 
 - Single workshop-portal flow assumed (Skillable-style).
 - Screenshots aren't attached inline to issues (`gh` CLI limitation); they're referenced by local path in the issue body.
 
-[Unreleased]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/microsoft/BootcampLabTestPlugin/compare/v0.5.0...v0.6.0

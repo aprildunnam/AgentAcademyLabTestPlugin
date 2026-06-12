@@ -34,6 +34,15 @@ Set `portal_kind: chatbot` and adapt `references/workshop-redemption-chatbot.md`
 
 Document the pre-redemption login flow in the portal-kind-specific reference doc. The Playwright sequence is the same as the AAD sign-in flow — `_browser_type` username, `_browser_type` password, click submit — just against the workshop portal's identity provider instead of AAD.
 
+### Browser tool naming is host-specific
+
+The plugin drives the browser via a **Playwright MCP**, but the tool names for that MCP differ by host:
+
+- **Claude Code** uses the `playwright@claude-plugins-official` prerequisite; tool names are prefixed `mcp__plugin_playwright_playwright__<action>`.
+- **Copilot CLI** uses a plugin-bundled Playwright MCP declared in `.github/mcp.json` (`npx -y @playwright/mcp@latest --isolated`); tool names are the bare `<action>` names from the same `@playwright/mcp` package.
+
+The canonical mapping is centralized in `skills/mcs-lab-auditor/references/host-tools.md`. The cookbook (`references/playwright-cookbook.md`) references actions by their bare name; `host-tools.md` is the single place to update if you need to point at a different Playwright MCP server or add a new host. To wire up a different browser MCP: update `.github/mcp.json` for the Copilot server and/or the `playwright@claude-plugins-official` prerequisite for Claude Code — no cookbook edits needed.
+
 ## Adding a new slash command
 
 To add `/audit-foo`:

@@ -13,6 +13,9 @@ allowed-tools:
   - Bash(gh repo view:*)
   - PowerShell
   - AskUserQuestion
+  # Claude Code browser tools (playwright@claude-plugins-official). Copilot CLI
+  # exposes the same @playwright/mcp actions under its bundled `playwright`
+  # server — see references/host-tools.md. Copilot ignores unknown entries.
   - mcp__plugin_playwright_playwright__browser_navigate
   - mcp__plugin_playwright_playwright__browser_snapshot
   - mcp__plugin_playwright_playwright__browser_take_screenshot
@@ -155,6 +158,24 @@ Write the resolved `.portal` object to `runtime/account/active-portal.yml` (crea
    $run_dir = "runtime/runs/$run_id"
    ```
    Initialize `manifest.yml` with the planned lab list, all `status: pending`, and the run start timestamp.
+
+#### Browser-MCP preflight (before any interactive step)
+
+The interactive phase needs a Playwright MCP. Tool names differ per host — see
+[`references/host-tools.md`](references/host-tools.md). Before the first browser
+action:
+
+1. Check your available tools for the Playwright `browser_*` actions (Claude:
+   `mcp__plugin_playwright_playwright__*`; Copilot: the bundled `playwright`
+   server). 
+2. **If present** → proceed with the interactive phase, calling each action by
+   its host-qualified name.
+3. **If absent** → do NOT call a browser tool. Fall back to `--static-only` for
+   this run and tell the user how to enable the browser for their host:
+   - Claude Code: enable the `playwright@claude-plugins-official` MCP plugin.
+   - Copilot CLI: the plugin bundles a `playwright` MCP (`.github/mcp.json`); it
+     needs `npx` + network on first use. Run `copilot mcp list` to confirm it
+     loaded.
 
 ### Phase 1.5 — Run-start interview (MANDATORY)
 
@@ -540,7 +561,8 @@ granularity is too coarse (subagent itself overflows on a 50-step lab).
 
 The orchestrator signs in **once** in Phase 1.5. The Playwright MCP
 server keeps the browser process alive across subagent boundaries — a
-per-UC subagent that calls `mcp__plugin_playwright_playwright__*` reuses
+per-UC subagent that calls `mcp__plugin_playwright_playwright__*` (or your host's
+browser tool — see references/host-tools.md) reuses
 the same browser tab the orchestrator left it in. The subagent's first
 real step is typically `_browser_navigate` to the URL the UC's first
 parser step expects, then a `_browser_snapshot` to confirm state.
@@ -606,7 +628,8 @@ topological order from Phase 1.7):
      `opus`). Pass the subagent: the UC's `uc-<N>-steps.json` path, the
      paths of all prior `uc-*-state.yml` files in this lab dir, the
      run-id, the lab slug, the lab-level transcript path, the
-     allowed-tools list scoped to `mcp__plugin_playwright_playwright__*`
+     allowed-tools list scoped to `mcp__plugin_playwright_playwright__*` (or your host's
+     browser tool — see references/host-tools.md)
      + `Read` + `Write` + the per-step judge invocation, AND the
      resolved `judge` + `critique` model values from the manifest so the
      subagent's internal per-step judge call also runs on the right
@@ -726,7 +749,7 @@ The orchestrator hands each per-UC subagent a self-contained prompt with:
     orchestrator can `AskUserQuestion` the user.
 ### Phase 3 — Wrap-up
 
-1. Close the browser (`mcp__plugin_playwright_playwright__browser_close`).
+1. Close the browser (`mcp__plugin_playwright_playwright__browser_close` (or your host's browser tool — see references/host-tools.md)).
 2. Print a summary to the user: total labs, count by status, list of filed issue URLs **and PR URLs**, run-id for future `/audit-report` lookups.
 3. Write `runs/<run-id>/manifest.yml` final state.
 

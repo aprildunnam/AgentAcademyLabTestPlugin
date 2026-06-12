@@ -205,6 +205,39 @@ Build mode opens a `type: new-lab` + `status: in-progress` issue at B3.5. If it 
 
 `/build-lab --resume <build-id>`. It re-runs preflight + the account prompt, returns to where the browser left off, and resumes at the first unconfirmed step. Confirmed steps in `runtime/builds/<build-id>/ledger.yml` (and their screenshots) are preserved. The `<build-id>` is printed at build start and stored in `runtime/builds/<build-id>/manifest.yml`.
 
+## Copilot CLI
+
+**Symptom:** Interactive phase doesn't run in Copilot CLI — audit falls back to `--static-only`, or build halts without opening a browser.
+
+The interactive phase requires a bundled Playwright MCP server. When the plugin is installed it registers `.github/mcp.json` (`npx -y @playwright/mcp@latest --isolated`), which Copilot CLI auto-loads. On first interactive use, `npx` downloads the package — network access is required once.
+
+Diagnose:
+
+```text
+copilot mcp list      # confirms whether the "playwright" server is loaded
+```
+
+If the server is absent or failed to start:
+
+| Cause | Fix |
+|---|---|
+| Plugin was not installed via `copilot plugin install` (manual copy missed MCP registration) | Run `copilot plugin install mcs-lab-auditor@BootcampLabTestPlugin` to (re)install and register the MCP server. If your Copilot version lacks `plugin install`, add the server manually: `copilot mcp add playwright npx -y @playwright/mcp@latest --isolated`. |
+| No network on first `npx` run | Ensure outbound internet access and retry. Subsequent runs use the local `npx` cache. |
+| `npx` not on PATH | Install Node.js / npm so `npx` is available, then reinstall the plugin. |
+
+Without the server: `/audit-*` commands run in `--static-only` mode (no browser steps executed); `/build-lab` halts at the first step that requires a browser.
+
+---
+
+**Symptom:** "Browser tool not found" error, or a browser action is called under the wrong tool name.
+
+Browser tool names are host-specific and are not interchangeable:
+
+- **Claude Code:** `mcp__plugin_playwright_playwright__<action>` (e.g. `mcp__plugin_playwright_playwright__browser_click`)
+- **Copilot CLI:** the bundled `playwright` server exposes actions directly as `<action>` (e.g. `browser_click`)
+
+The skill resolves the correct names at runtime via `skills/mcs-lab-auditor/references/host-tools.md`. If you are adapting a prompt or script that hard-codes one host's prefix, replace it with the mapping from that reference file — do not hard-code either prefix.
+
 ## Filesystem issues
 
 **Symptom:** `Cannot remove the item ... because it is in use`.
