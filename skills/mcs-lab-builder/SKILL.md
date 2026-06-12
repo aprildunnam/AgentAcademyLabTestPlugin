@@ -21,6 +21,9 @@ allowed-tools:
   - Bash(git*)
   - PowerShell
   - AskUserQuestion
+  # Claude Code browser tools (playwright@claude-plugins-official). Copilot CLI
+  # exposes the same @playwright/mcp actions under its bundled `playwright`
+  # server — see ../mcs-lab-auditor/references/host-tools.md. Copilot ignores unknown entries.
   - mcp__plugin_playwright_playwright__browser_navigate
   - mcp__plugin_playwright_playwright__browser_snapshot
   - mcp__plugin_playwright_playwright__browser_take_screenshot
@@ -108,6 +111,20 @@ Two `AskUserQuestion` calls, each skipped only when a CLI flag already answered 
 Record `manifest.mode: guided | scenario`.
 
 ### B2 — Navigate to the Copilot Studio Home page
+
+#### Browser-MCP preflight (build mode needs the live product)
+
+Build mode authors a lab by driving the real product, so a Playwright MCP is
+required — tool names differ per host (see
+[`../mcs-lab-auditor/references/host-tools.md`](../mcs-lab-auditor/references/host-tools.md)).
+Before B2:
+
+1. Check your available tools for the Playwright `browser_*` actions.
+2. **If present** → proceed, calling each by its host-qualified name.
+3. **If absent** → **halt** with a clear message (build mode cannot run
+   static-only). Tell the user to enable the browser MCP for their host — Claude:
+   `playwright@claude-plugins-official`; Copilot: the bundled `playwright` server
+   (`copilot mcp list` to confirm; needs `npx` + network on first use).
 
 Using the chosen account (browser signed in by B1's redemption flow, or sign in now with cached credentials per `playwright-cookbook.md` §sign-in flow):
 1. Navigate to `runtime/account/active-portal.yml.auth_probe_url` (default `https://copilotstudio.microsoft.com/`).
