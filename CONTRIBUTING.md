@@ -16,6 +16,8 @@ This means **most "code" in this repo is prose**: the precision of the instructi
 
 ```
 .claude-plugin/plugin.json                 # plugin manifest
+.github/
+  mcp.json                                 # Copilot Playwright MCP server for interactive phase
 commands/                                  # slash command entry points
   audit-bootcamp.md
   audit-event.md
@@ -29,6 +31,7 @@ skills/
       lab-parser-spec.md                   # md → step tree grammar
       llm-judge-prompts.md                 # judge / critique / classifier templates
       playwright-cookbook.md               # portal quirks, sign-in flow
+      host-tools.md                        # browser tool naming: host-agnostic action names & per-host prefixes
       workshop-redemption.md               # workshop-code → cached account flow
       workshop-redemption-chatbot.md       # chatbot-style portal variant
       finding-schema.md                    # finding record fields, severity rubric
@@ -123,6 +126,12 @@ There is no automated test runner. The verification path is the end-to-end run s
 3. If your change affected the issue body template, render at least one finding and visually verify the resulting markdown in the GitHub preview.
 
 ## Conventions
+
+### Browser and Playwright tools
+
+When referencing browser or Playwright tools in skills, references, or cookbooks, keep action names **host-agnostic**: use bare `@playwright/mcp` action names (e.g., `browser_navigate`, `browser_click`) without any host-specific prefix. Cross-host naming (Claude: `mcp__plugin_playwright_playwright__<action>`; Copilot: bundled `playwright` server's `<action>`) is documented in [`skills/mcs-lab-auditor/references/host-tools.md`](skills/mcs-lab-auditor/references/host-tools.md).
+
+This ensures compatibility with both Claude Code (using the `playwright@claude-plugins-official` plugin) and Copilot CLI (using the Copilot Playwright MCP defined in `.github/mcp.json`).
 
 ### Commits
 
