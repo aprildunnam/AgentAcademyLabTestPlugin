@@ -1,6 +1,6 @@
 {
   "name": "mcs-lab-auditor",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Audit AND interactively build Microsoft Copilot Studio labs (any event/workshop, not just bootcamp) end-to-end via Playwright. Audit mode compares live UI to written instructions and posts fingerprint-deduped findings + fix PRs. Build mode authors a new lab step-by-step with screenshots, gates it through the audit engine, and opens a PR adding the lab to mcs-labs.",
   "author": {
     "name": "dewainr",
