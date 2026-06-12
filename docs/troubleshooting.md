@@ -221,7 +221,7 @@ If the server is absent or failed to start:
 
 | Cause | Fix |
 |---|---|
-| Plugin was not installed via `copilot plugin install` (manual copy missed MCP registration) | Run `copilot plugin install mcs-lab-auditor@BootcampLabTestPlugin` to (re)install and register the MCP server. |
+| Plugin was not installed via `copilot plugin install` (manual copy missed MCP registration) | Run `copilot plugin install mcs-lab-auditor@BootcampLabTestPlugin` to (re)install and register the MCP server. If your Copilot version lacks `plugin install`, add the server manually: `copilot mcp add playwright npx -y @playwright/mcp@latest --isolated`. |
 | No network on first `npx` run | Ensure outbound internet access and retry. Subsequent runs use the local `npx` cache. |
 | `npx` not on PATH | Install Node.js / npm so `npx` is available, then reinstall the plugin. |
 
@@ -233,7 +233,7 @@ Without the server: `/audit-*` commands run in `--static-only` mode (no browser 
 
 Browser tool names are host-specific and are not interchangeable:
 
-- **Claude Code (this host):** `mcp__plugin_playwright_playwright__<action>` (e.g. `mcp__plugin_playwright_playwright__browser_click`)
+- **Claude Code:** `mcp__plugin_playwright_playwright__<action>` (e.g. `mcp__plugin_playwright_playwright__browser_click`)
 - **Copilot CLI:** the bundled `playwright` server exposes actions directly as `<action>` (e.g. `browser_click`)
 
 The skill resolves the correct names at runtime via `skills/mcs-lab-auditor/references/host-tools.md`. If you are adapting a prompt or script that hard-codes one host's prefix, replace it with the mapping from that reference file — do not hard-code either prefix.
