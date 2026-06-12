@@ -59,40 +59,46 @@ Test-Path "$env:USERPROFILE\Projects\mcs-labs\_data\lab-config.yml"   # should p
 
 ## Step 3 — Install the plugin
 
-The plugin is a directory of markdown commands, skills, references, and YAML config — no compiled artifacts. Both **Claude Code** and **GitHub Copilot CLI** auto-discover plugins from their respective user-plugins directories; install via `git clone` into the right place.
+The plugin is a directory of markdown commands, skills, references, and YAML config — no compiled artifacts. Both **Claude Code** and **GitHub Copilot CLI** install it the same way: **add the marketplace once, then install the plugin from it.** The marketplace is the GitHub repo `microsoft/BootcampLabTestPlugin`. Manual `git clone` into a plugins directory still works as a fallback, but the marketplace form is preferred — it handles placement and updates for you.
 
 ### Option A — Claude Code (primary, fully tested)
 
-Clone into the Claude Code user-plugins directory:
+Add the marketplace, then install the plugin (interactive slash commands):
+
+```text
+/plugin marketplace add microsoft/BootcampLabTestPlugin
+/plugin install mcs-lab-auditor@BootcampLabTestPlugin
+```
+
+Fallback — clone directly into the Claude Code user-plugins directory:
 
 ```powershell
 git clone https://github.com/microsoft/BootcampLabTestPlugin "$env:USERPROFILE\.claude\plugins\mcs-lab-auditor"
-```
-
-Confirm the install layout:
-
-```powershell
-Get-ChildItem "$env:USERPROFILE\.claude\plugins\mcs-lab-auditor" | Select-Object Name
-# expected: .claude-plugin, .gitignore, CHANGELOG.md, CODE_OF_CONDUCT.md,
-#           CONTRIBUTING.md, LICENSE, README.md, SECURITY.md, commands,
-#           config, docs, runtime, scripts, skills
+# confirm the layout: expected .claude-plugin, CHANGELOG.md, commands, config, docs, scripts, skills, ...
 ```
 
 ### Option B — GitHub Copilot CLI
 
-Install via the Copilot CLI marketplace (preferred):
+**Add the marketplace first, then install the plugin from it** (this two-step order matters — `plugin install` resolves `@BootcampLabTestPlugin` only after the marketplace is registered). Use either the non-interactive `copilot` subcommands or the interactive slash commands:
 
 ```powershell
+copilot plugin marketplace add microsoft/BootcampLabTestPlugin
 copilot plugin install mcs-lab-auditor@BootcampLabTestPlugin
 ```
 
-To update later:
-
-```powershell
-copilot plugin update mcs-lab-auditor@BootcampLabTestPlugin
+```text
+/plugin marketplace add microsoft/BootcampLabTestPlugin
+/plugin install mcs-lab-auditor@BootcampLabTestPlugin
 ```
 
-Alternatively, clone directly — but the marketplace form above (`mcs-lab-auditor@BootcampLabTestPlugin`) is preferred over cloning the raw repo. If you do clone manually, confirm the target directory with `copilot --help` or `copilot config get plugins.path`, then:
+Confirm the marketplace registered, then update later as needed:
+
+```powershell
+copilot plugin marketplace list                              # verify BootcampLabTestPlugin is listed
+copilot plugin update mcs-lab-auditor@BootcampLabTestPlugin   # update later
+```
+
+Fallback — clone directly. The marketplace form above is preferred over cloning the raw repo. If you do clone manually, confirm the target directory with `copilot --help` or `copilot config get plugins.path`, then:
 
 ```powershell
 # Example - confirm $copilotPluginsPath against `copilot --help` output first
@@ -103,6 +109,13 @@ Caveats for Copilot CLI:
 
 - The plugin no longer hard-codes any machine paths: it reads its own files via `$env:CLAUDE_PLUGIN_ROOT` and resolves the mcs-labs repo via `scripts/Resolve-LabRepo.ps1`. If your Copilot CLI host doesn't set `CLAUDE_PLUGIN_ROOT`, export it to the plugin's install directory before launching, and (optionally) set `MCS_LABS_REPO` to point at your labs clone. See [`docs/extending.md`](extending.md#pointing-at-a-different-lab-repo).
 - The plugin bundles a **Playwright MCP** (`.github/mcp.json`, `npx -y @playwright/mcp@latest --isolated`) that is auto-loaded on install, enabling the interactive (live-browser) phase in Copilot CLI with no extra configuration. Confirm it is registered with `copilot mcp list`. The first interactive use runs `npx` and requires network access once; subsequent runs are offline-capable.
+- **Playwright prerequisites (Copilot CLI only).** Because the bundled server shells out to `npx`, the host needs two things that Claude Code's `playwright@claude-plugins-official` plugin otherwise provides for you:
+  - **Node.js 18+ / npm on `PATH`** so `npx` can fetch and launch `@playwright/mcp`. Verify with `node --version` and `npx --version`.
+  - **Chromium browser binary.** `@playwright/mcp` drives a real browser; if it is not already installed you'll see a "browser is not installed" / "Executable doesn't exist" error on the first interactive run. Install it once with:
+
+    ```powershell
+    npx playwright install chromium    # or: npx playwright install   (all browsers)
+    ```
 - DPAPI credential storage is Windows-only regardless of which runtime invokes the skill.
 
 ### Both at once

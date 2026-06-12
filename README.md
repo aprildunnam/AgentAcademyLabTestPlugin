@@ -69,21 +69,30 @@ See [`docs/architecture.md`](docs/architecture.md#build-mode-interactive-lab-aut
 
 ## Installation
 
-The plugin works in both **Claude Code** and **GitHub Copilot CLI** (same skill-discovery model). Pick whichever runtime(s) you want and clone into the matching plugins directory.
+The plugin works in both **Claude Code** and **GitHub Copilot CLI** (same skill-discovery model). Both runtimes resolve the plugin from the same marketplace — `microsoft/BootcampLabTestPlugin` — so there are no per-machine path edits to clone into. Pick whichever runtime(s) you want.
 
-Claude Code (primary, fully tested):
+> **✅ Preferred install method (both runtimes): add the marketplace, then install the plugin.** This is the recommended path — it handles placement and updates for you. Manual `git clone` is only a fallback (see [`docs/installation.md`](docs/installation.md)).
 
-```powershell
-git clone https://github.com/microsoft/BootcampLabTestPlugin "$env:USERPROFILE\.claude\plugins\mcs-lab-auditor"
+**Claude Code** (primary, fully tested) — run these two slash commands:
+
+```text
+/plugin marketplace add microsoft/BootcampLabTestPlugin
+/plugin install mcs-lab-auditor@BootcampLabTestPlugin
 ```
 
-GitHub Copilot CLI (find the plugins directory via `copilot --help` or `copilot config get plugins.path`):
+**GitHub Copilot CLI** — add the marketplace, **then** install (the order matters: `install` resolves `@BootcampLabTestPlugin` only after the marketplace is registered). Use either the non-interactive `copilot` subcommands **or** the interactive slash commands:
 
 ```powershell
-git clone https://github.com/microsoft/BootcampLabTestPlugin (Join-Path $copilotPluginsPath "mcs-lab-auditor")
+copilot plugin marketplace add microsoft/BootcampLabTestPlugin
+copilot plugin install mcs-lab-auditor@BootcampLabTestPlugin
 ```
 
-…then restart your runtime. The five `/audit-*` commands should appear.
+```text
+/plugin marketplace add microsoft/BootcampLabTestPlugin
+/plugin install mcs-lab-auditor@BootcampLabTestPlugin
+```
+
+…then restart your runtime. The five `/audit-*` commands should appear. (Verify the marketplace is registered with `copilot plugin marketplace list`, or `/plugin marketplace list` in either runtime.)
 
 **Copilot CLI — interactive phase.** The repo ships `.github/mcp.json`, which registers a Playwright MCP server (`npx -y @playwright/mcp@latest --isolated`). Copilot auto-loads it on install — no manual configuration needed. The first interactive run downloads the package via `npx` (one-time network hit); confirm the server is registered with `copilot mcp list`. Browser tool names are host-specific: the bundled server exposes the same `@playwright/mcp` actions as the Claude Code plugin, resolved per host via `skills/mcs-lab-auditor/references/host-tools.md`. Every run begins with an interactive-phase preflight that checks for a browser MCP; if none is detected, audit runs fall back to `--static-only` automatically and build runs halt with a clear error.
 
@@ -100,7 +109,11 @@ For the full setup — including prerequisite checks, workshop portal configurat
 - **PowerShell module** (custom instances only): `powershell-yaml` — required when targeting a fork via a user `lab-instances.yml`. Install once with `Install-Module powershell-yaml -Scope CurrentUser -Force`. Not required for the default mcs-labs path.
 - **Browser MCP (interactive phase)**:
   - *Claude Code*: the global Playwright MCP plugin enabled (`playwright@claude-plugins-official`). This prerequisite is unchanged.
-  - *GitHub Copilot CLI*: zero-config — a Playwright MCP is bundled at `.github/mcp.json` and auto-loaded by Copilot on install. First interactive use fetches the package via `npx` (needs network once). Verify with `copilot mcp list`. If no browser MCP is detected at run time, the preflight falls back to `--static-only` (audit) or halts (build) with a clear error.
+  - *GitHub Copilot CLI*: near-zero-config — a Playwright MCP is bundled at `.github/mcp.json` (`npx -y @playwright/mcp@latest --isolated`) and auto-loaded by Copilot on install. Two host-level prerequisites must be present, since the bundled server shells out to `npx`:
+    - **Node.js 18+ / npm** on `PATH` so `npx` can fetch and run `@playwright/mcp`. Check with `node --version` and `npx --version`; install from [nodejs.org](https://nodejs.org/) if missing.
+    - **Playwright browser binaries.** The first interactive use fetches the `@playwright/mcp` package via `npx` (one-time network hit), but the Chromium binary it drives may not be present. If the interactive phase errors with a "browser is not installed" / "Executable doesn't exist" message, install it once with `npx playwright install chromium` (or `npx playwright install` for all browsers). Claude Code's `playwright@claude-plugins-official` plugin handles this for you; under Copilot CLI you may need to run it manually.
+
+    Verify the server is registered with `copilot mcp list`. If no browser MCP is detected at run time, the preflight falls back to `--static-only` (audit) or halts (build) with a clear error.
 - **Repo clone**: a local clone of the active instance's lab repo (defaults to `microsoft/mcs-labs`; the plugin reads `_labs/<slug>.md`, the `_events/` + `_workshops/` collections, and the instance marker file, defaulting to `_data/lab-config.yml`). You don't need to clone it manually or edit any path: `scripts/Resolve-LabRepo.ps1` resolves the repo at run start in this order — `$env:MCS_LABS_REPO`, the `mcs_labs_repo_path_candidates` in `config/judge-config.yml`, a built-in list under `%USERPROFILE%`, and finally an **auto-clone** of the active instance's `clone_url` into `%USERPROFILE%\.mcs-lab-auditor\mcs-labs`. The resolved repo is then fast-forwarded to `origin/main` so audits always run against the latest lab content. This applies to **both** audit and build modes.
 - **Workshop access**: an unredeemed workshop code from a Skillable-style portal. The training portal is read from the active instance's configuration (`config/workshop.yml` for the default mcs-labs instance). Custom instances define their own portal in their user `lab-instances.yml`.
 

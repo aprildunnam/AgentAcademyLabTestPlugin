@@ -6,6 +6,11 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+### Documentation
+
+- **Marketplace-based install instructions for both runtimes.** `README.md` and `docs/installation.md` now present **adding the marketplace** (`/plugin marketplace add microsoft/BootcampLabTestPlugin` → `/plugin install mcs-lab-auditor@BootcampLabTestPlugin`, or the `copilot plugin marketplace add` / `copilot plugin install` non-interactive equivalents) as the **preferred, highlighted** install path for both Claude Code and GitHub Copilot CLI. The Copilot CLI instructions now include the required `marketplace add` step before `plugin install`; manual `git clone` is demoted to a fallback.
+- **Copilot CLI Playwright prerequisites documented.** `README.md` and `docs/installation.md` now spell out the two host-level prerequisites the bundled Playwright MCP needs under Copilot CLI (which Claude Code's `playwright@claude-plugins-official` plugin otherwise provides): **Node.js 18+ / npm on `PATH`** for `npx`, and the **Chromium browser binary** (`npx playwright install chromium` if the interactive phase reports a missing-browser error).
+
 ## [0.8.0] - 2026-06-12
 
 ### Added
