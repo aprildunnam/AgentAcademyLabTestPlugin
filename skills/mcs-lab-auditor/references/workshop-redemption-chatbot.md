@@ -56,9 +56,15 @@ These come from the chatbot's success card — the plugin parses them, no user i
 ```text
 _browser_navigate(url: <workshop_portal_url>)
 _browser_wait_for(time: 3)
+# REQUIRED: open the chat to trigger the DirectLine connection (see note below).
+_browser_click(element: "Request account button (page header)")   # aria-label: "Request a Microsoft 365 account via Lab Assistant"
+_browser_wait_for(text: "Workshop Pass Code", time: 30)
 ```
 
-The aka.ms link redirects to `https://microsoft.github.io/mcs-labs/`. The Lab Assistant chat dialog usually auto-opens. If it doesn't, click the `Request account` button (in the page header) or the `Open Lab Assistant chat` floating button.
+The aka.ms link redirects to `https://microsoft.github.io/mcs-labs/`. The Lab Assistant chat widget renders on load, **but its DirectLine connection does NOT start automatically** — the chat input stays stuck on `Connecting…` (no token request fires) until you explicitly open the chat. **You must click the `Request account` button** (in the page header — aria-label `Request a Microsoft 365 account via Lab Assistant`) to initiate the connection. If that button isn't present, click the `Open Lab Assistant chat` floating button instead. Only after this click does the chat reach `Connected` and present the "Workshop Pass Code" card.
+
+> [!IMPORTANT]
+> Do not just navigate and wait. Navigating alone leaves the widget on `Connecting…` indefinitely — refreshing or waiting longer does nothing. The click on `Request account` (or `Open Lab Assistant chat`) is what triggers the DirectLine handshake, so it is a **required** step, not an "if it doesn't auto-open" fallback.
 
 ### Card 1 — Submit the workshop code
 
@@ -286,7 +292,7 @@ if ($result === 'single_card') { jumpTo Card 5 } else { continue Card 2 }
 ## Anti-patterns
 
 - **Never** skip the Workshop Pass Code card. The code is required (the user must provide it via `AskUserQuestion`) unless a valid cached account is being reused. Skipping the card and clicking `Get a User Account` directly will not produce credentials.
-- **Never** click the page-header `Request account` button as if it were the redeem trigger — it just opens the chat (which auto-opens on page load anyway).
+- **Never** treat the page-header `Request account` button as the *redeem* trigger — it does **not** submit the workshop code. It opens the chat and **initiates the DirectLine connection**, which is a separate, required first step (see Card 0). The chat does **not** connect on page load by itself, so this click is mandatory; just don't expect it to issue credentials on its own.
 - **Never** prompt the user for the form values (organization type, industry, company size, country, job title). Those come from `runtime/account/active-portal.yml.chatbot_account_request_form`; surfacing them as `AskUserQuestion` choices is wasted UX.
 - **Never** log the scraped password to console output, `audit-history.yml`, `manifest.yml`, issue bodies, PR descriptions, or any file other than DPAPI-encrypted `credential.enc`. The success card text MAY be retained in `runs/<run-id>/redemption-transcript.md` ONLY if that file is excluded from any subsequent issue/PR rendering.
 - **Never** log the workshop code itself anywhere except the first 4 chars in `account.meta.json.workshop_code_hint`. The code is a per-event secret.
@@ -297,6 +303,7 @@ if ($result === 'single_card') { jumpTo Card 5 } else { continue Card 2 }
 
 | Symptom                                                                                                                  | Likely cause                                                                                                       | Fix                                                                                                                                                          |
 | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Chat input stuck on `Connecting…`; the "Workshop Pass Code" card never appears after navigating to the portal.            | The DirectLine connection was never triggered — the widget renders but does not auto-connect; the chat wasn't opened via `Request account`. | Click the `Request account` button (header, aria-label `Request a Microsoft 365 account via Lab Assistant`), or the `Open Lab Assistant chat` floating button, to initiate the connection. See Card 0. |
 | After Submit on the Workshop Pass Code card the bot shows the Training Assistant greeting; no credentials yet.            | Expected — the code-submit gates the flow but doesn't issue. Continue with Card 2 ("Get a User Account").          | No fix needed. Click the `Get a User Account` suggested-action button on the Training Assistant card to continue.                                            |
 | Workshop code is rejected ("invalid code" or no transition).                                                              | Code typo, expired event, or already-used single-use code.                                                          | Re-prompt the user via `AskUserQuestion`. If still rejected, abort with `reason: invalid_workshop_code` and ask the user for a fresh code from the organizer.|
 | `Get a User Account` button isn't visible after 30 seconds.                                                              | The chat hasn't finished initializing, OR the code wasn't successfully submitted on Card 1.                          | Verify Card 1 was submitted (check chat history for the "Bot said: 1 attachment" entry referencing the Training Assistant). If not, retry Card 1.            |
