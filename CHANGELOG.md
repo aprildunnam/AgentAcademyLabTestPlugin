@@ -6,6 +6,10 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+### Fixed
+
+- **Chatbot redemption Card 0 now triggers the DirectLine connection explicitly.** `skills/mcs-lab-auditor/references/workshop-redemption-chatbot.md` previously assumed the Lab Assistant chat auto-connects on page load. It does not — the widget renders but the chat input stays stuck on `Connecting…` (no token request fires) until the `Request account` button (or `Open Lab Assistant chat` floating button) is clicked. Card 0 now makes that click a **required** step before waiting for the "Workshop Pass Code" card, the "What to do when stuck" table gains a matching symptom→cause→fix row, and the stale anti-pattern claiming the chat "auto-opens on page load anyway" was corrected.
+
 ### Documentation
 
 - **Marketplace-based install instructions for both runtimes.** `README.md` and `docs/installation.md` now present **adding the marketplace** (`/plugin marketplace add microsoft/BootcampLabTestPlugin` → `/plugin install mcs-lab-auditor@BootcampLabTestPlugin`, or the `copilot plugin marketplace add` / `copilot plugin install` non-interactive equivalents) as the **preferred, highlighted** install path for both Claude Code and GitHub Copilot CLI. The Copilot CLI instructions now include the required `marketplace add` step before `plugin install`; manual `git clone` is demoted to a fallback.
