@@ -890,7 +890,7 @@ def build_story(styles):
         ["confidence.min_to_include_in_issue", "0.5", "Findings below this never reach an issue."],
         ["confidence.low_confidence_marker_max", "0.7", "Findings in 0.5-0.7 are tagged 'low confidence' in the issue body."],
         ["execution.require_interactive_phase", "true", "Skip Phase 2 only when explicitly opted out."],
-        ["execution.account_prompt_mode", "always", "Q1 interview behavior."],
+        ["execution.account_prompt_mode", "only_if_expired", "Q1 interview behavior."],
         ["execution.network_retry_count", "3", "Connection-class failures retry up to N times before halting."],
         ["execution.fanout_concurrency", "1", "Parallel interactive browser sessions per account."],
         ["execution.static_fanout_concurrency", "11", "Background subagents for the static phase."],
