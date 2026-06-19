@@ -241,6 +241,15 @@ build:
     labels: ["type: new-lab", "status: in-progress"]
     title_pattern: "New lab proposal: {title} ({slug})"
     link_pr_with: "Closes"                # Closes | Refs — how the B7 PR references the issue
+    # `Closes #<n>` only fires when the B7 PR is MERGED. If a proposal's PR is
+    # closed WITHOUT merging (abandoned/superseded build, or a human closing it),
+    # the issue would otherwise stay open forever as an orphaned "In Progress"
+    # proposal. When true, the next build run for the slug detects that orphan
+    # at B3.5 dedup and CLOSES it (with the comment below) instead of reusing it;
+    # mcs-lab-new-lab-pr likewise closes the issue inline if it closes its own PR.
+    # See docs/design-decisions.md and skills/mcs-lab-builder/SKILL.md B3.5.
+    close_orphaned_on_pr_close: true
+    orphan_close_comment: "Linked PR #{pr} was closed without merging; closing this stale In-Progress proposal. A fresh proposal will be opened for the new build."
 
   # --- Audit gate (B6) ---
   # After the lab is drafted, register + materialize it and run the auditor's
