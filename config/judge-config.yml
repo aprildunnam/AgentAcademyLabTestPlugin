@@ -40,7 +40,7 @@ execution:
   #   future; prompt when expired or missing.
   # - `only_if_missing`: prompt only when no cached account exists.
   #   Equivalent to the pre-0.2 behavior. Not recommended.
-  account_prompt_mode: always
+  account_prompt_mode: only_if_expired
 
   # --- Connection-error retry policy ---
   # Distinct from `transient_retries`, which covers UI-side timeouts on a

@@ -196,11 +196,11 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
   `execution.skipped_interactive: true, reason: <flag|config>` so future
   readers know the audit didn't exercise the live UI.
 - **Always-on run-start account prompt.** New
-  `judge-config.yml.execution.account_prompt_mode` (default `always`). Other
-  modes: `only_if_expired`, `only_if_missing`. The default forces Phase 1.5
-  to ask "use cached vs. redeem new" every fresh run regardless of cache
-  freshness — the user's safety net against running against the wrong
-  tenant. `--resume` re-prompts unless the mode permits skipping AND the
+  `judge-config.yml.execution.account_prompt_mode` (default `only_if_expired`).
+  Other modes: `always`, `only_if_missing`. The default skips the prompt when
+  the cached credential is still valid — avoiding unnecessary re-prompts for
+  a password the plugin itself generated. Use `always` if you need the safety
+  net of confirming the account every run. `--resume` re-prompts unless the mode permits skipping AND the
   cached `expires_at` is still in the future.
 - **Connection-error retry policy.** New
   `judge-config.yml.execution.network_retry_count` (default `3`),
