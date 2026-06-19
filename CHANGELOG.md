@@ -6,6 +6,10 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+### Added
+
+- **`mcs-lab-builder` now crops step screenshots to the key area.** The B4 capture loop takes the after-snapshot first, then decides framing (`build-session-spec.md` §framing): it element-scopes `browser_take_screenshot` to the tightest self-orienting element when that conveys the step, and keeps a full-viewport shot when the whole screen is needed (layout/location context, a freshly loaded page, a designer canvas). The ledger `image:` record gains `framing` / `element_desc` / `element_ref`, and the CONFIRM step's `re-screenshot` option gains `full / crop / adjust` framing controls so the author can override any call. Auditor refresh and judge inspection shots are unchanged.
+
 ### Fixed
 
 - **Chatbot redemption Card 0 now triggers the DirectLine connection explicitly.** `skills/mcs-lab-auditor/references/workshop-redemption-chatbot.md` previously assumed the Lab Assistant chat auto-connects on page load. It does not — the widget renders but the chat input stays stuck on `Connecting…` (no token request fires) until the `Request account` button (or `Open Lab Assistant chat` floating button) is clicked. Card 0 now makes that click a **required** step before waiting for the "Workshop Pass Code" card, the "What to do when stuck" table gains a matching symptom→cause→fix row, and the stale anti-pattern claiming the chat "auto-opens on page load anyway" was corrected.
