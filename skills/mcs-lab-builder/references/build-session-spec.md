@@ -93,8 +93,11 @@ loop:
      instruction_md = render_step_markdown(intent, result, snap_after)       # see §render-step
 
   6. CONFIRM
-     AskUserQuestion: confirm | redo-step | re-screenshot | edit-prose | split-step | end-scene | end-lab
+     AskUserQuestion: confirm | redo-step | re-screenshot (full / crop / adjust) | edit-prose | split-step | end-scene | end-lab
        - show the rendered markdown + the screenshot path + "did the UI do what you intended?"
+       - re-screenshot full:   re-shoot full viewport (no element/target)
+       - re-screenshot crop:   re-run decide_framing's element pick on snap_after (see §framing)
+       - re-screenshot adjust: user names the region; map it to the enclosing snap_after ref, re-shoot element+target
 
   7. CHECKPOINT
      on confirm:        append step record to ledger.yml; write session-state.yml (advance cursor)
