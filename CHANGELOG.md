@@ -6,6 +6,10 @@ This project adheres to [Semantic Versioning](https://semver.org/). The format i
 
 ## [Unreleased]
 
+### Added
+
+- **`mcs-lab-builder` now crops step screenshots to the key area.** The B4 capture loop takes the after-snapshot first, then decides framing (`build-session-spec.md` §framing): it element-scopes `browser_take_screenshot` to the tightest self-orienting element when that conveys the step, and keeps a full-viewport shot when the whole screen is needed (layout/location context, a freshly loaded page, a designer canvas). The ledger `image:` record gains `framing` / `element_desc` / `element_ref`, and the CONFIRM step's `re-screenshot` option gains `full / crop / adjust` framing controls so the author can override any call. Auditor refresh and judge inspection shots are unchanged.
+
 ### Fixed
 
 - **Orphaned new-lab proposal issues are now closed when their PR is closed without merging.** Build mode links the B3.5 proposal issue (`type: new-lab` + `status: in-progress`) to the B7 new-lab PR with `Closes #<n>`, which GitHub honors **only on merge** — so a PR closed without merging used to leave the proposal open `In Progress` forever. The B3.5 dedup in `skills/mcs-lab-builder/SKILL.md` now resolves a candidate proposal's linked PR and, when that PR is `CLOSED && !merged` with no open PR for the slug, **closes the orphan** (with a comment) instead of reusing it before opening a fresh proposal; `skills/mcs-lab-new-lab-pr/SKILL.md` likewise closes the linked proposal inline whenever it closes its own PR. New config `build.proposal_issue.close_orphaned_on_pr_close` (default `true`) + `orphan_close_comment` in `config/judge-config.yml`. The audit-issue ↔ fix-PR pair is intentionally untouched (a closed-unmerged *fix*-PR does not invalidate the finding). See `docs/superpowers/specs/2026-06-19-orphaned-proposal-issue-close-design.md`.

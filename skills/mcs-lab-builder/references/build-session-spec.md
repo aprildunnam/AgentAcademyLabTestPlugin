@@ -45,6 +45,9 @@ One entry per confirmed step. Field shape is chosen to map cleanly onto both the
   image:
     file: "create-agent-button.png"       # lives in draft/images/, promoted to labs/<slug>/images/
     alt: "Create agent button"
+    framing: crop                          # crop | full  (see §framing) — how the shot was framed
+    element_desc: "Create agent command bar"   # crop only: the enclosing element passed as browser_take_screenshot `element`
+    element_ref: "e123"                    # crop only: the snap_after ref used as `target`, for redo/resume
   evidence:
     snapshot_after: "snapshots/usecase-1.scene-2.step-3-after.yml"
   variables_set: { agent_name: "Returns Triage" }   # artifact names later steps/prose can reference
@@ -75,15 +78,26 @@ loop:
      un-completable -> recovery menu (manual-by-user / reword / split / skip-with-NOTE / abort). never silently skip.
 
   4. CAPTURE
-     browser_take_screenshot(filename: "draft/images/<kebab>.png")          # naming rule in §screenshots
-     browser_snapshot(filename: "snapshots/<step-id>-after.yml")
+     snap_after = browser_snapshot(filename: "snapshots/<step-id>-after.yml")
+     framing    = decide_framing(intent, result, snap_after)    # crop | full  — see §framing
+     if framing == crop:
+        target_ref = tightest element in snap_after that encloses the action target AND a label/heading that identifies it
+        browser_take_screenshot(element: <human description of target_ref>,
+                                target:  target_ref,
+                                filename: "draft/images/<kebab>.png")        # naming rule in §screenshots
+     else:
+        browser_take_screenshot(filename: "draft/images/<kebab>.png")        # full viewport
+     # element-shot failure (stale/detached/zero-size ref) -> retry once as full viewport, record framing: full
 
   5. WRITE
      instruction_md = render_step_markdown(intent, result, snap_after)       # see §render-step
 
   6. CONFIRM
-     AskUserQuestion: confirm | redo-step | re-screenshot | edit-prose | split-step | end-scene | end-lab
+     AskUserQuestion: confirm | redo-step | re-screenshot (full / crop / adjust) | edit-prose | split-step | end-scene | end-lab
        - show the rendered markdown + the screenshot path + "did the UI do what you intended?"
+       - re-screenshot full:   re-shoot full viewport (no element/target)
+       - re-screenshot crop:   re-run decide_framing's element pick on snap_after (see §framing)
+       - re-screenshot adjust: user names the region; map it to the enclosing snap_after ref, re-shoot element+target
 
   7. CHECKPOINT
      on confirm:        append step record to ledger.yml; write session-state.yml (advance cursor)
@@ -101,12 +115,34 @@ Produce exactly one numbered list item:
 ### §propose — `propose_next_step` (scenario mode)
 From the scenario captured in B3, the ledger so far, and `snap_before`, infer the single most likely next action a learner would take to advance the scenario, grounded in the controls actually visible in `snap_before`. Propose ONE step only (control + intent + a candidate tip). Present it for confirmation before executing — the user can accept, adjust, or replace it. Never chain multiple steps without confirmation.
 
+## §framing — crop vs full screen (loop step 4)
+
+`decide_framing` chooses how tightly to frame the step's screenshot. **Default to crop.**
+Frame the tightest element in `snap_after` that encloses the action target together with a
+label or heading that identifies it — so the crop is self-orienting, never a bare icon. Pass
+that element's ref as `target` (and a human description as `element`) to
+`browser_take_screenshot`; never pass `fullPage`.
+
+Choose **full** (no `element`/`target`) instead when ANY of these hold:
+- the step's meaning depends on *where* something sits in the overall layout (e.g. "the panel
+  appears in the left rail");
+- the learner must locate one control among many to follow the step;
+- the result is a whole-page state — a freshly loaded page, a designer/canvas view;
+- no single element encloses the key area without dropping context the learner needs.
+
+Robustness: if the element-scoped shot fails (ref stale, detached, or zero-size), fall back to
+a full-viewport shot automatically and record `framing: full`. A crop never blocks the loop.
+
+Record the chosen framing on the ledger `image:` record. `framing: full` rows omit
+`element_desc` and `element_ref` entirely (they apply only to crops).
+
 ## §screenshots — kebab naming rule
 
 At capture time (loop step 4), derive the filename from the step's primary action target:
 - lowercase; non-alphanumerics → single hyphens; trim leading/trailing hyphens.
 - On collision with an existing `draft/images/*` name, append `-2`, `-3`, … .
 - Apply the rule at capture time so the ledger's `image.file` and the on-disk file always agree.
+- The kebab naming rule is independent of framing (§framing): a cropped shot and a full shot are named the same way, from the step's action target.
 
 Examples: "Create agent button" → `create-agent-button.png`; a second shot of the same surface → `create-agent-button-2.png`.
 
