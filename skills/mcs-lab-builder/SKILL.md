@@ -180,9 +180,10 @@ loop:
   3. EXECUTE    drive Playwright per playwright-cookbook §tool-mapping (snapshot refs only, never raw CSS).
                 connection-class failures follow judge-config execution.network_retry_count before pausing.
                 un-completable step -> recovery menu (see below); never silently skip.
-  4. CAPTURE    snapshot -> snapshots/<step-id>-after.yml ; then per build-session-spec §framing,
-                crop to the tightest self-orienting element (browser_take_screenshot element+target)
-                or shoot full viewport -> draft/images/<kebab>.png ; record framing in the ledger image record
+  4. CAPTURE    snap_after -> snapshots/<step-id>-after.yml
+                then decide framing (build-session-spec §framing): crop to the tightest element enclosing
+                the action target + an identifying label (browser_take_screenshot element+target), else full
+                viewport -> draft/images/<kebab>.png ; record framing: crop|full on the ledger image record
   5. WRITE      render the numbered instruction markdown + > [!TIP]/[!IMPORTANT]/[!WARNING] callouts
                 + the ![alt](images/<kebab>.png) reference (kebab rule in build-session-spec §screenshots)
   6. CONFIRM    AskUserQuestion: confirm | redo-step | re-screenshot (full / crop / adjust) | edit-prose | split-step | end-scene | end-lab
