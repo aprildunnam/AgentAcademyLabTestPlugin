@@ -69,6 +69,8 @@ Open the PR for a freshly-built lab. You are called by `mcs-lab-builder` at B7 w
    ```
    Render `pr-body.md` first: what the lab teaches, the UC list, the lab metadata (section/difficulty/duration/journeys, events if any), a "How it was verified" line (`Built interactively and passed the mcs-lab-builder audit gate, build <build_id>`), and — if the user accepted residual findings — a "Findings deferred to review" list. **If a `proposal_issue.number` was passed, include `Closes #<proposal_issue.number>` in the body** (per `build.proposal_issue.link_pr_with`; use `Refs #<n>` instead if configured to `Refs`) so merging the lab resolves the In-Progress proposal. Use `gh pr create --draft` when residual findings exist.
 
+   > **`Closes #<n>` only resolves the proposal when the PR is _merged_.** If this PR is ever closed *without* merging (superseded run, abandoned build), the proposal would be orphaned `In Progress` — see the close-on-PR-close rule below and `skills/mcs-lab-builder/SKILL.md` B3.5, which closes such orphans on the next build run for the slug.
+
 8. **Restore + record.**
    - `git switch -` then `git stash pop` if a stash was created.
    - Write `runtime/builds/<build_id>/pr-url.txt` and return `{ pr_url, pr_action: created | created_draft | skipped_no_changes }` to the orchestrator.
@@ -80,3 +82,4 @@ Open the PR for a freshly-built lab. You are called by `mcs-lab-builder` at B7 w
 - **Never force-push.** Never touch other labs' files.
 - **Restore stashed work** even on early abort.
 - **Generated output is committed** in generate mode so the PR builds the site without a maintainer re-running generation.
+- **If you close or supersede a PR you opened (without merging it), close its linked proposal issue in the same step.** `Closes #<n>` fires on merge only, so a non-merge close would otherwise leave the `type: new-lab` / `status: in-progress` proposal orphaned. Run `gh issue close <proposal_issue.number> --repo {repo} --comment "Linked PR #<pr> was closed without merging."` (skip when `build.proposal_issue.close_orphaned_on_pr_close: false`). Never depend on `Closes` to clean up a closed-unmerged PR.

@@ -146,13 +146,22 @@ The browser session established here is reused across the whole build (and by B6
 As soon as the lab is named and scaffolded, open a tracking issue on the active instance's repo (`{repo}`) so the new lab is visible to the team as an **In Progress** proposal for the whole duration of the build. Governed by `judge-config.yml.build.proposal_issue` (defaults in `references/build-session-spec.md`).
 
 1. **Skip / defer conditions.** Skip only if `build.proposal_issue.enabled: false`, or if `gh` is unauthenticated / lacks issue-create permission on the repo (then warn and continue — the build still produces a draft; record `proposal_issue.status: skipped`). On `--resume`, **reuse** the issue recorded in `manifest.proposal_issue` — never open a second one.
-2. **Dedup.** Before creating, query for an existing open proposal for this slug:
+2. **Dedup (with orphan reconciliation).** Before creating, query for an existing open proposal for this slug:
    ```
    gh issue list --repo {repo} --state open \
      --label "type: new-lab" --search "<slug> in:title" \
      --json number,title,url --limit 5
    ```
-   If a match exists, reuse it (record it in the manifest) instead of opening a duplicate.
+   If a match exists, **resolve its linked PR before reusing it** — `Closes #<n>` only closes the proposal on *merge*, so a proposal whose PR was closed-without-merge is an orphaned `In Progress` issue, not live work. Governed by `build.proposal_issue.close_orphaned_on_pr_close` (default `true`):
+   - Find the linked PR: parse `Closes #<issue>` from open PRs for the slug, or inspect the issue's cross-referenced PRs (`gh issue view <n> --repo {repo} --json number,timelineItems` / `gh pr list --repo {repo} --search "<slug>" --state all --json number,state,closed,merged`).
+   - **Orphaned** = the linked PR is `CLOSED` with `merged == false` **and** no *open* PR for the slug exists. Then close it instead of reusing it:
+     ```
+     gh issue close <n> --repo {repo} \
+       --comment "<build.proposal_issue.orphan_close_comment>"   # {pr} substituted with the closed PR number
+     ```
+     Then fall through to step 3 and open a **fresh** proposal for this build.
+   - Otherwise (linked PR is open, or merged, or none linked yet) **reuse** the open proposal — record it in the manifest instead of opening a duplicate, exactly as before.
+   - When `close_orphaned_on_pr_close: false`, skip the reconciliation and reuse any open match (legacy behavior).
 3. **Create the issue** with the repo's existing taxonomy labels (do not invent new ones):
    ```
    gh issue create --repo {repo} \

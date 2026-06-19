@@ -544,6 +544,27 @@ The underlying `@playwright/mcp` action names (e.g., `browser_navigate`, `browse
 
 ---
 
+## ADR-026 — Close orphaned new-lab proposal issues on the next run, not via a CI listener
+
+**Status:** Accepted (Unreleased; targets the next patch, v0.8.1).
+
+**Context.** Build mode opens a proposal issue (`type: new-lab` + `status: in-progress`) at B3.5 and the new-lab PR at B7, linking them with `Closes #<n>`. GitHub auto-closes a linked issue **only when the PR is merged.** A PR closed *without* merging (abandoned build, superseded run, human cleanup in the UI) therefore left the proposal open and `In Progress` indefinitely — an orphaned issue. The plugin is an instruction-skill bundle with no long-running process, so it cannot react at PR-close time.
+
+**Decision.** Reconcile orphans **on the next plugin run** that touches the slug, entirely plugin-side:
+
+1. **B3.5 dedup resolves the linked PR before reusing a proposal.** If the linked PR is `CLOSED && merged == false` and no open PR exists for the slug, the proposal is orphaned → close it (with `build.proposal_issue.orphan_close_comment`) and open a fresh proposal instead of reusing the stale one. Open / merged / no-PR cases reuse as before. Gated by `build.proposal_issue.close_orphaned_on_pr_close` (default `true`).
+2. **`mcs-lab-new-lab-pr` closes the proposal inline** whenever it closes/supersedes a PR it opened, rather than depending on the merge-only `Closes`.
+
+**Scope — proposal issues only.** The audit-issue ↔ fix-PR pair is intentionally excluded: a closed-unmerged *fix*-PR means the proposed fix was rejected or superseded, **not** that the underlying finding is resolved. Auto-closing the `lab-audit` findings issue there would hide still-valid problems. A proposal issue, by contrast, tracks nothing but the in-progress PR, so closing it when that PR dies is unambiguously correct.
+
+**Alternatives considered.**
+- **A GitHub Actions workflow in the target lab repo** (`pull_request: closed` → close linked issue when unmerged). Rejected — event-driven and instant, but it would add a *third* GitHub write path into `mcs-labs`, require Actions enabled + permissions, and break the plugin's portability across configurable lab instances (ADR-024). The whole-build "exactly two GitHub writes" property would no longer hold.
+- **Reopen/relabel instead of close.** Rejected for proposal issues — the proposal's only purpose is tracking the PR; once the PR is gone-unmerged there is nothing to track, so closing is the honest state.
+
+**Consequences.** Orphans are cleaned up lazily (next run for the slug), not in real time — an accepted trade-off given the no-listener architecture. Design doc: [`superpowers/specs/2026-06-19-orphaned-proposal-issue-close-design.md`](superpowers/specs/2026-06-19-orphaned-proposal-issue-close-design.md).
+
+---
+
 ## Cross-references
 
 - [`architecture.md`](architecture.md) — how these decisions compose at runtime.

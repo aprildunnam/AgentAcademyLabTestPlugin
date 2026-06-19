@@ -152,6 +152,8 @@ build:
     labels: ["type: new-lab", "status: in-progress"]   # existing repo labels (do not invent)
     title_pattern: "New lab proposal: {title} ({slug})"
     link_pr_with: "Closes"                 # Closes | Refs — how the B7 PR references the issue
+    close_orphaned_on_pr_close: true       # `Closes` fires on MERGE only; B3.5 closes a proposal whose PR was closed-unmerged instead of reusing it
+    orphan_close_comment: "Linked PR #{pr} was closed without merging; closing this stale In-Progress proposal. A fresh proposal will be opened for the new build."
   audit_gate:
     enabled: true
     fail_on: [broken, unclear]
