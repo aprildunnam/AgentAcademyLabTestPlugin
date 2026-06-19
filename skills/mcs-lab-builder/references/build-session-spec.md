@@ -46,7 +46,7 @@ One entry per confirmed step. Field shape is chosen to map cleanly onto both the
     file: "create-agent-button.png"       # lives in draft/images/, promoted to labs/<slug>/images/
     alt: "Create agent button"
     framing: crop                          # crop | full  (see §framing) — how the shot was framed
-    element_desc: "Create agent dialog"    # crop only: the element passed as browser_take_screenshot `element`
+    element_desc: "Create agent command bar"   # crop only: the enclosing element passed as browser_take_screenshot `element`
     element_ref: "e123"                    # crop only: the snap_after ref used as `target`, for redo/resume
   evidence:
     snapshot_after: "snapshots/usecase-1.scene-2.step-3-after.yml"
@@ -129,6 +129,9 @@ Choose **full** (no `element`/`target`) instead when ANY of these hold:
 
 Robustness: if the element-scoped shot fails (ref stale, detached, or zero-size), fall back to
 a full-viewport shot automatically and record `framing: full`. A crop never blocks the loop.
+
+Record the chosen framing on the ledger `image:` record. `framing: full` rows omit
+`element_desc` and `element_ref` entirely (they apply only to crops).
 
 ## §screenshots — kebab naming rule
 
