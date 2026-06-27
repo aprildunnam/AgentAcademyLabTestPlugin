@@ -1,16 +1,16 @@
 {
-  "name": "BootcampLabTestPlugin",
+  "name": "AgentAcademyLabTestPlugin",
   "owner": {
-    "name": "Microsoft"
+    "name": "aprildunnam"
   },
   "metadata": {
-    "description": "Claude Code plugin for auditing Microsoft Copilot Studio bootcamp labs end-to-end via Playwright."
+    "description": "Test Agent Academy labs end-to-end via Playwright. Walks through each lab step in a live browser and files issues at microsoft/agent-academy."
   },
   "plugins": [
     {
-      "name": "mcs-lab-auditor",
-      "description": "Audit AND interactively build Microsoft Copilot Studio labs (any event/workshop) end-to-end via Playwright. Audit mode files fingerprint-deduped findings + fix PRs; build mode authors a new lab step-by-step, gates it through the audit engine, and opens a PR adding it to mcs-labs.",
-      "version": "0.8.0",
+      "name": "agent-academy-tester",
+      "description": "Test Copilot Studio Agent Academy labs end-to-end via Playwright. Opens Edge with your browser profile, walks through lab steps, judges each against the live UI, and files GitHub issues for broken or unclear instructions.",
+      "version": "1.0.0",
       "source": "./"
     }
   ]
