@@ -1,6 +1,6 @@
 ---
 description: Test a single Agent Academy lab end-to-end by walking through its steps in a live browser.
-argument-hint: "[<course>/<slug>] [--dry-run] [--static-only]"
+argument-hint: "[<course>/<slug>] [--dry-run] [--static-only] [--no-issue]"
 ---
 
 # /test-lab
@@ -18,6 +18,7 @@ available interactive labs to choose from.
 Flags:
 - `--dry-run` — parse the lab into a step tree only. No browser activity.
 - `--static-only` — check markdown structure, links, and images only. No browser.
+- `--no-issue` — run the test but skip GitHub issue filing. Results are local only.
 
 ## Your task
 
@@ -40,7 +41,10 @@ Invoke the `agent-academy-tester` skill for the given lab:
 5. **Execute steps**: Walk through each step in the parsed step tree using Playwright.
    For each step: classify the action → execute → capture state → judge the result.
 
-6. **Report**: Summarize results — how many steps passed, failed, were unclear, etc.
+6. **Report & file issues**: Summarize results — how many steps passed, failed, were unclear.
    Write a detailed report to `runtime/test-results/<course>-<slug>-<timestamp>.md`.
+   If any `broken` or `unclear` findings exist with confidence ≥ 0.7, file a GitHub issue
+   at `microsoft/agent-academy` (or comment on an existing open issue for this lab).
+   Skip issue filing if `--no-issue` was passed.
 
 Follow `$PLUGIN_ROOT/skills/agent-academy-tester/SKILL.md` for the full procedure.

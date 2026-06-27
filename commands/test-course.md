@@ -1,6 +1,6 @@
 ---
 description: Test all interactive labs in an Agent Academy course sequentially.
-argument-hint: "[<course>] [--skip-conceptual] [--stop-on-failure]"
+argument-hint: "[<course>] [--skip-conceptual] [--stop-on-failure] [--no-issue]"
 ---
 
 # /test-course
@@ -18,6 +18,7 @@ available courses to choose from.
 Flags:
 - `--skip-conceptual` — skip labs marked as `interactive: false` (default behavior)
 - `--stop-on-failure` — halt the run if any lab has a `broken` finding with high confidence
+- `--no-issue` — run all tests but skip GitHub issue filing. Results are local only.
 
 ## Your task
 
@@ -45,6 +46,10 @@ Invoke the `agent-academy-tester` skill for every interactive lab in the course:
    - Total steps tested, passed, failed
    - List of broken steps across the course
    - Write to `runtime/test-results/course-<course>-<timestamp>.md`
+
+6. **File GitHub issues**: For each lab with `broken` or `unclear` findings (confidence
+   ≥ 0.7), file an issue at `microsoft/agent-academy` (or comment on an existing open
+   issue). One issue per lab, deduped by `lab:<course>/<slug>` label. Skip if `--no-issue`.
 
 Follow `$PLUGIN_ROOT/skills/agent-academy-tester/SKILL.md` for the per-lab procedure.
 

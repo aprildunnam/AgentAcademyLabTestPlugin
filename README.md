@@ -11,6 +11,7 @@ A Copilot CLI / Claude Code plugin that **tests Agent Academy labs end-to-end** 
 3. **Walks through every step** of the selected lab using Playwright
 4. **Judges each step** — compares what the lab says should happen vs what actually happens in the live UI
 5. **Reports findings** — which steps pass, which are broken (UI diverged from instructions), which are unclear
+6. **Files GitHub issues** — when findings are confirmed, files issues at [microsoft/agent-academy](https://github.com/microsoft/agent-academy/issues) with step-by-step details and suggested corrections
 
 ## Commands
 
@@ -48,7 +49,7 @@ A Copilot CLI / Claude Code plugin that **tests Agent Academy labs end-to-end** 
 | Content source | `microsoft/mcs-labs` (Jekyll) | `microsoft/agent-academy` (VitePress) |
 | Authentication | Automated workshop code redemption + DPAPI-cached credentials | Manual M365 sign-in in browser |
 | Environment setup | Workshop portal chatbot flow | You use your own M365 tenant |
-| Output | GitHub issues + fix PRs on mcs-labs | Local test reports (markdown) |
+| Output | GitHub issues + fix PRs on mcs-labs | GitHub issues on [microsoft/agent-academy](https://github.com/microsoft/agent-academy/issues) + local reports |
 | Dependencies | PowerShell scripts, Windows-specific DPAPI | Cross-platform (Playwright MCP only) |
 
 ## Prerequisites

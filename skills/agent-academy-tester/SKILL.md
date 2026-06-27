@@ -13,6 +13,9 @@ allowed-tools:
   - Write
   - Edit
   - Bash(gh:*)
+  - Bash(gh issue create:*)
+  - Bash(gh issue list:*)
+  - Bash(gh issue comment:*)
   - AskUserQuestion
   # Playwright MCP tools
   - mcp__playwright__browser_navigate
@@ -121,17 +124,32 @@ For each step in the parsed step tree:
 6. **Record the finding.** Store the verdict, confidence, screenshots, and any
    suggested correction.
 
-### Phase 4 — Report
+### Phase 4 — Report & Issue Filing
 
 After all steps are executed:
 
 1. **Summarize results.** Count pass/broken/unclear/etc. per lab.
-2. **Write report.** Generate a markdown report with:
+2. **Write local report.** Generate a markdown report with:
    - Lab title, course, date tested
    - Step-by-step results with screenshots for failures
    - Overall pass/fail status
    - Suggested corrections for broken steps
-3. **Present to user.** Display the summary and path to the full report.
+3. **File GitHub issue (if findings exist).** When the lab has at least one `broken`
+   or `unclear` finding with confidence ≥ 0.7:
+   a. **Deduplicate**: Check `gh issue list --repo microsoft/agent-academy --label lab-test`
+      for an existing open issue for this lab (match by `lab:<course>/<slug>` label).
+   b. **If no open issue exists**: File a new issue with:
+      - Title: `[Lab Test] <course>/<slug>: <1-line summary of findings>`
+      - Labels: `lab-test`, `automated`, `lab:<course>/<slug>`
+      - Body: structured report with step-by-step findings, expected vs observed,
+        suggested corrections, screenshot references, and test metadata
+      - Command: `gh issue create --repo microsoft/agent-academy --title "..." --body "..." --label lab-test,automated,"lab:<course>/<slug>"`
+   c. **If an open issue already exists**: Add a comment with the new findings
+      (fingerprint-deduped — skip findings already reported in the issue body or
+      prior comments).
+      - Command: `gh issue comment <number> --repo microsoft/agent-academy --body "..."`
+   d. If `--no-issue` flag was passed, skip issue filing and only write the local report.
+4. **Present to user.** Display the summary, local report path, and issue URL (if filed).
 
 ## Lab parsing rules
 

@@ -36,5 +36,25 @@ report:
   format: "markdown"  # markdown | json
   include_screenshots: true
 
+# --- GitHub issue filing ---
+# When findings meet the confidence threshold, file one issue per lab on the
+# agent-academy repo. Deduplicates against open issues so the same lab never
+# gets a duplicate open issue.
+issues:
+  enabled: true
+  repo: "microsoft/agent-academy"
+  # Labels applied to every filed issue
+  labels: ["lab-test", "automated"]
+  # Title pattern — {course} and {slug} are replaced at runtime
+  title_pattern: "[Lab Test] {course}/{slug}: {summary}"
+  # Minimum confidence to include a finding in the issue body
+  min_confidence_to_file: 0.7
+  # Verdicts that trigger issue filing (at least one must be present in the lab)
+  file_on_verdicts: ["broken", "unclear"]
+  # Never file a duplicate open issue for the same lab
+  dedupe_by_labels: true
+  # When an open issue already exists for the lab, add a comment with new findings
+  on_duplicate: "comment"
+
 # Plugin version
 plugin_version: "1.0.0"
