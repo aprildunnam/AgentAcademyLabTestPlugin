@@ -1,0 +1,148 @@
+# Agent Academy Lab configuration
+# Source: https://microsoft.github.io/agent-academy/
+# Repo: https://github.com/microsoft/agent-academy
+
+content_source:
+  repo: "microsoft/agent-academy"
+  clone_url: "https://github.com/microsoft/agent-academy.git"
+  docs_root: "docs"
+  site_url: "https://microsoft.github.io/agent-academy/"
+
+# Course catalog — each course contains numbered labs
+courses:
+  recruit:
+    title: "Recruit"
+    path: "docs/recruit"
+    labs:
+      - slug: "00-course-setup"
+        title: "Course Setup"
+        interactive: true
+      - slug: "01-introduction-to-agents"
+        title: "Introduction to Agents"
+        interactive: false  # conceptual only
+      - slug: "02-copilot-studio-fundamentals"
+        title: "Copilot Studio Fundamentals"
+        interactive: false  # conceptual only
+      - slug: "03-create-a-declarative-agent-for-M365Copilot"
+        title: "Create A Declarative Agent For M365 Copilot"
+        interactive: true
+      - slug: "04-creating-a-solution"
+        title: "Creating A Solution"
+        interactive: true
+      - slug: "05-using-prebuilt-agents"
+        title: "Using Prebuilt Agents"
+        interactive: true
+      - slug: "06-create-agent-from-conversation"
+        title: "Create Agent From Conversation"
+        interactive: true
+      - slug: "07-add-new-topic-with-trigger"
+        title: "Add New Topic With Trigger"
+        interactive: true
+      - slug: "08-add-adaptive-card"
+        title: "Add Adaptive Cards"
+        interactive: true
+      - slug: "09-add-an-agent-flow"
+        title: "Add An Agent Flow"
+        interactive: true
+      - slug: "10-add-event-triggers"
+        title: "Add Event Triggers"
+        interactive: true
+      - slug: "11-publish-your-agent"
+        title: "Publish Your Agents"
+        interactive: true
+      - slug: "12-understanding-licensing"
+        title: "Understanding Licensing"
+        interactive: false  # conceptual only
+
+  operative:
+    title: "Operative"
+    path: "docs/operative"
+    labs:
+      - slug: "01-get-started"
+        title: "Get started with the Hiring Agent"
+        interactive: true
+      - slug: "02-agent-instructions"
+        title: "Authoring Agent Instructions"
+        interactive: true
+      - slug: "03-multi-agent"
+        title: "Make your agent multi-agent ready"
+        interactive: true
+      - slug: "04-automate-triggers"
+        title: "Automate your agent with Triggers"
+        interactive: true
+      - slug: "05-model-selection"
+        title: "Understanding Agent Models"
+        interactive: true
+      - slug: "06-ai-safety"
+        title: "Content Moderation and AI Safety"
+        interactive: true
+      - slug: "07-multimodal-prompts"
+        title: "Extracting Resume Contents"
+        interactive: true
+      - slug: "08-dataverse-grounding"
+        title: "Prompts - Dataverse Grounding"
+        interactive: true
+      - slug: "09-document-generation"
+        title: "Generating an Interview Prep Document"
+        interactive: true
+      - slug: "10-mcp"
+        title: "Integrate with MCP Servers"
+        interactive: true
+      - slug: "11-obtain-user-feedback"
+        title: "Obtain User Feedback with Adaptive Cards"
+        interactive: true
+
+  special-ops:
+    title: "Special Ops"
+    path: "docs/special-ops"
+    labs:
+      - slug: "mcs-mcp"
+        title: "MCS ❤️ MCP"
+        interactive: true
+      - slug: "ms-learn-mcp"
+        title: "Microsoft Learn Docs MCP"
+        interactive: true
+      - slug: "pac-cli-mcp"
+        title: "Power Platform CLI MCP"
+        interactive: true
+      - slug: "yaml-specialist"
+        title: "YAML Specialist"
+        interactive: true
+      - slug: "docusign-mcp"
+        title: "MCS + Docusign MCP"
+        interactive: true
+
+  cowork-collective:
+    title: "Cowork Collective"
+    path: "docs/cowork-collective"
+    labs:
+      - slug: "badge-check"
+        title: "Badge Check"
+        interactive: true
+      - slug: "compliance-packet"
+        title: "The Compliance Packet"
+        interactive: true
+      - slug: "out-of-office-prep"
+        title: "Out of Office Vacation Handoff"
+        interactive: true
+
+# Authentication — user authenticates manually in browser
+auth:
+  # The plugin opens a browser and navigates here, then waits for the user
+  # to complete sign-in. No automated credential entry.
+  login_url: "https://login.microsoftonline.com/"
+  # After auth, verify we can reach these portals
+  verify_urls:
+    - "https://copilotstudio.microsoft.com/"
+    - "https://make.powerapps.com/"
+  # How long to wait for the user to complete authentication (seconds)
+  auth_timeout_seconds: 300
+  # Probe URL to check auth is still valid between lab sections
+  auth_probe_url: "https://copilotstudio.microsoft.com/"
+
+# Portals used by Agent Academy labs
+portals:
+  copilot_studio: "https://copilotstudio.microsoft.com/"
+  power_apps: "https://make.powerapps.com/"
+  m365_copilot: "https://m365.cloud.microsoft/chat/"
+  power_platform_admin: "https://admin.powerplatform.microsoft.com/"
