@@ -1,6 +1,6 @@
 ---
 description: Test a single Agent Academy lab end-to-end by walking through its steps in a live browser.
-argument-hint: "[<course>/<slug>] [--dry-run] [--static-only] [--no-issue]"
+argument-hint: "[<course>/<slug>] [--dry-run] [--static-only] [--no-issue] [--env-url <url>]"
 ---
 
 # /test-lab
@@ -19,6 +19,10 @@ Flags:
 - `--dry-run` — parse the lab into a step tree only. No browser activity.
 - `--static-only` — check markdown structure, links, and images only. No browser.
 - `--no-issue` — run the test but skip GitHub issue filing. Results are local only.
+- `--env-url <url>` — override the default Power Platform environment URL. Use the
+  full Copilot Studio environment URL, e.g.
+  `https://copilotstudio.microsoft.com/environments/<env-id>/home`.
+  If omitted, uses `environment.default_url` from `config/agent-academy-config.yml`.
 
 ## Your task
 

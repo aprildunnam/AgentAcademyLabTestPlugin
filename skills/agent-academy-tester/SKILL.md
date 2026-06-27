@@ -67,19 +67,29 @@ This file is the orchestrator. It loads reference files as needed:
 
 This is the key difference from the original plugin: **no automated credential entry**.
 
-1. **Open browser.** Use `browser_navigate` to go to `https://copilotstudio.microsoft.com/`.
-   This will trigger the M365 login flow.
+1. **Resolve environment URL.** Check for `--env-url` flag first. If not provided, read
+   `environment.default_url` from `config/agent-academy-config.yml`. This gives a
+   full Copilot Studio URL with the target Power Platform environment embedded, e.g.
+   `https://copilotstudio.microsoft.com/environments/<env-id>/home`.
 
-2. **Prompt the user.** Tell the user:
+2. **Open browser.** Use `browser_navigate` to go to the resolved environment URL.
+   This will either land directly in the correct environment (if the Edge profile has
+   an active session) or trigger the M365 login flow.
+
+3. **Check if already authenticated.** Take a `browser_snapshot`. If the page shows
+   the Copilot Studio home (agent list, environment name, etc.) — auth is already
+   handled by the Edge profile. Skip to step 6.
+
+4. **Prompt the user (if login page appeared).** Tell the user:
    ```
    🔐 Please sign in to your M365 account in the browser window that just opened.
    Take your time — I'll wait up to 5 minutes for you to complete authentication.
    Let me know when you're signed in, or I'll detect it automatically.
    ```
 
-3. **Wait for authentication.** Poll with `browser_snapshot` every 10 seconds, checking
+5. **Wait for authentication.** Poll with `browser_snapshot` every 10 seconds, checking
    whether the page has left the `login.microsoftonline.com` domain and reached the
-   Copilot Studio home page. Indicators of success:
+   Copilot Studio environment. Indicators of success:
    - URL contains `copilotstudio.microsoft.com/environments`
    - Page contains environment picker or agent list
    - No login form visible

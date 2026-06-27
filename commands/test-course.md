@@ -1,6 +1,6 @@
 ---
 description: Test all interactive labs in an Agent Academy course sequentially.
-argument-hint: "[<course>] [--skip-conceptual] [--stop-on-failure] [--no-issue]"
+argument-hint: "[<course>] [--skip-conceptual] [--stop-on-failure] [--no-issue] [--env-url <url>]"
 ---
 
 # /test-course
@@ -19,6 +19,7 @@ Flags:
 - `--skip-conceptual` — skip labs marked as `interactive: false` (default behavior)
 - `--stop-on-failure` — halt the run if any lab has a `broken` finding with high confidence
 - `--no-issue` — run all tests but skip GitHub issue filing. Results are local only.
+- `--env-url <url>` — override the default Power Platform environment URL for all labs in the run.
 
 ## Your task
 

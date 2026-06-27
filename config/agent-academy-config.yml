@@ -140,6 +140,13 @@ auth:
   # Probe URL to check auth is still valid between lab sections
   auth_probe_url: "https://copilotstudio.microsoft.com/"
 
+# Power Platform environment
+# The environment URL the plugin navigates to before starting lab steps.
+# This ensures all lab work happens in the correct Copilot Studio environment.
+# Override per-run with: /test-lab recruit/04-creating-a-solution --env-url <url>
+environment:
+  default_url: "https://copilotstudio.microsoft.com/environments/f4742039-a72b-ee20-b60b-139dea70dc02/home"
+
 # Portals used by Agent Academy labs
 portals:
   copilot_studio: "https://copilotstudio.microsoft.com/"
