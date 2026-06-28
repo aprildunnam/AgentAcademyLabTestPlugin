@@ -310,12 +310,30 @@ When you need a net-new lab (not a rewrite of an existing one):
 
 1. **Tell it the course and topic** — e.g., `/create-lab operative --topic "teach users how to connect an MCP server"`
 2. **It explores the feature live** in your Copilot Studio environment — discovers the full click path, decision points, and pitfalls
-3. **Captures screenshots** at every meaningful step
-4. **Writes a complete lab** in the exact Agent Academy VitePress format (mission brief, objectives, numbered steps with bold UI elements, tips, code blocks, screenshots)
+3. **Captures annotated screenshots** (red box around target element) at every step, plus clean backups
+4. **Writes a complete lab** in the exact Agent Academy VitePress format — matching the style of existing labs perfectly
 5. **Self-validates** by running through its own instructions to confirm they work
 6. **Generates an evaluation file** with stats, validation results, and suggested placement in the course
 
-Output is local only (`runtime/new-labs/<course>-<slug>/`). You review the generated `index.md`, edit to taste, and manually add it to the agent-academy repo when ready. The writing style matches the Agent Academy voice — friendly, precise, one action per step.
+Output is local only (`runtime/new-labs/<course>-<slug>/`). You review the generated `index.md`, edit to taste, and manually add it to the agent-academy repo when ready.
+
+**What input does it need?**
+
+| Input | Required? | How to provide |
+|---|---|---|
+| Course | Yes | First argument: `recruit`, `operative`, `special-ops`, `cowork-collective` |
+| Topic | Yes | `--topic "..."` flag, or it will ask you |
+| Title | Recommended | `--title "..."` flag, or it will generate one |
+| Codename | Optional | It will ask (e.g., "OPERATION KNOWLEDGE DROP") or generate one |
+| Prerequisites | Asked | It will ask what prior labs or artifacts are needed |
+| Time estimate | Asked | How many minutes (defaults: 30–45 recruit, 45–60 operative) |
+| Environment URL | Optional | `--env-url` flag or uses your default |
+
+The more detail you give in `--topic`, the better. Compare:
+- ❌ Vague: `--topic "SharePoint"`
+- ✅ Good: `--topic "teach users how to add a SharePoint site as a knowledge source to their agent, configure the indexing, and test it by asking questions about the SharePoint content"`
+
+**Style matching:** The generated markdown uses the exact Agent Academy conventions — `<mission-meta />`, VitePress frontmatter (prev/next, difficulty, codename, tags), heading anchors, `::: warning` blocks, "select" instead of "click", bold exact UI text, `1.` for all steps, tables for field properties, and the spy/mission narrative voice.
 
 ## Architecture
 

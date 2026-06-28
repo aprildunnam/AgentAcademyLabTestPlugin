@@ -121,6 +121,9 @@ Invoke the `agent-academy-tester` skill in **rewrite mode**:
    ```
 
 6. **Generate the rewritten lab markdown.** Write `<output-dir>/index.md`:
+   - **Preserve the exact Agent Academy VitePress format** — frontmatter (prev/next,
+     short-description, difficulty, codename, time, tags, products), `<mission-meta />`,
+     heading anchors `{#slug}`, `::: warning` blocks, etc.
    - Start from the original lab's structure (headings, sections, mission brief, objectives)
    - Replace each step's instruction text with the new version (for `modified`/`new_flow`)
    - Keep `unchanged` steps as-is
@@ -131,7 +134,11 @@ Invoke the `agent-academy-tester` skill in **rewrite mode**:
           Reason: {reason}
           Alternative: {alternative or "None — manual review needed"} -->
      ```
-   - Update all screenshot references to point to the new captures
+   - Update all screenshot references to use the annotated captures (`step-N-annotated.png`)
+   - Ensure screenshots are 4-space indented under their step
+   - Use `1.` for all numbered steps (VitePress auto-numbers)
+   - Keep the Agent Academy voice: "select" not "click", bold exact UI text,
+     "Copy and paste the following as the **{field}**," pattern for text entry
    - Add a note at the top:
      ```markdown
      > [!NOTE]

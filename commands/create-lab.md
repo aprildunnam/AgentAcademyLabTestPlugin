@@ -30,15 +30,36 @@ Invoke the `agent-academy-tester` skill in **lab creation mode**:
 
 ### Step 1 — Gather requirements
 
-If not provided via flags, ask the user:
+If not provided via flags, ask the user for the following information. **All of these
+are needed** to produce a high-quality lab — don't skip any:
+
 1. **Which course?** (recruit, operative, special-ops, cowork-collective)
-2. **What's the lab about?** Get a topic description — can be high-level like
-   "teach users how to connect a SharePoint knowledge source to their agent" or
-   detailed with specific steps they want covered.
-3. **Any prerequisites?** Does this lab build on a prior lab? Should the learner
-   already have a solution, agent, or other artifact created?
-4. **Difficulty level?** Beginner (recruit-level), intermediate (operative), or
-   advanced (special-ops)?
+   - `recruit` = beginner, fundamentals of Copilot Studio
+   - `operative` = intermediate, advanced agent features
+   - `special-ops` = advanced integrations (MCP, external services)
+   - `cowork-collective` = real-world multi-agent scenarios
+
+2. **What's the lab about?** Get a topic description. The more detail the better:
+   - What feature/capability should the learner walk through?
+   - What's the end result? (e.g., "an agent that answers questions from SharePoint")
+   - Any specific scenarios or data to use as examples?
+
+3. **What's the codename?** Agent Academy uses spy/mission codenames for flavor
+   (e.g., "OPERATION CTRL-ALT-PACKAGE", "OPERATION KNOWLEDGE DROP"). Ask the user
+   for one, or generate a fun one that fits the theme.
+
+4. **Any prerequisites?** Does this lab build on a prior lab? Should the learner
+   already have:
+   - A specific solution created?
+   - An existing agent to modify?
+   - A data source configured?
+   - Specific security roles?
+
+5. **Estimated time?** How long should this lab take (in minutes)? Default to 30–45
+   for recruit, 45–60 for operative, 60+ for special-ops.
+
+6. **Tags and products?** What tags apply? (e.g., `copilot-studio`, `power-platform`,
+   `sharepoint`, `mcp`, `adaptive-cards`)
 
 ### Step 2 — Explore the feature
 
@@ -81,73 +102,142 @@ Based on your exploration, plan the lab structure:
 
 ### Step 4 — Write the lab markdown
 
-Generate `<output-dir>/index.md` in the exact Agent Academy VitePress format:
+Generate `<output-dir>/index.md` in the **exact** Agent Academy VitePress format.
+Study this template carefully — it matches the real labs in `microsoft/agent-academy`:
 
 ```markdown
 ---
-title: "🚨 Mission XX: {Title}"
-description: "{One-line description}"
+prev:
+  text: {Previous lab title}
+  link: /{course}/{prev-slug}
+next:
+  text: {Next lab title}
+  link: /{course}/{next-slug}
+short-description: {One-line description for navigation}
+difficulty: {1=beginner, 2=intermediate, 3=advanced}
+codename: {OPERATION CODENAME IN ALL CAPS}
+time: {estimated minutes}
+tags:
+  - {tag1}
+  - {tag2}
+products:
+  - copilot-studio
+  - power-platform
+industries:
+  - it
+created-date: {YYYY-MM-DD}
+last-edited-date: {YYYY-MM-DD}
 ---
+# 🚨 Mission {XX}: {Title} {#{slug-anchor}}
 
-# 🚨 Mission XX: {Title}
+<mission-meta />
 
-## 🎯 Mission Brief
+## 🎯 Mission Brief {#mission-brief}
 
-{2-3 paragraph introduction explaining what the learner will accomplish and why
-it matters. Written in a friendly, encouraging tone. Reference the Agent Academy
-narrative voice — learners are "recruits" in the recruit course, "operatives" in
-the operative course, etc.}
+{Agent Maker / Operative / Special Agent}, welcome to your next {tactical operation / mission / assignment}. In this mission, you'll learn to {what they'll accomplish}. Think of this as {fun analogy that fits the spy/mission theme}.
 
-## 🔎 Objectives
+{Second paragraph explaining WHY this matters in the real world.}
 
-By the end of this mission, you will:
-- {Objective 1}
-- {Objective 2}
-- {Objective 3}
+Let's {get started / begin / dive in}!
 
-## 🧪 Lab XX: {Section Title}
+> [!NOTE]
+> {Any important context before starting — e.g., "If your Copilot Studio screen looks different..."}
+
+## 🔎 Objectives {#objectives}
+
+In this mission, you'll learn:
+
+1. {Objective as a gerund phrase — "Understanding what X is and its role in Y"}
+1. {Objective 2}
+1. {Objective 3}
+1. {Objective 4}
+1. {Objective 5}
+
+## 🕵🏻‍♀️ {Conceptual Section Title} {#slug-anchor}
+
+{2-4 paragraphs of conceptual explanation with personality. Use emoji sparingly 🤓.
+Include diagrams or tables when helpful. This section teaches the "why" before the
+hands-on "how".}
+
+   ![{Descriptive alt text}](./assets/{XX.0_01_Description}.png)
+
+{More explanation, possibly with a bulleted list of key concepts.}
+
+## 🧪 Lab {XX}: {Hands-on Section Title} {#lab-xx-slug}
+
+We're now going to learn
+
+- {What they'll do in bullet form}
+- {Second thing}
+
+Let's begin!
 
 ### Prerequisites
 
-{List anything needed before starting. Reference prior labs by number if applicable.}
+{Security roles, prior labs, or environment requirements}
 
-> [!NOTE]
-> {Any helpful context or tips before starting}
+::: warning {Warning title}
+{Important prerequisite warning — e.g., "Make sure you switch to your developer environment"}
+:::
 
-### X.1 {First Subsection Title}
+1. {Prerequisite step if any setup is needed}
 
-1. {Step instruction with **bold UI elements** to interact with}
+    ![{Alt text}](./assets/{XX.0_0N_Description}.png)
 
-   ![{alt text}](./assets/{step-N-annotated}.png)
+### {X.1} {Subsection Title}
 
-2. {Next step...}
+1. {Instruction}. From {location}, select the **{exact UI element name}**.
 
-   ```text
-   {Any text the user needs to copy/paste}
-   ```
+    ![{Descriptive alt text}](./assets/{step-N-annotated}.png)
 
-3. {Step with a verification point}
+1. {Next instruction}. The **{pane/dialog name}** will {appear/load}. Select **{element}**
 
-   > [!TIP]
-   > {Helpful tip about what to look for}
+    ![{Alt text}](./assets/{step-N-annotated}.png)
 
-### X.2 {Second Subsection Title}
+1. {For copy/paste steps:} Copy and paste the following as the **{field name}**,
 
-1. {Continue with steps...}
+    ```text
+    {exact value to paste}
+    ```
 
-## ✅ Mission Complete
+1. {For verification steps:} You should now see {description of expected state}.
 
-🎉 {Congratulatory message summarizing what was accomplished.}
+    ![{Alt text}](./assets/{step-N-annotated}.png)
+
+    > [!TIP]
+    > {Helpful observation about what just happened or what to look for}
+
+### {X.2} {Next Subsection Title}
+
+1. {Continue steps...}
+
+## ✅ Mission Complete {#mission-complete}
+
+🎉 {Congratulatory message with personality — "Agent Maker, you've successfully packed
+your digital briefcase!"}
 
 You have successfully:
-- {Accomplishment 1}
-- {Accomplishment 2}
-- {Accomplishment 3}
+- ✅ {Accomplishment 1}
+- ✅ {Accomplishment 2}
+- ✅ {Accomplishment 3}
 
 ### Next Steps
 
-{Suggest what to explore next or which lab to do after this one.}
+{Suggest what comes next — "In the next mission, you'll learn to..."}
 ```
+
+**Critical style rules from real Agent Academy labs:**
+- Use `1.` for ALL numbered steps (VitePress auto-numbers them)
+- Screenshots are indented with 4 spaces under their step
+- Use `{#slug-anchor}` heading IDs on all `##` headings
+- Include `<mission-meta />` component right after the H1
+- Use `::: warning` blocks (not `> [!WARNING]`) for prerequisite warnings
+- Use `> [!NOTE]` and `> [!TIP]` for non-critical callouts
+- Tables for listing field values or properties
+- Asset filenames follow the pattern: `{section}_{subsection}_{sequence}_{Description}.png`
+- Copy/paste instructions use the phrasing: "Copy and paste the following as the **{field}**,"
+- Navigation instructions use: "From {location}, select the **{element}**"
+- Pane/dialog appearance: "The **{name}** will appear/load"
 
 ### Step 5 — Validate the lab
 
@@ -220,15 +310,44 @@ agent-academy repo when ready to submit a PR.
 
 ## Writing style guidelines
 
-When writing lab instructions, match the Agent Academy voice:
+Match the Agent Academy voice EXACTLY. Study existing labs in `microsoft/agent-academy`
+for tone. Key rules:
 
-- **Friendly and encouraging** — learners are on a mission, not reading a manual
-- **Precise about UI elements** — always bold the exact button/menu text: **Create agent**
-- **One action per step** — don't combine "click X and then type Y" into one step
-- **Show, don't just tell** — include a screenshot after every meaningful action
-- **Anticipate confusion** — use `> [!TIP]` blocks for non-obvious things
-- **Use code blocks** for anything the user needs to type or paste verbatim
-- **Keep steps scannable** — short sentences, active voice, start with a verb
+### Voice and tone
+- **Spy/mission theme** — learners are agents on missions, not students in a class
+- **Friendly and encouraging** — "Let's begin!", "Agent Maker, welcome to..."
+- **Light emoji use** — 🤓 🪄 🎉 sparingly for personality, never in step instructions
+- **Active voice** — "Select the **New** button" not "The New button should be selected"
+
+### Step instruction format
+- **One action per numbered step** — NEVER combine "click X and then type Y"
+- **Bold the exact UI text** — `**New solution**` not "the new solution button"
+- **Start with location context** — "From the left navigation, select..." or "In the **Properties** pane, enter..."
+- **Describe the result** — "The **Solution Explorer** will load" after a navigation step
+- **Use "select" not "click"** — Agent Academy convention
+- **Use "copy and paste the following as the **{field}**," pattern** for text entry
+
+### Screenshots
+- **Every action step gets a screenshot** — show the state AFTER the action
+- **Always use annotated versions** — red box around the target element
+- **4-space indent** under the step they belong to
+- **Descriptive alt text** — `![Solution Explorer showing new solution](./assets/...)`
+- **Asset naming**: `{section}_{subsection}_{sequence}_{Description}.png`
+  (e.g., `4.1_01_Solutions.png`, `4.1_02_NewSolution.png`)
+
+### Copy/paste blocks
+- Always preceded by: "Copy and paste the following as the **{field name}**,"
+- Use ` ```text ` fence (not ` ```bash ` or bare ` ``` `)
+- One value per code block — don't combine multiple fields
+
+### Structural rules
+- Use `1.` for ALL numbered items (VitePress auto-increments)
+- Tables for listing properties, security roles, or comparisons
+- `::: warning` for critical prerequisites (not `> [!WARNING]`)
+- `> [!NOTE]` for contextual info, `> [!TIP]` for helpful hints
+- Heading anchors on all `##` headings: `{#slug-anchor}`
+- Conceptual section BEFORE the `🧪 Lab` hands-on section
+- `<mission-meta />` component immediately after the H1 title
 
 Follow `$PLUGIN_ROOT/skills/agent-academy-tester/SKILL.md` for browser auth and
 Playwright execution procedures.
