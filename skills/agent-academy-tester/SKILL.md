@@ -20,6 +20,8 @@ allowed-tools:
   - Bash(gh repo clone:*)
   - Bash(gh pr create:*)
   - Bash(git:*)
+  - Bash(pac:*)
+  - Bash(dotnet:*)
   - AskUserQuestion
   # Playwright MCP tools
   - mcp__playwright__browser_navigate
@@ -62,6 +64,7 @@ This file is the orchestrator. It loads reference files as needed:
 | `/rewrite-lab [<course>/<slug>]` | Rewrite a lab for a new UI experience — documents changes and generates updated markdown locally |
 | `/create-lab [<course>]` | Create a brand-new lab from scratch — explores the feature live and generates complete lab markdown |
 | `/export-solution [<course>/<slug>]` | Export a Power Platform starter solution .zip so learners can skip prerequisite labs |
+| `/cleanup [<course>]` | Remove lab-created artifacts from the environment so labs can be re-run clean |
 
 ## Run lifecycle
 
@@ -373,6 +376,32 @@ This phase can run standalone (via `/export-solution`) or as a final step of oth
 commands when `--export-solution` is passed.
 
 See `commands/export-solution.md` for full details.
+
+### Phase 11 — Cleanup (for `/cleanup`)
+
+Removes lab-created artifacts so the environment is ready for a fresh run.
+
+1. **Identify artifacts.** Based on the course/lab scope, determine what was created
+   (agents, topics, flows, solutions, publishers, etc.) by reading the lab steps.
+
+2. **Discover actual state.** Use Power Platform CLI (`pac solution list`,
+   `pac solution list-components`) if available, otherwise browse Solution Explorer.
+
+3. **Present the cleanup plan.** Always show what will be deleted and get user
+   confirmation before proceeding. With `--dry-run`, stop after the plan.
+
+4. **Delete in dependency order.** Remove from inside-out: knowledge sources → topics
+   → flows → agents → solution components → solution → publisher. Never delete
+   system artifacts, the Default Solution, or non-lab-created items.
+
+5. **Verify clean state.** Refresh and confirm deletions. Report any failures.
+
+6. **Generate cleanup report.** Save to `runtime/cleanup/<course>-<timestamp>.md`.
+
+Safety: requires explicit user confirmation (or `--force` flag). The `--dry-run`
+flag shows the plan without deleting anything.
+
+See `commands/cleanup.md` for full details.
 
 ## Lab parsing rules
 
