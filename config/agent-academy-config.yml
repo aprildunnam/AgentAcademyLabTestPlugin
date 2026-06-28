@@ -143,9 +143,16 @@ auth:
 # Power Platform environment
 # The environment URL the plugin navigates to before starting lab steps.
 # This ensures all lab work happens in the correct Copilot Studio environment.
+#
+# Resolution order:
+#   1. --env-url flag (per-run override)
+#   2. AGENT_ACADEMY_ENV_URL environment variable (from .env file)
+#   3. default_url below (fallback)
+#
+# Set your personal URL in .env (see .env.example) rather than editing this file.
 # Override per-run with: /test-lab recruit/04-creating-a-solution --env-url <url>
 environment:
-  default_url: "https://copilotstudio.microsoft.com/environments/f4742039-a72b-ee20-b60b-139dea70dc02/home"
+  default_url: "${AGENT_ACADEMY_ENV_URL}"
 
 # Portals used by Agent Academy labs
 portals:

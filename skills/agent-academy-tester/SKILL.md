@@ -80,10 +80,12 @@ This file is the orchestrator. It loads reference files as needed:
 
 This is the key difference from the original plugin: **no automated credential entry**.
 
-1. **Resolve environment URL.** Check for `--env-url` flag first. If not provided, read
-   `environment.default_url` from `config/agent-academy-config.yml`. This gives a
-   full Copilot Studio URL with the target Power Platform environment embedded, e.g.
-   `https://copilotstudio.microsoft.com/environments/<env-id>/home`.
+1. **Resolve environment URL.** Check in order:
+   1. `--env-url` flag (highest priority, per-run override)
+   2. `AGENT_ACADEMY_ENV_URL` environment variable (from `.env` file)
+   3. `environment.default_url` from `config/agent-academy-config.yml`
+   If the resolved value is `${AGENT_ACADEMY_ENV_URL}` (unexpanded) or empty,
+   prompt the user to provide a URL or create a `.env` file.
 
 2. **Open browser.** Use `browser_navigate` to go to the resolved environment URL.
    This will either land directly in the correct environment (if the Edge profile has
