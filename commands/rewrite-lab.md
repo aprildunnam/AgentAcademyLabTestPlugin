@@ -22,6 +22,8 @@ Flags:
   `https://copilotstudio.microsoft.com/environments/<new-experience-env-id>/home`
 - `--output-dir <path>` — Where to save the rewritten lab and screenshots locally.
   Defaults to `runtime/rewrites/<course>-<slug>/`.
+- `--export-solution` — after rewriting, also export the environment state as a
+  Power Platform solution .zip starter pack for the rewritten lab.
 
 ## Your task
 

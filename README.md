@@ -23,6 +23,7 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 | `/reproduce-issue [<issue-number>]` | Reproduce a bug reported in a GitHub issue by re-running the relevant lab steps |
 | `/rewrite-lab [<course>/<slug>]` | Rewrite a lab for a new UI experience — generates updated markdown + screenshots locally |
 | `/create-lab [<course>]` | Create a brand-new lab from scratch — explores the feature live and generates complete lab markdown |
+| `/export-solution [<course>/<slug>]` | Export a Power Platform starter solution so learners can skip prerequisite labs |
 
 ### Command flags
 
@@ -37,6 +38,10 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 | `--static-only` | `/test-lab` | Check markdown structure, links, and images only |
 | `--stop-on-failure` | `/test-course` | Halt the run if any lab has a high-severity broken finding |
 | `--output-dir <path>` | `/rewrite-lab`, `/create-lab` | Custom output directory for generated lab files |
+| `--export-solution` | `/test-lab`, `/rewrite-lab`, `/create-lab` | Also export the resulting state as a Power Platform solution .zip |
+| `--run-prereqs` | `/export-solution` | Run all prerequisite lab steps first to create artifacts from scratch |
+| `--export-type` | `/export-solution` | Export as `managed`, `unmanaged`, or `both` (default: both) |
+| `--solution-name` | `/export-solution` | Custom solution display name (default: auto-generated) |
 | `--title <title>` | `/create-lab` | The mission title for the new lab |
 | `--topic <description>` | `/create-lab` | Brief description of what the lab should teach |
 
@@ -96,6 +101,15 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 
 # Create a lab with a specific environment
 /create-lab recruit --topic "Setting up an MCP server connection" --env-url https://copilotstudio.microsoft.com/environments/NEW-ENV/home
+
+# Export a starter solution for a lab (so learners can skip prerequisites)
+/export-solution recruit/06-create-agent-from-conversation
+
+# Export after running all prerequisite steps from scratch
+/export-solution recruit/06-create-agent-from-conversation --run-prereqs
+
+# Test a lab and also export the resulting state as a starter solution
+/test-lab recruit/06-create-agent-from-conversation --export-solution
 ```
 
 ## Prerequisites
@@ -335,6 +349,23 @@ The more detail you give in `--topic`, the better. Compare:
 
 **Style matching:** The generated markdown uses the exact Agent Academy conventions — `<mission-meta />`, VitePress frontmatter (prev/next, difficulty, codename, tags), heading anchors, `::: warning` blocks, "select" instead of "click", bold exact UI text, `1.` for all steps, tables for field properties, and the spy/mission narrative voice.
 
+### Modular lab solutions (`/export-solution`)
+
+Labs in Agent Academy build on each other — Lab 06 needs artifacts from Labs 04 and 05. The `/export-solution` command creates **starter packs** so learners can jump to any lab:
+
+1. **Identifies what the target lab needs** — catalogs all artifacts from prerequisite labs (agents, topics, flows, tables, etc.)
+2. **Validates artifacts exist** in the environment (or runs prereqs with `--run-prereqs` to create them from scratch)
+3. **Ensures everything is in the correct solution** — adds missing components via "Add existing"
+4. **Runs solution validation** — blocks export on critical errors
+5. **Publishes and exports** as managed .zip, unmanaged .zip, or both
+6. **Generates a manifest** with import instructions and post-import setup steps
+
+The result is a `.zip` file that a learner can import into their environment to instantly have all prerequisites ready.
+
+**Use with other commands:** Add `--export-solution` to `/test-lab`, `/rewrite-lab`, or `/create-lab` to also produce the starter solution after the primary task completes.
+
+Output goes to `runtime/solutions/<course>-<slug>/` with the .zip(s) and a `manifest.md`.
+
 ## Architecture
 
 ```
@@ -349,6 +380,7 @@ commands/
   reproduce-issue.md                — /reproduce-issue command definition
   rewrite-lab.md                    — /rewrite-lab command definition
   create-lab.md                     — /create-lab command definition
+  export-solution.md                — /export-solution command definition
 skills/
   agent-academy-tester/
     SKILL.md                        — Main orchestration skill (auth → parse → execute → judge → report)

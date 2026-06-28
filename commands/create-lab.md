@@ -23,6 +23,8 @@ Flags:
   documenting the feature. Falls back to `environment.default_url` from config.
 - `--output-dir <path>` — Where to save the generated lab. Defaults to
   `runtime/new-labs/<course>-<slug>/`.
+- `--export-solution` — after creating the lab, also export the resulting environment
+  state as a Power Platform solution .zip starter pack.
 
 ## Your task
 
