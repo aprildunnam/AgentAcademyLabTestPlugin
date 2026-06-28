@@ -88,3 +88,31 @@ Many Agent Academy labs require being in a specific environment:
   on hover or click — take a fresh snapshot after clicking to see child items.
 - **Modal dialogs**: Solution publisher, agent naming, etc. use modal panes
   that slide in from the right side.
+
+## Download handling (for solution export)
+
+When exporting solutions, Power Platform triggers a browser download:
+
+1. **Before clicking Export**, configure a download directory:
+   - Use `browser_evaluate` to check if a download is triggered
+   - The Playwright MCP server saves downloads to its default downloads path
+
+2. **Click the Export button** and wait for the download to start.
+
+3. **Wait for completion.** Use `browser_wait_for` to detect the download
+   completion indicator in the UI (typically a toast notification or the
+   Export button returning to its normal state).
+
+4. **Locate the file.** After download, use Bash to find the `.zip` file:
+   ```bash
+   # Playwright MCP downloads go to the system default downloads folder
+   ls -t ~/Downloads/*.zip | head -1
+   ```
+
+5. **Move to output directory:**
+   ```bash
+   mv ~/Downloads/SolutionName_*.zip runtime/solutions/
+   ```
+
+If the download does not trigger (some environments require a different
+export flow), fall back to using `pac solution export` via CLI instead.

@@ -62,7 +62,8 @@ runtime/                                   # gitignored — test results, screen
 
 4. **Configure your environment:**
    - Edit `.github/mcp.json` to set your Edge profile path (see `edge://version` in your target profile)
-   - Edit `config/agent-academy-config.yml` to set your Power Platform environment URL
+   - Copy `.env.example` to `.env` and set your `AGENT_ACADEMY_ENV_URL` (see `.env.example` for details)
+   - The `.env` file is gitignored — your personal environment URL is never committed
 
 ## Common change recipes
 
@@ -147,3 +148,11 @@ This project uses [Semantic Versioning](https://semver.org/). Version is recorde
 - `config/judge-config.yml`
 
 When cutting a release, update both files in the same commit and tag appropriately.
+
+## Known limitations
+
+- **No automated consistency checks.** There is no CI pipeline or linter that
+  validates cross-references between commands, SKILL.md phases, config keys, and
+  flag names. When adding or renaming a flag, manually search all files for the old
+  name (`grep -r 'old-flag' .`). Future improvement: a validation script that
+  checks flag references, config keys, and file path references across all plugin files.

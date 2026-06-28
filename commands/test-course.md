@@ -1,6 +1,6 @@
 ---
 description: Test all interactive labs in an Agent Academy course sequentially.
-argument-hint: "[<course>] [--skip-conceptual] [--stop-on-failure] [--no-issue] [--no-pr] [--auto-fix] [--common-issues] [--env-url <url>]"
+argument-hint: "[<course>] [--include-conceptual] [--stop-on-failure] [--no-issue] [--no-pr] [--auto-fix] [--common-issues] [--env-url <url>]"
 ---
 
 # /test-course
@@ -16,7 +16,7 @@ The first positional argument is the course name (e.g., `recruit`, `operative`,
 available courses to choose from.
 
 Flags:
-- `--skip-conceptual` — skip labs marked as `interactive: false` (default behavior)
+- `--include-conceptual` — also validate non-interactive (conceptual reading) labs with static checks
 - `--stop-on-failure` — halt the run if any lab has a `broken` finding with high confidence
 - `--no-issue` — run all tests but skip GitHub issue filing. Results are local only.
 - `--no-pr` — skip fix PR generation even when `--auto-fix` is passed.

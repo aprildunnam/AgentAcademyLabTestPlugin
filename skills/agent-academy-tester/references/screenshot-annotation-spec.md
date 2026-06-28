@@ -162,10 +162,15 @@ after detecting that lab instructions have drifted from the current Copilot Stud
 **Actual (current UI):** {observed}
 
 **Before** (annotated):
-![Step {N} annotated](runtime/screenshots/{course}-{slug}/step-{N}-annotated.png)
+![Step {N} annotated]({course}/{slug}/assets/step-{N}-annotated.png)
 
 **After** (replacement screenshot):
 ![Step {N} replacement](docs/{course}/{slug}/assets/{screenshot_filename})
+
+> Note: Annotated screenshots are committed to the PR branch under
+> `docs/{course}/{slug}/assets/` so they render inline on GitHub.
+> If the screenshots are too large, they are uploaded as issue attachments
+> and linked via URL instead.
 
 **Text change:**
 ```diff

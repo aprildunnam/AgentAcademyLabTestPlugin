@@ -32,11 +32,23 @@ Microsoft follows the principle of [Coordinated Vulnerability Disclosure](https:
 
 ## Plugin-specific security model
 
-This plugin handles workshop-issued test account credentials. The security model is documented in detail in [`docs/security.md`](docs/security.md), including:
+This plugin does NOT handle or store any credentials. Authentication is performed
+manually by the user in their browser — the plugin never sees, caches, or logs
+passwords, tokens, or secrets.
 
-- What is encrypted (passwords, tenant identifiers) versus stored as cleartext (user IDs, timestamps).
-- The Windows DPAPI scope (current-user) and what that guarantees.
-- The boundaries of the audit log (what's logged, what's never logged).
-- Known limitations (browser cookies, screenshots that may capture PII, transcript hygiene).
+**What the plugin DOES access:**
+- Your browser profile (via Playwright MCP) — to reuse an existing M365 session
+- Copilot Studio UI elements — via accessibility snapshots and screenshots
+- GitHub CLI (`gh`) — for issue filing and PR creation, using your existing `gh` auth
+- Power Platform CLI (`pac`) — optional, for solution management
 
-If you discover a flaw in this plugin's credential handling, please report it through MSRC (above) rather than filing a public issue against this repo.
+**What the plugin DOES NOT do:**
+- Store or cache any credentials (passwords, tokens, API keys)
+- Automate the sign-in process (you always sign in manually)
+- Log sensitive data in reports (screenshots may capture UI state — review before sharing)
+
+**Screenshots and reports** are saved to `runtime/` (gitignored) and may contain
+UI state from your environment. Review them before sharing or committing.
+
+If you discover a security issue in this plugin, please report it through MSRC (above)
+rather than filing a public issue against this repo.

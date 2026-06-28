@@ -3,11 +3,13 @@
 
 # Plugin runtime state — never committed.
 # This directory holds:
-#   - account/credential.enc      DPAPI-encrypted workshop-account credentials (user-scoped)
-#   - account/account.meta.json   cached account metadata (user_id, timestamps)
-#   - audit-history.yml           rolling local log of every audit run
-#   - runs/<run-id>/...           per-run parsed steps, findings, screenshots, transcripts
-# All of it is local, user-specific, and frequently contains secrets or PII. Never commit.
+#   - test-results/         per-run test reports and findings
+#   - screenshots/          annotated and clean screenshots
+#   - rewrites/             rewritten lab output from /rewrite-lab
+#   - new-labs/             new lab output from /create-lab
+#   - solutions/            exported solution .zip files
+#   - cleanup/              cleanup reports
+# All of it is local and user-specific. Never commit.
 runtime/
 
 # OS / editor / IDE artifacts
