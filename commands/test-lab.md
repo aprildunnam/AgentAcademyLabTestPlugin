@@ -1,6 +1,6 @@
 ---
 description: Test a single Agent Academy lab end-to-end by walking through its steps in a live browser.
-argument-hint: "[<course>/<slug>] [--dry-run] [--static-only] [--no-issue] [--no-pr] [--auto-fix] [--env-url <url>]"
+argument-hint: "[<course>/<slug>] [--dry-run] [--static-only] [--no-issue] [--no-pr] [--auto-fix] [--common-issues] [--env-url <url>]"
 ---
 
 # /test-lab
@@ -25,6 +25,11 @@ Flags:
   screenshots highlighting the problem and opens a PR on `microsoft/agent-academy`
   with corrected markdown and refreshed screenshots. Without this flag, only the
   report and optional issue are generated.
+- `--common-issues` — generate a "Common Issues" section for the lab. Collects
+  steps that are confusing, slightly off, or have non-obvious workarounds (verdicts:
+  `unclear`, `non_deterministic`, or `pass` with low confidence) and produces a
+  troubleshooting appendix in Agent Academy markdown format. Output is saved locally
+  and can be appended to the lab's `index.md`.
 - `--env-url <url>` — override the default Power Platform environment URL. Use the
   full Copilot Studio environment URL, e.g.
   `https://copilotstudio.microsoft.com/environments/<env-id>/home`.

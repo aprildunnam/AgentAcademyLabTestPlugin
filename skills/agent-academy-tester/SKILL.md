@@ -405,6 +405,56 @@ flag shows the plan without deleting anything.
 
 See `commands/cleanup.md` for full details.
 
+### Phase 12 — Common Issues Log (when `--common-issues` is passed)
+
+After step execution and judging, collect findings that aren't outright broken but
+are confusing, slightly off, or have non-obvious workarounds:
+
+**What qualifies as a "common issue":**
+- Verdict `unclear` (any confidence) — instruction is ambiguous
+- Verdict `pass` but confidence < 0.8 — it works but something felt off
+- Verdict `non_deterministic` — result varies, learner might see something different
+- Verdict `transient` — timing-dependent, may fail on first try
+- Steps where the tester had to try an alternative path before succeeding
+- Steps where a modal/dialog appeared that wasn't mentioned in the instructions
+- Steps where the UI element was found but in a different location than described
+
+**Output format.** Generate `<output-dir>/common-issues.md` in Agent Academy style:
+
+```markdown
+## 🛟 Common Issues {#common-issues}
+
+Having trouble? Here are solutions to common issues encountered in this lab.
+
+### Step {N}: {brief description of the issue}
+
+**Symptom:** {What the learner might see or experience}
+
+**Cause:** {Why this happens — timing, environment config, UI variation, etc.}
+
+**Fix:** {Exact steps to resolve, with bold UI elements}
+
+{Optional screenshot showing the issue or fix}
+
+---
+
+### Step {M}: {next issue}
+
+...
+```
+
+**Rules for writing common issues:**
+- Write from the learner's perspective — "If you see..." / "If the button doesn't appear..."
+- Be specific about the symptom (what they see) and fix (what to do)
+- Include a screenshot if the issue is visual
+- Keep the same Agent Academy voice (friendly, helpful)
+- Order by step number
+- Only include issues that a real learner would plausibly encounter
+
+**Integration:** The generated `common-issues.md` section can be appended to the
+lab's `index.md` before the `## ✅ Mission Complete` section. It's saved as a
+separate file so the user can review and decide whether to include it.
+
 ## Lab parsing rules
 
 Agent Academy labs use VitePress markdown with this structure:

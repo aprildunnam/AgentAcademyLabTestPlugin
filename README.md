@@ -34,6 +34,7 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 | `--no-issue` | Both | Skip GitHub issue filing — results are local only |
 | `--auto-fix` | Both | Enable annotated screenshots + fix PR generation for broken findings |
 | `--no-pr` | Both | Skip fix PR generation (use with `--auto-fix` to get screenshots only) |
+| `--common-issues` | `/test-lab`, `/test-course` | Generate a "Common Issues" troubleshooting section for the lab |
 | `--no-comment` | `/reproduce-issue` | Run reproduction but don't post results to the issue |
 | `--dry-run` | `/test-lab` | Parse the lab into a step tree only, no browser |
 | `--static-only` | `/test-lab` | Check markdown structure, links, and images only |
@@ -126,6 +127,12 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 
 # Clean up but keep the solution container for re-use
 /cleanup recruit --keep-solution
+
+# Test a lab and generate a "Common Issues" troubleshooting section
+/test-lab recruit/06-create-agent-from-conversation --common-issues
+
+# Test an entire course with common issues for each lab
+/test-course recruit --common-issues
 ```
 
 ## Prerequisites
@@ -411,6 +418,29 @@ When you want to re-run labs from scratch, `/cleanup` removes all lab-created ar
 - Requires explicit confirmation (or `--force` to skip)
 
 **Power Platform CLI integration:** If `pac` is installed (`dotnet tool install --global Microsoft.PowerApps.CLI.Tool`), cleanup is faster and more reliable. Falls back to browser-based deletion via Playwright if `pac` isn't available.
+
+### Common issues log (`--common-issues`)
+
+When testing reveals steps that aren't broken but are confusing, slightly off, or have non-obvious workarounds, the `--common-issues` flag generates a ready-to-use troubleshooting section:
+
+- **Captures "soft" findings** — ambiguous instructions, low-confidence passes, timing issues, unexpected modals, UI elements in different locations than described
+- **Writes a `common-issues.md`** in Agent Academy format (`## 🛟 Common Issues`) with symptom/cause/fix for each issue
+- **Ready to append** to the lab's `index.md` before the "Mission Complete" section
+
+Example output:
+```markdown
+## 🛟 Common Issues {#common-issues}
+
+### Step 5: SharePoint URL validation dialog
+
+**Symptom:** After pasting the SharePoint URL, an "Add anyway?" dialog appears that isn't mentioned in the instructions.
+
+**Cause:** Copilot Studio validates SharePoint URLs and shows a confirmation when the site hasn't been indexed yet.
+
+**Fix:** Select **Add anyway** to proceed. The knowledge source will be added and indexing will begin automatically.
+```
+
+This is saved locally — you review it and decide whether to include it in the published lab.
 
 ## Architecture
 
