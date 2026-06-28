@@ -1,6 +1,6 @@
 ---
 description: Test all interactive labs in an Agent Academy course sequentially.
-argument-hint: "[<course>] [--skip-conceptual] [--stop-on-failure] [--no-issue] [--no-pr] [--auto-fix] [--env-url <url>]"
+argument-hint: "[<course>] [--skip-conceptual] [--stop-on-failure] [--no-issue] [--no-pr] [--auto-fix] [--common-issues] [--env-url <url>]"
 ---
 
 # /test-course
@@ -24,6 +24,8 @@ Flags:
   `broken` findings (confidence ≥ 0.7), captures annotated screenshots and opens a
   fix PR on `microsoft/agent-academy` with corrected markdown and refreshed screenshots.
   One PR per lab (not one per course).
+- `--common-issues` — for each lab, generate a "Common Issues" troubleshooting section
+  collecting confusing steps, non-obvious workarounds, and low-confidence passes.
 - `--env-url <url>` — override the default Power Platform environment URL for all labs in the run.
 
 ## Your task
