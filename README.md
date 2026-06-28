@@ -21,6 +21,7 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 | `/test-lab [<course>/<slug>]` | Test a single lab interactively |
 | `/test-course [<course>]` | Test all interactive labs in a course sequentially |
 | `/reproduce-issue [<issue-number>]` | Reproduce a bug reported in a GitHub issue by re-running the relevant lab steps |
+| `/rewrite-lab [<course>/<slug>]` | Rewrite a lab for a new UI experience — generates updated markdown + screenshots locally |
 
 ### Command flags
 
@@ -34,6 +35,7 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 | `--dry-run` | `/test-lab` | Parse the lab into a step tree only, no browser |
 | `--static-only` | `/test-lab` | Check markdown structure, links, and images only |
 | `--stop-on-failure` | `/test-course` | Halt the run if any lab has a high-severity broken finding |
+| `--output-dir <path>` | `/rewrite-lab` | Custom output directory for the rewritten lab files |
 
 ### Available courses
 
@@ -79,6 +81,12 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 
 # Reproduce without posting results back to the issue
 /reproduce-issue 42 --no-comment
+
+# Rewrite a lab for a new Copilot Studio UI experience
+/rewrite-lab recruit/06-create-agent-from-conversation --env-url https://copilotstudio.microsoft.com/environments/NEW-EXPERIENCE-ENV-ID/home
+
+# Rewrite with custom output location
+/rewrite-lab recruit/04-creating-a-solution --env-url https://copilotstudio.microsoft.com/environments/NEW-ENV/home --output-dir ~/Desktop/lab-rewrites/04
 ```
 
 ## Prerequisites
@@ -271,6 +279,22 @@ When you have a bug report filed against a lab, `/reproduce-issue` automates the
 
 This is useful for triaging incoming bug reports — run `/reproduce-issue 42` and let the plugin confirm whether the problem is real, environment-specific, or already fixed.
 
+### Lab rewrite for new UI (`/rewrite-lab`)
+
+When a new Copilot Studio experience rolls out, `/rewrite-lab` helps you migrate existing labs:
+
+1. **Runs the original lab steps** in the new environment (you provide the `--env-url` with the new experience enabled)
+2. **Classifies each step**: `unchanged` (works as-is), `modified` (UI renamed/moved), `new_flow` (fundamentally different), `removed` (no longer possible), or `blocked` (not supported)
+3. **Discovers the new path** for modified/new-flow steps by figuring out how to accomplish the same goal in the new UI
+4. **Captures fresh screenshots** at every step
+5. **Generates two files locally** (no PR, no issue — purely for your review):
+   - `evaluation.md` — full comparison table with blockers section highlighting anything that's **not possible** in the new UI
+   - `index.md` — the complete rewritten lab markdown ready to copy into agent-academy
+
+Output goes to `runtime/rewrites/<course>-<slug>/` (or `--output-dir`). You review, edit, and submit a PR manually when ready.
+
+**Key: blockers are flagged prominently.** If something from the old lab can't be done in the new UI, the evaluation file calls it out with the reason, potential alternatives, and impact on the learning objective.
+
 ## Architecture
 
 ```
@@ -283,6 +307,7 @@ commands/
   test-lab.md                       — /test-lab command definition
   test-course.md                    — /test-course command definition
   reproduce-issue.md                — /reproduce-issue command definition
+  rewrite-lab.md                    — /rewrite-lab command definition
 skills/
   agent-academy-tester/
     SKILL.md                        — Main orchestration skill (auth → parse → execute → judge → report)
