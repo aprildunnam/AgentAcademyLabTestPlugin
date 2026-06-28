@@ -56,5 +56,48 @@ issues:
   # When an open issue already exists for the lab, add a comment with new findings
   on_duplicate: "comment"
 
+# --- Issue reproduction ---
+# Settings for /reproduce-issue command
+reproduction:
+  # When running targeted reproduction, how many steps after the reported
+  # broken step(s) to also run (to check for cascade effects)
+  cascade_steps: 3
+  # In quick mode (prerequisite steps), skip the critique pass
+  quick_mode_skip_critique: true
+  # Post reproduction results as a comment on the issue
+  post_comment: true
+  # Verdicts from the original report that trigger targeted (vs full) mode
+  targeted_verdicts: ["broken", "unclear"]
+
+# --- Fix PR generation ---
+# When --auto-fix is used and broken findings exist, generate a fix PR
+fix_pr:
+  enabled: true
+  repo: "microsoft/agent-academy"
+  branch_pattern: "fix/{course}-{slug}-lab-test-{run_id}"
+  labels: ["lab-test", "automated"]
+  # Minimum confidence for a finding to be included in the fix PR
+  min_confidence: 0.7
+  # Only generate fixes for these verdicts
+  fix_verdicts: ["broken"]
+  # Include annotated screenshots in the PR body
+  include_annotated_screenshots: true
+  # If the user doesn't have push access, open the PR from a fork
+  fork_fallback: true
+
+# --- Annotated screenshots ---
+screenshots:
+  # Where to save annotated screenshots (relative to plugin runtime dir)
+  output_dir: "runtime/screenshots"
+  # Annotation overlay colors
+  highlight_color: "#ff4444"
+  callout_background: "#ff4444"
+  callout_text_color: "#ffffff"
+  # Verdicts that trigger annotation
+  annotate_on_verdicts: ["broken", "unclear"]
+  # Minimum confidence to annotate
+  min_confidence_broken: 0.7
+  min_confidence_unclear: 0.8
+
 # Plugin version
 plugin_version: "1.0.0"

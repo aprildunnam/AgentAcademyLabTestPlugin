@@ -1,6 +1,6 @@
 ---
 description: Test a single Agent Academy lab end-to-end by walking through its steps in a live browser.
-argument-hint: "[<course>/<slug>] [--dry-run] [--static-only] [--no-issue] [--env-url <url>]"
+argument-hint: "[<course>/<slug>] [--dry-run] [--static-only] [--no-issue] [--no-pr] [--auto-fix] [--env-url <url>]"
 ---
 
 # /test-lab
@@ -19,6 +19,12 @@ Flags:
 - `--dry-run` — parse the lab into a step tree only. No browser activity.
 - `--static-only` — check markdown structure, links, and images only. No browser.
 - `--no-issue` — run the test but skip GitHub issue filing. Results are local only.
+- `--no-pr` — skip fix PR generation even if broken findings are found.
+- `--auto-fix` — enable annotated screenshots + fix PR generation (Phase 5–6).
+  When a `broken` finding (confidence ≥ 0.7) is detected, captures annotated
+  screenshots highlighting the problem and opens a PR on `microsoft/agent-academy`
+  with corrected markdown and refreshed screenshots. Without this flag, only the
+  report and optional issue are generated.
 - `--env-url <url>` — override the default Power Platform environment URL. Use the
   full Copilot Studio environment URL, e.g.
   `https://copilotstudio.microsoft.com/environments/<env-id>/home`.
@@ -50,5 +56,11 @@ Invoke the `agent-academy-tester` skill for the given lab:
    If any `broken` or `unclear` findings exist with confidence ≥ 0.7, file a GitHub issue
    at `microsoft/agent-academy` (or comment on an existing open issue for this lab).
    Skip issue filing if `--no-issue` was passed.
+
+7. **Annotated screenshots & fix PR** (when `--auto-fix` is passed): For each broken
+   finding, capture annotated screenshots with red callout boxes highlighting the
+   discrepancy. Then clone `microsoft/agent-academy`, apply corrected markdown and
+   replacement screenshots, and open a fix PR. Skip if `--no-pr` was passed.
+   See Phases 5–6 in `SKILL.md`.
 
 Follow `$PLUGIN_ROOT/skills/agent-academy-tester/SKILL.md` for the full procedure.

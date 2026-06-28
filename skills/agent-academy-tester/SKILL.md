@@ -16,6 +16,10 @@ allowed-tools:
   - Bash(gh issue create:*)
   - Bash(gh issue list:*)
   - Bash(gh issue comment:*)
+  - Bash(gh issue view:*)
+  - Bash(gh repo clone:*)
+  - Bash(gh pr create:*)
+  - Bash(git:*)
   - AskUserQuestion
   # Playwright MCP tools
   - mcp__playwright__browser_navigate
@@ -45,6 +49,7 @@ This file is the orchestrator. It loads reference files as needed:
 - `references/playwright-cookbook.md` — portal navigation, tool mapping, known quirks
 - `references/llm-judge-prompts.md` — per-step judge and critique prompts
 - `references/finding-schema.md` — finding record structure and outcome definitions
+- `references/screenshot-annotation-spec.md` — annotated screenshot generation and fix PR procedure
 
 ## Top-level entry points
 
@@ -52,6 +57,7 @@ This file is the orchestrator. It loads reference files as needed:
 |---|---|
 | `/test-lab [<course>/<slug>]` | Test a single lab interactively |
 | `/test-course [<course>]` | Test all interactive labs in a course sequentially |
+| `/reproduce-issue [<issue-number>]` | Reproduce a reported GitHub issue by re-running the relevant lab steps |
 
 ## Run lifecycle
 
@@ -160,6 +166,108 @@ After all steps are executed:
       - Command: `gh issue comment <number> --repo microsoft/agent-academy --body "..."`
    d. If `--no-issue` flag was passed, skip issue filing and only write the local report.
 4. **Present to user.** Display the summary, local report path, and issue URL (if filed).
+
+### Phase 5 — Annotated Screenshots
+
+For each finding with verdict `broken` (confidence ≥ 0.7) or `unclear` (confidence ≥ 0.8):
+
+1. **Capture the actual UI state.** Take a clean `browser_take_screenshot` showing what the
+   learner would see today. Save as `step-<N>-actual.png`.
+
+2. **Generate an annotated screenshot.** Use `browser_evaluate` to inject a temporary
+   overlay onto the page with:
+   - A **red callout box** in the corner showing: step number, verdict, expected vs observed
+   - A **red rectangle** around the UI element that's wrong (renamed, missing, moved)
+   - For renamed elements: label showing `"Lab says: {old} → Now: {new}"`
+   - For missing elements: red dashed box where the element should be
+
+3. **Take the annotated screenshot** with `browser_take_screenshot`. Save as
+   `step-<N>-annotated.png`.
+
+4. **Remove the overlay** with `browser_evaluate` to restore the clean page state.
+
+5. **Capture a replacement screenshot.** If the lab's screenshot for this step is outdated,
+   take a clean screenshot of the current UI in the same viewport/state as the lab's
+   original. Save as `step-<N>-replacement.png`. This becomes the new screenshot in the
+   fix PR.
+
+See `references/screenshot-annotation-spec.md` for full annotation styles and file naming.
+
+### Phase 6 — Fix PR Generation
+
+When at least one finding has verdict `broken` (confidence ≥ 0.7) with a
+`suggested_correction`, and `--no-pr` was NOT passed:
+
+1. **Clone `microsoft/agent-academy`** (shallow, depth 1).
+
+2. **Create a fix branch**: `fix/<course>-<slug>-lab-test-<run_id>`.
+
+3. **Apply text corrections** to `docs/<course>/<slug>/index.md`:
+   - For each finding with `suggested_correction`, find the original step text
+     and replace it with the corrected version.
+   - Preserve markdown formatting (indentation, bold, code blocks).
+
+4. **Replace outdated screenshots**: Copy each `step-<N>-replacement.png` into
+   `docs/<course>/<slug>/assets/`, using the same filename as the original
+   screenshot referenced in the lab markdown.
+
+5. **Commit and push** with a descriptive message listing each corrected step.
+
+6. **Open a PR** via `gh pr create --repo microsoft/agent-academy` with:
+   - Title: `fix(<course>/<slug>): update lab steps to match current UI`
+   - Body: structured report with before/after for each finding, annotated
+     screenshots, diff of text changes, and `Fixes #<issue>` if an issue exists
+   - Labels: `lab-test`, `automated`
+
+7. **Link the issue**: If a GitHub issue was filed (or already open) for this lab,
+   add a comment on the issue linking to the new PR.
+
+See `references/screenshot-annotation-spec.md` for the full PR body template and
+error handling (fork fallback, permission errors, etc.).
+
+### Phase 7 — Issue Reproduction (for `/reproduce-issue`)
+
+When invoked via `/reproduce-issue <number>`, the lifecycle changes:
+
+1. **Fetch the issue.** Use `gh issue view <number> --repo microsoft/agent-academy`
+   to retrieve the title, body, labels, and comments.
+
+2. **Extract the lab and step references.**
+   - Look for a `lab:<course>/<slug>` label (auto-filed issues always have one)
+   - Parse the body for lab paths (`recruit/06-...`) and step numbers (`Step 5`)
+   - If ambiguous, ask the user which lab the issue relates to
+
+3. **Determine scope.** Two modes:
+   - **Targeted**: issue references specific steps → run prerequisites in quick mode
+     (execute without deep judging), then run the reported steps with full scrutiny,
+     plus 2–3 subsequent steps for cascade effects
+   - **Full**: issue is general → run the entire lab normally via Phase 3
+
+4. **Execute with extra comparison.** During step judging, also compare the live UI
+   against any screenshots the reporter attached to the issue. This catches cases
+   where the lab text is correct but the UI has changed since the reporter filed.
+
+5. **Classify the reproduction result:**
+
+   | Status | Meaning |
+   |---|---|
+   | `reproduced` | Confirmed — live UI matches what the reporter described |
+   | `partially_reproduced` | Some findings confirmed, others differ or work fine |
+   | `not_reproduced` | All tested steps work as documented — issue may be resolved |
+   | `different_issue` | Found a problem, but it's not the one reported |
+   | `environment_dependent` | Issue may be specific to reporter's tenant/config |
+
+6. **Write a reproduction report.** Save to
+   `runtime/test-results/repro-<issue>-<timestamp>.md` with the reproduction
+   status, step-by-step results, screenshots, and environment comparison.
+
+7. **Post results to the issue** (unless `--no-comment`). Add a structured comment
+   with the reproduction verdict, per-step results, and screenshots. See the
+   comment template in `commands/reproduce-issue.md`.
+
+8. **Auto-fix (optional).** If `--auto-fix` was passed and the issue was reproduced,
+   proceed to Phases 5–6 to capture annotated screenshots and open a fix PR with
+   `Fixes #<issue_number>` in the body.
 
 ## Lab parsing rules
 

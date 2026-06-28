@@ -11,6 +11,8 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 5. **Judges each step** with an LLM — compares what the lab says should happen vs what actually happens in the live UI
 6. **Reports findings** — pass, broken (UI diverged), unclear, non-deterministic, transient, or cannot-verify
 7. **Files GitHub issues** at [microsoft/agent-academy](https://github.com/microsoft/agent-academy/issues) when findings are confirmed (deduped — no duplicate open issues)
+8. **Captures annotated screenshots** (with `--auto-fix`) — highlights broken steps with red callout boxes showing expected vs actual
+9. **Opens fix PRs** (with `--auto-fix`) — applies corrected markdown and refreshed screenshots to `microsoft/agent-academy` so broken labs can be fixed quickly
 
 ## Commands
 
@@ -18,6 +20,7 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 |---|---|
 | `/test-lab [<course>/<slug>]` | Test a single lab interactively |
 | `/test-course [<course>]` | Test all interactive labs in a course sequentially |
+| `/reproduce-issue [<issue-number>]` | Reproduce a bug reported in a GitHub issue by re-running the relevant lab steps |
 
 ### Command flags
 
@@ -25,6 +28,9 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 |---|---|---|
 | `--env-url <url>` | Both | Override the default Power Platform environment URL |
 | `--no-issue` | Both | Skip GitHub issue filing — results are local only |
+| `--auto-fix` | Both | Enable annotated screenshots + fix PR generation for broken findings |
+| `--no-pr` | Both | Skip fix PR generation (use with `--auto-fix` to get screenshots only) |
+| `--no-comment` | `/reproduce-issue` | Run reproduction but don't post results to the issue |
 | `--dry-run` | `/test-lab` | Parse the lab into a step tree only, no browser |
 | `--static-only` | `/test-lab` | Check markdown structure, links, and images only |
 | `--stop-on-failure` | `/test-course` | Halt the run if any lab has a high-severity broken finding |
@@ -47,14 +53,32 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 # Test a lab against a different environment
 /test-lab recruit/04-creating-a-solution --env-url https://copilotstudio.microsoft.com/environments/YOUR-ENV-ID/home
 
+# Test with annotated screenshots + fix PR
+/test-lab recruit/04-creating-a-solution --auto-fix
+
+# Get annotated screenshots only (no PR)
+/test-lab recruit/04-creating-a-solution --auto-fix --no-pr
+
 # Test the entire Recruit course
 /test-course recruit
+
+# Test a course with auto-fix enabled
+/test-course recruit --auto-fix
 
 # Dry-run to see parsed steps without running the browser
 /test-lab operative/01-get-started --dry-run
 
 # Test without filing GitHub issues
 /test-course operative --no-issue
+
+# Reproduce a specific GitHub issue
+/reproduce-issue 42
+
+# Reproduce and auto-fix if confirmed
+/reproduce-issue 42 --auto-fix
+
+# Reproduce without posting results back to the issue
+/reproduce-issue 42 --no-comment
 ```
 
 ## Prerequisites
@@ -153,6 +177,36 @@ critique:
   downgrade_on_failure: true   # downgrade false positives to pass
 ```
 
+### Fix PR generation (`config/judge-config.yml`)
+
+Controls the `--auto-fix` behavior:
+
+```yaml
+fix_pr:
+  enabled: true
+  repo: "microsoft/agent-academy"
+  branch_pattern: "fix/{course}-{slug}-lab-test-{run_id}"
+  labels: ["lab-test", "automated"]
+  min_confidence: 0.7          # minimum confidence to include a finding in the fix PR
+  fix_verdicts: ["broken"]     # only generate fixes for these verdicts
+  fork_fallback: true          # if no push access, open PR from a fork
+
+screenshots:
+  output_dir: "runtime/screenshots"
+  highlight_color: "#ff4444"
+  annotate_on_verdicts: ["broken", "unclear"]
+  min_confidence_broken: 0.7
+  min_confidence_unclear: 0.8
+```
+
+| Setting | Description |
+|---|---|
+| `fix_pr.enabled` | Set to `false` to globally disable fix PR generation |
+| `fix_pr.min_confidence` | Minimum judge confidence to include a finding in the PR |
+| `fix_pr.fork_fallback` | If you don't have push access to `microsoft/agent-academy`, open the PR from a fork instead |
+| `screenshots.output_dir` | Where annotated screenshots are saved locally |
+| `screenshots.highlight_color` | Color of the annotation overlays (hex) |
+
 ### Course & lab catalog (`config/agent-academy-config.yml`)
 
 The full lab catalog is defined here. Each lab has:
@@ -191,6 +245,32 @@ For each lab step, after Playwright executes the action:
 5. **Critique pass** (for `broken`/`unclear`): A second LLM review argues for the opposite verdict to catch false positives
 6. **Files or reports** all confirmed findings with confidence scores and suggested corrections
 
+### Annotated screenshots & fix PRs (Phase 5–6)
+
+When `--auto-fix` is enabled and broken findings exist:
+
+1. **Captures an annotated screenshot** for each broken step — injects a red callout overlay showing the step number, expected text, and actual text, then takes a screenshot
+2. **Captures a clean replacement screenshot** of the current UI to replace the outdated lab screenshot
+3. **Generates corrected markdown** for each broken step with updated instructions
+4. **Opens a fix PR** on `microsoft/agent-academy` with:
+   - Updated `index.md` with corrected step text
+   - Refreshed screenshots replacing outdated ones
+   - Before/after comparison in the PR body with annotated screenshots
+   - `Fixes #<issue>` linking to the filed issue (auto-closes on merge)
+
+### Issue reproduction (`/reproduce-issue`)
+
+When you have a bug report filed against a lab, `/reproduce-issue` automates the verification:
+
+1. **Fetches the issue** from `microsoft/agent-academy` and extracts the lab reference + reported broken steps
+2. **Runs in targeted mode** — executes prerequisite steps quickly, then runs the reported broken steps with full scrutiny, plus a few steps after to check for cascading failures
+3. **Compares live UI** against both the lab instructions AND any screenshots the reporter attached
+4. **Classifies the result**: `reproduced`, `partially_reproduced`, `not_reproduced`, `different_issue`, or `environment_dependent`
+5. **Posts results** back to the issue as a structured comment with screenshots and a reproduction verdict
+6. **Optionally opens a fix PR** (with `--auto-fix`) if the issue is confirmed
+
+This is useful for triaging incoming bug reports — run `/reproduce-issue 42` and let the plugin confirm whether the problem is real, environment-specific, or already fixed.
+
 ## Architecture
 
 ```
@@ -202,6 +282,7 @@ config/
 commands/
   test-lab.md                       — /test-lab command definition
   test-course.md                    — /test-course command definition
+  reproduce-issue.md                — /reproduce-issue command definition
 skills/
   agent-academy-tester/
     SKILL.md                        — Main orchestration skill (auth → parse → execute → judge → report)
@@ -210,6 +291,7 @@ skills/
       playwright-cookbook.md         — Portal navigation patterns, Edge/M365 quirks
       llm-judge-prompts.md          — Judge, critique, and action classifier prompts
       finding-schema.md             — Test result structure and severity definitions
+      screenshot-annotation-spec.md — Annotated screenshot and fix PR specification
 ```
 
 ## License

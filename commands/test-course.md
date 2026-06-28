@@ -1,6 +1,6 @@
 ---
 description: Test all interactive labs in an Agent Academy course sequentially.
-argument-hint: "[<course>] [--skip-conceptual] [--stop-on-failure] [--no-issue] [--env-url <url>]"
+argument-hint: "[<course>] [--skip-conceptual] [--stop-on-failure] [--no-issue] [--no-pr] [--auto-fix] [--env-url <url>]"
 ---
 
 # /test-course
@@ -19,6 +19,11 @@ Flags:
 - `--skip-conceptual` — skip labs marked as `interactive: false` (default behavior)
 - `--stop-on-failure` — halt the run if any lab has a `broken` finding with high confidence
 - `--no-issue` — run all tests but skip GitHub issue filing. Results are local only.
+- `--no-pr` — skip fix PR generation even when `--auto-fix` is passed.
+- `--auto-fix` — enable annotated screenshots + fix PR generation. For each lab with
+  `broken` findings (confidence ≥ 0.7), captures annotated screenshots and opens a
+  fix PR on `microsoft/agent-academy` with corrected markdown and refreshed screenshots.
+  One PR per lab (not one per course).
 - `--env-url <url>` — override the default Power Platform environment URL for all labs in the run.
 
 ## Your task
@@ -51,6 +56,11 @@ Invoke the `agent-academy-tester` skill for every interactive lab in the course:
 6. **File GitHub issues**: For each lab with `broken` or `unclear` findings (confidence
    ≥ 0.7), file an issue at `microsoft/agent-academy` (or comment on an existing open
    issue). One issue per lab, deduped by `lab:<course>/<slug>` label. Skip if `--no-issue`.
+
+7. **Annotated screenshots & fix PRs** (when `--auto-fix` is passed): For each lab with
+   broken findings, capture annotated screenshots and open a fix PR on
+   `microsoft/agent-academy`. One PR per lab. Skip if `--no-pr` was passed.
+   See Phases 5–6 in `SKILL.md`.
 
 Follow `$PLUGIN_ROOT/skills/agent-academy-tester/SKILL.md` for the per-lab procedure.
 
