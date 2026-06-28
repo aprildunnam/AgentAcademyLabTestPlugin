@@ -33,6 +33,18 @@ finding:
   snapshot_before: "(accessibility tree excerpt)"
   snapshot_after: "(accessibility tree excerpt)"
 
+  # Annotated screenshots (Phase 5 — populated when verdict triggers annotation)
+  screenshot_actual: "runtime/screenshots/<course>-<slug>/step-<N>-actual.png"
+  screenshot_annotated: "runtime/screenshots/<course>-<slug>/step-<N>-annotated.png"
+  screenshot_replacement: "runtime/screenshots/<course>-<slug>/step-<N>-replacement.png"
+
+  # Fix PR data (Phase 6 — populated when a fix PR is generated)
+  fix_pr:
+    original_markdown: "(the original step text from the lab)"
+    corrected_markdown: "(the corrected step text)"
+    original_screenshot_path: "docs/<course>/<slug>/assets/<filename>.png"
+    replacement_screenshot_path: "docs/<course>/<slug>/assets/<filename>.png"
+
   # Metadata
   timestamp: "2026-06-27T17:00:00Z"
   critique_upheld: true|false|null
