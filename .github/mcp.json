@@ -2,7 +2,12 @@
   "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest", "--isolated"]
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--browser", "msedge",
+        "--user-data-dir", "~/Library/Application Support/Microsoft Edge/Profile 39"
+      ]
     }
   }
 }

@@ -1,11 +1,11 @@
 {
-  "name": "mcs-lab-auditor",
-  "version": "0.8.0",
-  "description": "Audit AND interactively build Microsoft Copilot Studio labs (any event/workshop, not just bootcamp) end-to-end via Playwright. Audit mode compares live UI to written instructions and posts fingerprint-deduped findings + fix PRs. Build mode authors a new lab step-by-step with screenshots, gates it through the audit engine, and opens a PR adding the lab to mcs-labs.",
+  "name": "agent-academy-tester",
+  "version": "1.0.0",
+  "description": "Test Agent Academy labs (microsoft/agent-academy) end-to-end via Playwright. Opens a browser for manual M365 authentication, then walks through each lab's steps in Copilot Studio, comparing live UI behavior to written instructions with an LLM judge.",
   "author": {
-    "name": "dewainr",
-    "email": "dewainr@microsoft.com"
+    "name": "aprildunnam",
+    "email": "aprildunnam@microsoft.com"
   },
-  "repository": "https://github.com/microsoft/BootcampLabTestPlugin",
+  "repository": "https://github.com/aprildunnam/AgentAcademyLabTestPlugin",
   "license": "MIT"
 }

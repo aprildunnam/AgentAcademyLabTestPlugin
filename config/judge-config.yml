@@ -1,286 +1,60 @@
-# Judge and orchestration configuration.
+# Judge and execution configuration for Agent Academy Lab Tester
 
 # --- Confidence thresholds ---
-# Findings below `min_to_log` are dropped entirely.
-# Findings at or above `min_to_include_in_issue` are sent to GitHub.
-# Findings between these two values are kept locally but excluded from the issue.
-# Findings between `low_confidence_marker_max` and `min_to_include_in_issue` are
-# included in the issue but tagged with "(low confidence — please verify)".
 confidence:
   min_to_log: 0.5
   low_confidence_marker_max: 0.7
-  min_to_include_in_issue: 0.5    # same as min_to_log → all logged findings go to issue, low-conf tagged
+  min_to_report: 0.6
 
 # --- Step execution ---
 execution:
-  transient_retries: 1            # retry once on `transient` verdict (UI-side, page reachable)
-  max_steps_per_lab: 200          # hard cap to bound cost on runaway labs
-  min_seconds_between_labs: 30    # pause between labs to avoid rate limits
-  scene_boundary_probe: true      # if true, hit auth_probe_url at each scene start
-  skip_judge_on_pure_navigate: true   # skip the LLM judge for navigate steps with no observable target
+  transient_retries: 1
+  max_steps_per_lab: 150
+  scene_boundary_probe: true
+  skip_judge_on_pure_navigate: true
 
-  # --- Interactive phase enforcement ---
-  # When true (default), the orchestrator MUST run Phase 2 (interactive UI
-  # execution) for every audited lab. Static analysis alone catches typos,
-  # broken links, and missing images — it does not catch UI drift in the
-  # live product. Skipping Phase 2 produces a documentation audit, not a
-  # lab audit. The only way to opt out is to set this to `false` or pass
-  # `--static-only` on the command line; either choice is recorded in the
-  # run manifest so future readers know why the interactive phase was
-  # skipped.
-  require_interactive_phase: true
-
-  # --- Run-start account prompt ---
-  # Controls whether Phase 1.5 asks the user "use cached vs. redeem new"
-  # at every run start.
-  # - `always` (default): prompt every fresh run, regardless of cache
-  #   freshness. Forces the user to opt in to reuse — the safety net
-  #   against accidentally running against last week's tenant.
-  # - `only_if_expired`: skip the prompt only when expires_at is in the
-  #   future; prompt when expired or missing.
-  # - `only_if_missing`: prompt only when no cached account exists.
-  #   Equivalent to the pre-0.2 behavior. Not recommended.
-  account_prompt_mode: only_if_expired
-
-  # --- Connection-error retry policy ---
-  # Distinct from `transient_retries`, which covers UI-side timeouts on a
-  # page that is itself reachable. These settings handle the connection
-  # class: DNS failure, net::ERR_*, repeated navigation timeouts to URLs
-  # that should resolve quickly, or any failed-network entry that recurs
-  # across consecutive steps.
-  #
-  # On a connection failure, the orchestrator retries up to
-  # `network_retry_count` times with the per-attempt backoff below, then
-  # halts the lab and prompts the user via AskUserQuestion for next steps
-  # (retry / wait / skip lab / abort run). Connection failures are NEVER
-  # recorded as lab findings — they're environment issues, not lab issues.
+  # Network retry policy
   network_retry_count: 3
-  network_retry_backoff_seconds: [5, 10, 20]   # retry delays (seconds): retry1=5, retry2=10, retry3=20
-  network_wait_seconds: 120        # default "wait then retry" sleep when the user picks that option
+  network_retry_backoff_seconds: [5, 10, 20]
 
-  # --- Fan-out execution (parallel labs) ---
-  # `fanout_concurrency` caps how many labs run their interactive Playwright
-  # pass simultaneously. 1 = strictly serial (legacy behavior). The static
-  # phase always fans out fully — only the interactive phase is throttled,
-  # because every concurrent browser instance signs in to the same training
-  # account and can collide with the others' tenant state.
-  #
-  # Static phase (markdown parsing, link checks, image refs, structural
-  # validation) has no tenant state and is always run in parallel via
-  # background subagents — one per lab — capped at `static_fanout_concurrency`.
-  fanout_concurrency: 1            # interactive UI passes per training account
-  static_fanout_concurrency: 11    # background subagents for static analysis
-
-  # --- Model preset and per-function assignments ---
-  # The orchestrator is REQUIRED to run on Opus (Phase 1 asserts this). This
-  # block controls only the sub-agents the orchestrator spawns: per-UC
-  # subagents, per-step LLM judge, critique pass, static fan-out, cross-lab
-  # consistency, lab parser, and the issue-filer / fix-PR filer / PR appender
-  # sub-skills.
-  #
-  # `preset` resolves the per-function assignments:
-  #
-  # - `prompt` (factory default): the Phase 1.5 Q2a interview asks the user
-  #   to pick `optimized` or `opus` (or `custom`). Use this on first install;
-  #   the resolved selection is frozen into manifest.yml.interview.model_preset.
-  # - `optimized`: each function uses the per-function default below
-  #   (sonnet for UI reasoning + judge, haiku for filers + static fan-out).
-  #   ~$50 per bootcamp event run, ~85% completion.
-  # - `opus`: every per-function key is forced to opus. ~$140 per bootcamp,
-  #   ~90% completion. Maximum reliability.
-  # - `custom`: read each per-function key below as the literal value (don't
-  #   apply preset rules). Use this when you want to mix-and-match.
+  # Model assignments for sub-agents
   model:
-    preset: prompt    # prompt | optimized | opus | custom
-
-    # Per-function defaults (used when preset = optimized or custom).
-    # Valid values: opus | sonnet | haiku
-    uc_subagent:        sonnet     # Playwright loop subagents (per Use Case)
-    judge:              sonnet     # per-step LLM judge (snapshot+screenshot → verdict)
-    critique:           sonnet     # second-opinion critique on broken/unclear findings
-    static_subagent:    haiku      # per-lab static analysis (markdown, links, images)
-    cross_lab:          sonnet     # cross-lab consistency fan-in (identifier-token similarity)
-    lab_parser:         sonnet     # markdown → step tree
-    issue_filer:        haiku      # gh issue create + render template
-    fix_pr_filer:       haiku      # apply suggested_correction diffs + git ops
-    pr_appender:        haiku      # screenshot-only commit push to existing PR branch
-
-# --- Lab dependency graph ---
-# Some bootcamp labs build on prior labs' artifacts (agents, topics, knowledge
-# sources, evaluations created in the training tenant). Running them out of
-# order leaves the next lab without the prerequisites its instructions assume.
-#
-# Express each chain as a list of slugs in the order they must execute.
-# The orchestrator topologically sorts these against the planned lab list:
-# - Labs that appear in a chain run in chain order (serially).
-# - Labs that don't appear in any chain run in parallel (up to fanout_concurrency).
-# - When a chain is interleaved with parallel labs, the chain runs to
-#   completion before its dependents start; independent parallel labs run
-#   alongside the chain.
-lab_dependencies:
-  - reason: |
-      core-concepts-* labs share a single agent created in lab #2 and
-      progressively add knowledge sources, topics, variables, channel
-      deployments, and analytics+evaluation telemetry. Each later lab
-      reads state the earlier lab wrote.
-    chain:
-      - core-concepts-agent-knowledge-tools          # #2 — creates the base agent + knowledge sources + topics
-      - core-concepts-variables-agents-channels      # #3 — adds variables, multi-agent refs, and channel deploys
-      - core-concepts-analytics-evaluations          # #4 — reads analytics + runs evaluations against #2/#3 artifacts
-
-# --- Non-deterministic labs ---
-# These labs render LLM-generated UI (Agent Builder, multi-agent demos) that
-# varies per call. Default to log-only (no GitHub issue) and use a softer
-# shape-match rubric in the judge prompt. Override per-run with --force-issue.
-non_deterministic_lab_slugs:
-  - agent-builder-m365
-  - mcs-multi-agent
+    judge: sonnet
+    critique: sonnet
+    lab_parser: sonnet
+    step_executor: sonnet
 
 # --- Critique pass ---
-# If enabled, every finding flagged as `broken` or `unclear` runs through a
-# second-pass critique judge that argues for the opposite verdict. Findings
-# that survive critique keep their original verdict; findings that don't are
-# downgraded to log-only. Adds ~10% cost; significantly reduces false positives.
 critique:
   enabled: true
   downgrade_on_failure: true
 
-# --- Issue de-duplication (UNCONDITIONAL) ---
-# The plugin will never create a second open issue for the same lab. The only
-# tunable here is what to do when an open issue already exists: "comment" (the
-# default — append a fingerprint-deduped delta comment) or "skip" (record the
-# existing issue URL and write nothing). "create_anyway" is DEPRECATED and is
-# silently treated as "comment".
+# --- Report output ---
+report:
+  # Where to write test results (relative to plugin runtime dir)
+  output_dir: "runtime/test-results"
+  format: "markdown"  # markdown | json
+  include_screenshots: true
+
+# --- GitHub issue filing ---
+# When findings meet the confidence threshold, file one issue per lab on the
+# agent-academy repo. Deduplicates against open issues so the same lab never
+# gets a duplicate open issue.
 issues:
-  # Repo where audit issues/PRs are filed. Sourced at run start from the active
-  # lab instance (scripts/Resolve-LabInstance.ps1 -> .repo). The literal below
-  # is only the fallback for the built-in mcs-labs instance.
-  repo: "microsoft/mcs-labs"
-  dedupe_by_labels: ["lab-audit"]               # required label on every audit-filed issue
-  dedupe_loose_title_match: true                # also match open issues by `{slug} in:title` for back-compat with un-per-slug-labeled history
-  dedupe_by_fingerprint: true                   # finding-level fingerprint dedup across the existing issue body + all comments
-  on_duplicate: "comment"                       # "comment" | "skip" (legacy "create_anyway" → coerced to "comment")
-  on_duplicate_all_covered: "skip_no_comment"   # if every finding fingerprint already exists, post nothing
-  backfill_per_slug_label: true                 # `gh issue edit --add-label lab:<slug>` on comment so future strict dedup queries match
-  labels_always: ["lab-audit"]
-  labels_non_deterministic: ["non-deterministic-lab"]
+  enabled: true
+  repo: "microsoft/agent-academy"
+  # Labels applied to every filed issue
+  labels: ["lab-test", "automated"]
+  # Title pattern — {course} and {slug} are replaced at runtime
+  title_pattern: "[Lab Test] {course}/{slug}: {summary}"
+  # Minimum confidence to include a finding in the issue body
+  min_confidence_to_file: 0.7
+  # Verdicts that trigger issue filing (at least one must be present in the lab)
+  file_on_verdicts: ["broken", "unclear"]
+  # Never file a duplicate open issue for the same lab
+  dedupe_by_labels: true
+  # When an open issue already exists for the lab, add a comment with new findings
+  on_duplicate: "comment"
 
-  # --- Open-PR append carve-out (default ON, screenshots-only) ---
-  # Default behavior: when an open fix-PR for a lab exists AND the run produced
-  # refreshed screenshots, push them onto that branch. Suppress with the CLI
-  # flag --no-update-screenshots (alias --no-append-to-pr) or by setting
-  # `enabled_by_default: false` here. The guardrails (same-author, mergeable,
-  # unprotected branch, no force-push, screenshots-only) still apply.
-  # See skills/mcs-lab-pr-appender/SKILL.md and
-  # skills/mcs-lab-auditor/references/pr-append-flow.md.
-  pr_append:
-    enabled_by_default: true                    # screenshot updates are part of every run by default
-    # Branch the fix-PR filer CREATES when no open PR exists for the slug. The
-    # `{run_id}` token makes every newly-opened PR's branch unique, so a run
-    # never collides with a leftover branch from a merged/closed prior PR.
-    pr_branch_pattern: "{branch_prefix}/fix-{slug}-content-audit-{run_id}"
-    # Head-ref PREFIX used to find an existing OPEN fix-PR for a slug, regardless
-    # of the run-id suffix the branch was created with. This is how dedup finds
-    # the open PR to append to (and the appender's fallback match if the title
-    # query misses). Must stay a prefix of `pr_branch_pattern`.
-    pr_match_head_prefix: "{branch_prefix}/fix-{slug}-content-audit"
-    scope: "screenshots_only"                   # "screenshots_only" — no other value supported yet
-    require_same_author: true                   # current `gh` user must match PR author
-    require_mergeable: true                     # `mergeable: MERGEABLE` required
-    allow_force_push: false                     # never enabled
-
-  # --- New-lab PR (used by mcs-lab-builder B7 / mcs-lab-new-lab-pr) ---
-  # A NEW lab built by /build-lab is a one-shot PR (no open-PR append path —
-  # that is the fix-PR filer's job). The {build_id} token makes the branch
-  # run-unique, so re-building the same slug never collides with a merged or
-  # closed prior PR.
-  new_lab_pr:
-    pr_branch_pattern: "{branch_prefix}/new-lab-{slug}-{build_id}"
-    require_same_author: true
-
-# --- Existing-state probe (Phase 1.4) ---
-existing_state:
-  check_open_issues: true       # off → orchestrator falls back to inline filer queries (legacy behavior)
-  check_open_prs: true          # required for pr_append to fire
-  cache_file: "existing-state.yml"   # written under runs/<run-id>/
-
-# --- Cross-lab consistency check (Phase 1.7 step 1a) ---
-# After per-lab static fan-out completes, an extra fan-in pass groups scenes
-# by shape hash across the lab set and flags identifier-token drift between
-# sibling labs (e.g. "Address 1: State/Province" vs "Address1: State or
-# Providence" in two labs that verify the same Account columns). Findings
-# are severity `low` and tagged with `flags.cross_lab_drift: true`. Full
-# algorithm in `skills/mcs-lab-auditor/references/cross-lab-consistency.md`.
-consistency:
-  cross_lab_enabled: true                  # off → skip the fan-in pass entirely
-  cross_lab_similarity_threshold: 0.85     # SequenceMatcher.ratio() threshold for "near-match drift"
-  cross_lab_borderline_floor: 0.85         # findings between this and `cross_lab_high_confidence_floor` get confidence 0.65
-  cross_lab_high_confidence_floor: 0.90    # findings at or above this get confidence 0.85
-  cross_lab_min_cluster_size: 2            # shapes shared by fewer labs are ignored (single-lab clusters always are)
-
-# --- Interactive lab-builder (used by mcs-lab-builder / /build-lab) ---
-# Build mode AUTHORS a new lab end-to-end, then re-runs it through the audit
-# engine as a quality gate before opening a PR. It is event/workshop-agnostic:
-# a lab is built and tested standalone; event attachment is optional (B3).
-build:
-  # Default interaction mode when neither --mode nor an interview answer is set.
-  # `prompt` = ask at B1; `guided` = user dictates each step; `scenario` = AI
-  # proposes one step at a time. Both modes confirm EVERY step.
-  interaction_mode_default: prompt        # prompt | guided | scenario
-
-  # --- New-lab proposal issue (B3.5) ---
-  # As soon as a new lab is named, build mode opens a tracking issue on the lab
-  # repo so the lab is visible to the team as an "In Progress" proposal for the
-  # whole build. Deduped per slug; reused on --resume; closed by the B7 PR.
-  # Labels match the EXISTING microsoft/mcs-labs taxonomy — do not invent new
-  # ones (type: new-lab = "Brand new lab proposal"; status: in-progress =
-  # "Someone is actively working on this").
-  proposal_issue:
-    enabled: true
-    repo: "microsoft/mcs-labs"   # sourced from the active instance; literal = mcs-labs fallback
-    labels: ["type: new-lab", "status: in-progress"]
-    title_pattern: "New lab proposal: {title} ({slug})"
-    link_pr_with: "Closes"                # Closes | Refs — how the B7 PR references the issue
-    # `Closes #<n>` only fires when the B7 PR is MERGED. If a proposal's PR is
-    # closed WITHOUT merging (abandoned/superseded build, or a human closing it),
-    # the issue would otherwise stay open forever as an orphaned "In Progress"
-    # proposal. When true, the next build run for the slug detects that orphan
-    # at B3.5 dedup and CLOSES it (with the comment below) instead of reusing it;
-    # mcs-lab-new-lab-pr likewise closes the issue inline if it closes its own PR.
-    # See docs/design-decisions.md and skills/mcs-lab-builder/SKILL.md B3.5.
-    close_orphaned_on_pr_close: true
-    orphan_close_comment: "Linked PR #{pr} was closed without merging; closing this stale In-Progress proposal. A fresh proposal will be opened for the new build."
-
-  # --- Audit gate (B6) ---
-  # After the lab is drafted, register + materialize it and run the auditor's
-  # Phase-2 judge loop against it. Findings are consumed IN-LOOP (fed back into
-  # the build to fix), never routed to the issue/PR filers. The gate passes
-  # when zero above-threshold findings of a `fail_on` outcome remain.
-  audit_gate:
-    enabled: true
-    fail_on: [broken, unclear]            # outcomes that block the gate
-    max_loops: 5                          # cap on fix-and-recheck iterations
-    suppress_github_writes: true          # NEVER file an issue/PR from the gate
-
-  screenshot:
-    image_name_strategy: kebab_from_target   # see build-session-spec.md §screenshots
-
-  # --- mcs-labs registration (B6/B7) ---
-  registration:
-    # The mcs-labs repo path is NOT fixed. Both audit and build modes resolve it
-    # via scripts/Resolve-LabRepo.ps1, which tries (in order): $env:MCS_LABS_REPO,
-    # these candidates, then a built-in list under %USERPROFILE%, and finally
-    # CLONES microsoft/mcs-labs into %USERPROFILE%\.mcs-lab-auditor\mcs-labs if no
-    # local copy exists — then fast-forwards it to origin/main. Add your own clone
-    # path here (use doubled backslashes) to have it preferred over the built-ins.
-    mcs_labs_repo_path_candidates:
-      - "C:\\Users\\dewainr\\Projects\\mcs-labs"
-      - "C:\\Users\\dewainr\\mcs-labs"
-    root_config_relpath: "lab-config.yml"          # generate-mode source of truth (may be absent)
-    data_config_relpath: "_data/lab-config.yml"    # direct-mode registration target
-    generate_script_relpath: "scripts/Generate-Labs.ps1"   # may be absent → direct-write mode
-    generate_args: ["-SkipPDFs"]
-    order_gap_strategy: section_midpoint           # pick a free order number mid-band (see lab-registration-spec.md §2)
-
-# --- Plugin version (written into manifest.yml and issue bodies) ---
-plugin_version: "0.8.0"
+# Plugin version
+plugin_version: "1.0.0"
