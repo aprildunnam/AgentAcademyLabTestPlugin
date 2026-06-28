@@ -24,6 +24,7 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 | `/rewrite-lab [<course>/<slug>]` | Rewrite a lab for a new UI experience — generates updated markdown + screenshots locally |
 | `/create-lab [<course>]` | Create a brand-new lab from scratch — explores the feature live and generates complete lab markdown |
 | `/export-solution [<course>/<slug>]` | Export a Power Platform starter solution so learners can skip prerequisite labs |
+| `/cleanup [<course>]` | Remove lab-created artifacts from the environment so labs can be re-run clean |
 
 ### Command flags
 
@@ -42,6 +43,9 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 | `--run-prereqs` | `/export-solution` | Run all prerequisite lab steps first to create artifacts from scratch |
 | `--export-type` | `/export-solution` | Export as `managed`, `unmanaged`, or `both` (default: both) |
 | `--solution-name` | `/export-solution` | Custom solution display name (default: auto-generated) |
+| `--dry-run` | `/test-lab`, `/cleanup` | Preview what would happen without executing |
+| `--keep-solution` | `/cleanup` | Delete contents but keep the empty solution container |
+| `--force` | `/cleanup` | Skip confirmation prompt |
 | `--title <title>` | `/create-lab` | The mission title for the new lab |
 | `--topic <description>` | `/create-lab` | Brief description of what the lab should teach |
 
@@ -110,6 +114,18 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 
 # Test a lab and also export the resulting state as a starter solution
 /test-lab recruit/06-create-agent-from-conversation --export-solution
+
+# Clean up all Recruit course artifacts (preview first)
+/cleanup recruit --dry-run
+
+# Clean up and actually delete
+/cleanup recruit
+
+# Clean up only a specific lab's artifacts
+/cleanup recruit --lab 06-create-agent-from-conversation
+
+# Clean up but keep the solution container for re-use
+/cleanup recruit --keep-solution
 ```
 
 ## Prerequisites
@@ -366,6 +382,24 @@ The result is a `.zip` file that a learner can import into their environment to 
 
 Output goes to `runtime/solutions/<course>-<slug>/` with the .zip(s) and a `manifest.md`.
 
+### Environment cleanup (`/cleanup`)
+
+When you want to re-run labs from scratch, `/cleanup` removes all lab-created artifacts:
+
+1. **Catalogs what each lab created** — agents, topics, flows, solutions, publishers, etc.
+2. **Discovers what actually exists** in the environment (via Power Platform CLI `pac` or browser)
+3. **Shows you a cleanup plan** — you must confirm before anything is deleted
+4. **Deletes in dependency order** — inside-out (topics → agents → solution → publisher)
+5. **Verifies clean state** — confirms everything is gone
+
+**Safety features:**
+- `--dry-run` shows the plan without deleting anything (always run this first!)
+- Never deletes system artifacts, Default Solution, or non-lab items
+- Warns about cross-lab dependencies (e.g., "deleting Lab 06's agent will break Labs 07-13")
+- Requires explicit confirmation (or `--force` to skip)
+
+**Power Platform CLI integration:** If `pac` is installed (`dotnet tool install --global Microsoft.PowerApps.CLI.Tool`), cleanup is faster and more reliable. Falls back to browser-based deletion via Playwright if `pac` isn't available.
+
 ## Architecture
 
 ```
@@ -381,6 +415,7 @@ commands/
   rewrite-lab.md                    — /rewrite-lab command definition
   create-lab.md                     — /create-lab command definition
   export-solution.md                — /export-solution command definition
+  cleanup.md                        — /cleanup command definition
 skills/
   agent-academy-tester/
     SKILL.md                        — Main orchestration skill (auth → parse → execute → judge → report)
