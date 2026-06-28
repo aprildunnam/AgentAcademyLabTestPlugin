@@ -50,7 +50,13 @@ If not provided via flags, ask the user:
    - Decision points where the user has options
    - Common pitfalls or non-obvious steps
    - What the UI looks like at each stage
-4. **Capture screenshots** at every meaningful step. Save to `<output-dir>/assets/`.
+4. **Capture screenshots** at every meaningful step using the two-file strategy:
+   - Take a **clean screenshot** first → save as `step-<N>.png`
+   - Then **annotate** by injecting a red box around the UI element the step
+     references → save as `step-<N>-annotated.png`
+   - Remove the overlay after capturing
+   - The annotated version goes in the rendered `index.md`; the clean version is a backup
+   - See `references/lab-screenshot-guide.md` for the full annotation procedure
 5. **Take notes** on:
    - Button labels, menu items, dialog titles (exactly as shown)
    - Any fields that need specific values
@@ -112,7 +118,7 @@ By the end of this mission, you will:
 
 1. {Step instruction with **bold UI elements** to interact with}
 
-   ![{alt text}](./assets/{screenshot-filename}.png)
+   ![{alt text}](./assets/{step-N-annotated}.png)
 
 2. {Next step...}
 

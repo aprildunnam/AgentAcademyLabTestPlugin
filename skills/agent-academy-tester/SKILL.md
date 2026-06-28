@@ -50,6 +50,7 @@ This file is the orchestrator. It loads reference files as needed:
 - `references/llm-judge-prompts.md` — per-step judge and critique prompts
 - `references/finding-schema.md` — finding record structure and outcome definitions
 - `references/screenshot-annotation-spec.md` — annotated screenshot generation and fix PR procedure
+- `references/lab-screenshot-guide.md` — how to annotate screenshots in generated labs (red boxes around target elements)
 
 ## Top-level entry points
 
@@ -285,7 +286,11 @@ review, edit, and manually submit.
    a. Attempt the step as originally written in the new environment
    b. Classify the result: `unchanged`, `modified`, `new_flow`, `removed`, or `blocked`
    c. If the step doesn't work as written, discover the correct new path and execute it
-   d. Capture a screenshot at every step regardless of status
+   d. Capture TWO screenshots at every step:
+      - Clean screenshot → `step-<N>.png` (backup)
+      - Annotated screenshot with red box around the target element → `step-<N>-annotated.png`
+      - The annotated version is what gets referenced in the generated `index.md`
+      - See `references/lab-screenshot-guide.md` for the annotation procedure
 
 3. **Handle blocked/removed steps carefully.** When a step is not possible:
    - Document WHY it's not possible (element removed? feature deprecated? behind a flag?)
@@ -310,7 +315,10 @@ When invoked via `/create-lab`, the plugin creates a net-new lab from scratch:
 
 2. **Explore the feature live.** Open the browser, authenticate, and walk through the
    feature described by the user. The goal is to discover the full click path, decision
-   points, and potential pitfalls. Capture screenshots at every meaningful step.
+   points, and potential pitfalls. At every meaningful step, capture TWO screenshots:
+   - Clean version → `step-<N>.png` (backup)
+   - Annotated version with red box around the target element → `step-<N>-annotated.png`
+   - See `references/lab-screenshot-guide.md` for the annotation procedure
 
 3. **Plan the lab structure.** Based on exploration:
    - Determine the next available mission number in the target course

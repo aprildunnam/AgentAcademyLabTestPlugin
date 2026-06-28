@@ -64,8 +64,17 @@ Invoke the `agent-academy-tester` skill in **rewrite mode**:
    d. **If `removed` or `blocked`:** Document what's missing. Note any alternative
       approach if one exists. Flag this prominently in the evaluation.
 
-   e. **Capture a screenshot** at every step (both successful and blocked). Save to
-      `<output-dir>/assets/step-<N>-<status>.png`.
+   e. **Capture screenshots** at every step (both successful and blocked):
+      - First, take a **clean screenshot** → save as `<output-dir>/assets/step-<N>.png`
+      - Then, **annotate the screenshot** by injecting a red box around the UI element
+        the step references (the bold text target). Use `browser_evaluate` to overlay a
+        3px red border around the element, then take a second screenshot → save as
+        `<output-dir>/assets/step-<N>-annotated.png`
+      - Remove the overlay after capturing.
+      - The annotated version is what gets referenced in the generated `index.md`.
+        The clean version is a backup in case the annotation is wrong.
+      - See `references/lab-screenshot-guide.md` for the annotation procedure and
+        fallback behavior.
 
 5. **Generate the evaluation file.** Write `<output-dir>/evaluation.md`:
 
@@ -144,15 +153,18 @@ Invoke the `agent-academy-tester` skill in **rewrite mode**:
 
 ```
 runtime/rewrites/<course>-<slug>/
-  index.md              — The rewritten lab (ready to copy into agent-academy)
+  index.md              — The rewritten lab (references -annotated screenshots)
   evaluation.md         — Full step-by-step comparison + blockers
   assets/
-    step-01-unchanged.png
-    step-02-modified.png
-    step-03-new_flow.png
-    step-04-blocked.png
+    step-01.png                — clean backup screenshot
+    step-01-annotated.png      — annotated version (red box around target element)
+    step-02.png
+    step-02-annotated.png
     ...
 ```
+
+The `index.md` always references `step-<N>-annotated.png`. The clean versions are
+backups in case annotations need to be re-done manually.
 
 Follow `$PLUGIN_ROOT/skills/agent-academy-tester/SKILL.md` for browser auth and
 Playwright execution procedures.
