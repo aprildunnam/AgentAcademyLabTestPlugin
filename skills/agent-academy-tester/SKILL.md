@@ -58,6 +58,8 @@ This file is the orchestrator. It loads reference files as needed:
 | `/test-lab [<course>/<slug>]` | Test a single lab interactively |
 | `/test-course [<course>]` | Test all interactive labs in a course sequentially |
 | `/reproduce-issue [<issue-number>]` | Reproduce a reported GitHub issue by re-running the relevant lab steps |
+| `/rewrite-lab [<course>/<slug>]` | Rewrite a lab for a new UI experience — documents changes and generates updated markdown locally |
+| `/create-lab [<course>]` | Create a brand-new lab from scratch — explores the feature live and generates complete lab markdown |
 
 ## Run lifecycle
 
@@ -268,6 +270,71 @@ When invoked via `/reproduce-issue <number>`, the lifecycle changes:
 8. **Auto-fix (optional).** If `--auto-fix` was passed and the issue was reproduced,
    proceed to Phases 5–6 to capture annotated screenshots and open a fix PR with
    `Fixes #<issue_number>` in the body.
+
+### Phase 8 — Lab Rewrite (for `/rewrite-lab`)
+
+When invoked via `/rewrite-lab`, the goal is to document UI differences and produce
+a locally-stored rewritten lab. **No PRs are opened.** Output is for the user to
+review, edit, and manually submit.
+
+1. **Resolve environment URL.** The `--env-url` flag takes precedence. If not provided,
+   warn the user that rewrite mode is designed for a specific new-experience environment
+   and confirm they want to use the default.
+
+2. **Walk through each original step.** For every step in the parsed step tree:
+   a. Attempt the step as originally written in the new environment
+   b. Classify the result: `unchanged`, `modified`, `new_flow`, `removed`, or `blocked`
+   c. If the step doesn't work as written, discover the correct new path and execute it
+   d. Capture a screenshot at every step regardless of status
+
+3. **Handle blocked/removed steps carefully.** When a step is not possible:
+   - Document WHY it's not possible (element removed? feature deprecated? behind a flag?)
+   - Check if there's an alternative way to achieve the same learning objective
+   - Flag it prominently — these need human review before publishing
+
+4. **Generate two output files:**
+   - `evaluation.md` — full step-by-step comparison, blockers section at top, summary stats
+   - `index.md` — the rewritten lab markdown with updated instructions and screenshots
+
+5. **All output is local.** Save to `runtime/rewrites/<course>-<slug>/`. No issue filing,
+   no PR creation. The user reviews the output and decides what to do with it.
+
+See `commands/rewrite-lab.md` for the full evaluation table structure and output format.
+
+### Phase 9 — Lab Creation (for `/create-lab`)
+
+When invoked via `/create-lab`, the plugin creates a net-new lab from scratch:
+
+1. **Gather requirements.** Determine the course, topic, title, prerequisites, and
+   difficulty level. Ask the user for anything not provided via flags.
+
+2. **Explore the feature live.** Open the browser, authenticate, and walk through the
+   feature described by the user. The goal is to discover the full click path, decision
+   points, and potential pitfalls. Capture screenshots at every meaningful step.
+
+3. **Plan the lab structure.** Based on exploration:
+   - Determine the next available mission number in the target course
+   - Group steps into logical sections (2–5 sections)
+   - Define 3–5 learning objectives
+   - Identify prerequisites
+
+4. **Write the lab markdown.** Generate a complete `index.md` in the Agent Academy
+   VitePress format with:
+   - Mission brief, objectives, prerequisites
+   - Numbered steps with bold UI elements, screenshots, code blocks, and tips
+   - One action per step — never combine multiple actions
+   - Mission Complete summary with accomplishments and next steps
+
+5. **Self-validate.** Run through the generated lab instructions in the same browser
+   session to confirm every step works. Fix any issues found.
+
+6. **Generate evaluation.** Write an `evaluation.md` with stats, validation results,
+   and suggested placement (slug, path, mission number, dependencies).
+
+7. **All output is local.** Save to `runtime/new-labs/<course>-<slug>/`. No PR, no issue.
+   The user reviews and submits manually.
+
+See `commands/create-lab.md` for the full VitePress template and writing style guidelines.
 
 ## Lab parsing rules
 
