@@ -20,6 +20,7 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 |---|---|
 | `/test-lab [<course>/<slug>]` | Test a single lab interactively |
 | `/test-course [<course>]` | Test all interactive labs in a course sequentially |
+| `/reproduce-issue [<issue-number>]` | Reproduce a bug reported in a GitHub issue by re-running the relevant lab steps |
 
 ### Command flags
 
@@ -29,6 +30,7 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 | `--no-issue` | Both | Skip GitHub issue filing — results are local only |
 | `--auto-fix` | Both | Enable annotated screenshots + fix PR generation for broken findings |
 | `--no-pr` | Both | Skip fix PR generation (use with `--auto-fix` to get screenshots only) |
+| `--no-comment` | `/reproduce-issue` | Run reproduction but don't post results to the issue |
 | `--dry-run` | `/test-lab` | Parse the lab into a step tree only, no browser |
 | `--static-only` | `/test-lab` | Check markdown structure, links, and images only |
 | `--stop-on-failure` | `/test-course` | Halt the run if any lab has a high-severity broken finding |
@@ -68,6 +70,15 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 
 # Test without filing GitHub issues
 /test-course operative --no-issue
+
+# Reproduce a specific GitHub issue
+/reproduce-issue 42
+
+# Reproduce and auto-fix if confirmed
+/reproduce-issue 42 --auto-fix
+
+# Reproduce without posting results back to the issue
+/reproduce-issue 42 --no-comment
 ```
 
 ## Prerequisites
@@ -247,6 +258,19 @@ When `--auto-fix` is enabled and broken findings exist:
    - Before/after comparison in the PR body with annotated screenshots
    - `Fixes #<issue>` linking to the filed issue (auto-closes on merge)
 
+### Issue reproduction (`/reproduce-issue`)
+
+When you have a bug report filed against a lab, `/reproduce-issue` automates the verification:
+
+1. **Fetches the issue** from `microsoft/agent-academy` and extracts the lab reference + reported broken steps
+2. **Runs in targeted mode** — executes prerequisite steps quickly, then runs the reported broken steps with full scrutiny, plus a few steps after to check for cascading failures
+3. **Compares live UI** against both the lab instructions AND any screenshots the reporter attached
+4. **Classifies the result**: `reproduced`, `partially_reproduced`, `not_reproduced`, `different_issue`, or `environment_dependent`
+5. **Posts results** back to the issue as a structured comment with screenshots and a reproduction verdict
+6. **Optionally opens a fix PR** (with `--auto-fix`) if the issue is confirmed
+
+This is useful for triaging incoming bug reports — run `/reproduce-issue 42` and let the plugin confirm whether the problem is real, environment-specific, or already fixed.
+
 ## Architecture
 
 ```
@@ -258,6 +282,7 @@ config/
 commands/
   test-lab.md                       — /test-lab command definition
   test-course.md                    — /test-course command definition
+  reproduce-issue.md                — /reproduce-issue command definition
 skills/
   agent-academy-tester/
     SKILL.md                        — Main orchestration skill (auth → parse → execute → judge → report)

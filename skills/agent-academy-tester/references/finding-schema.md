@@ -66,3 +66,27 @@ finding:
 - **high**: `broken` with confidence ≥ 0.8
 - **medium**: `broken` with confidence 0.6–0.8, or `unclear` with confidence ≥ 0.8
 - **low**: everything else that's not a `pass`
+
+## Reproduction status (for `/reproduce-issue`)
+
+When running in reproduction mode, the overall result for the issue is classified as:
+
+| Status | Meaning |
+|---|---|
+| `reproduced` | Confirmed — live UI matches what the reporter described |
+| `partially_reproduced` | Some findings confirmed, others differ or work fine |
+| `not_reproduced` | All tested steps work as documented — issue may be resolved |
+| `different_issue` | Found a problem, but it's different from what was reported |
+| `environment_dependent` | Issue may be specific to reporter's tenant/config |
+
+Each finding in reproduction mode also includes:
+
+```yaml
+  # Reproduction context (only in /reproduce-issue mode)
+  reproduction:
+    issue_number: 42
+    reporter_expected: "Button labeled 'Create agent' should appear"
+    reporter_observed: "Button is missing from the toolbar"
+    matches_report: true|false  # does the live UI match what the reporter described?
+    scope: "targeted|full"      # was this a targeted step or full lab run?
+```

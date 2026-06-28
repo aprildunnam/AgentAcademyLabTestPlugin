@@ -56,6 +56,19 @@ issues:
   # When an open issue already exists for the lab, add a comment with new findings
   on_duplicate: "comment"
 
+# --- Issue reproduction ---
+# Settings for /reproduce-issue command
+reproduction:
+  # When running targeted reproduction, how many steps after the reported
+  # broken step(s) to also run (to check for cascade effects)
+  cascade_steps: 3
+  # In quick mode (prerequisite steps), skip the critique pass
+  quick_mode_skip_critique: true
+  # Post reproduction results as a comment on the issue
+  post_comment: true
+  # Verdicts from the original report that trigger targeted (vs full) mode
+  targeted_verdicts: ["broken", "unclear"]
+
 # --- Fix PR generation ---
 # When --auto-fix is used and broken findings exist, generate a fix PR
 fix_pr:

@@ -16,6 +16,7 @@ allowed-tools:
   - Bash(gh issue create:*)
   - Bash(gh issue list:*)
   - Bash(gh issue comment:*)
+  - Bash(gh issue view:*)
   - Bash(gh repo clone:*)
   - Bash(gh pr create:*)
   - Bash(git:*)
@@ -56,6 +57,7 @@ This file is the orchestrator. It loads reference files as needed:
 |---|---|
 | `/test-lab [<course>/<slug>]` | Test a single lab interactively |
 | `/test-course [<course>]` | Test all interactive labs in a course sequentially |
+| `/reproduce-issue [<issue-number>]` | Reproduce a reported GitHub issue by re-running the relevant lab steps |
 
 ## Run lifecycle
 
@@ -222,6 +224,50 @@ When at least one finding has verdict `broken` (confidence ≥ 0.7) with a
 
 See `references/screenshot-annotation-spec.md` for the full PR body template and
 error handling (fork fallback, permission errors, etc.).
+
+### Phase 7 — Issue Reproduction (for `/reproduce-issue`)
+
+When invoked via `/reproduce-issue <number>`, the lifecycle changes:
+
+1. **Fetch the issue.** Use `gh issue view <number> --repo microsoft/agent-academy`
+   to retrieve the title, body, labels, and comments.
+
+2. **Extract the lab and step references.**
+   - Look for a `lab:<course>/<slug>` label (auto-filed issues always have one)
+   - Parse the body for lab paths (`recruit/06-...`) and step numbers (`Step 5`)
+   - If ambiguous, ask the user which lab the issue relates to
+
+3. **Determine scope.** Two modes:
+   - **Targeted**: issue references specific steps → run prerequisites in quick mode
+     (execute without deep judging), then run the reported steps with full scrutiny,
+     plus 2–3 subsequent steps for cascade effects
+   - **Full**: issue is general → run the entire lab normally via Phase 3
+
+4. **Execute with extra comparison.** During step judging, also compare the live UI
+   against any screenshots the reporter attached to the issue. This catches cases
+   where the lab text is correct but the UI has changed since the reporter filed.
+
+5. **Classify the reproduction result:**
+
+   | Status | Meaning |
+   |---|---|
+   | `reproduced` | Confirmed — live UI matches what the reporter described |
+   | `partially_reproduced` | Some findings confirmed, others differ or work fine |
+   | `not_reproduced` | All tested steps work as documented — issue may be resolved |
+   | `different_issue` | Found a problem, but it's not the one reported |
+   | `environment_dependent` | Issue may be specific to reporter's tenant/config |
+
+6. **Write a reproduction report.** Save to
+   `runtime/test-results/repro-<issue>-<timestamp>.md` with the reproduction
+   status, step-by-step results, screenshots, and environment comparison.
+
+7. **Post results to the issue** (unless `--no-comment`). Add a structured comment
+   with the reproduction verdict, per-step results, and screenshots. See the
+   comment template in `commands/reproduce-issue.md`.
+
+8. **Auto-fix (optional).** If `--auto-fix` was passed and the issue was reproduced,
+   proceed to Phases 5–6 to capture annotated screenshots and open a fix PR with
+   `Fixes #<issue_number>` in the body.
 
 ## Lab parsing rules
 
