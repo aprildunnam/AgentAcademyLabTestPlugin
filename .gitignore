@@ -1,3 +1,6 @@
+# Environment-specific config (contains personal environment IDs)
+.env
+
 # Plugin runtime state — never committed.
 # This directory holds:
 #   - account/credential.enc      DPAPI-encrypted workshop-account credentials (user-scoped)

@@ -143,9 +143,17 @@ The plugin ships a `.github/mcp.json` that auto-configures Playwright MCP — no
 /plugin install aprildunnam/AgentAcademyLabTestPlugin
 ```
 
+After installing, create your personal `.env` file:
+
+```bash
+cp .env.example .env
+# Edit .env with your environment URL and Edge profile path
+```
+
 ## Configuration
 
-All configuration lives in the `config/` directory. Edit these files to customize behavior.
+Environment-specific settings go in `.env` (gitignored, never committed).
+Shared settings stay in the `config/` directory.
 
 ### Browser & profile (`/.github/mcp.json`)
 
@@ -173,13 +181,17 @@ Controls which browser and profile Playwright uses:
 
 **Finding your Edge profile path:** On macOS, profiles live at `~/Library/Application Support/Microsoft Edge/Profile N`. Open `edge://version` in your target profile to see the exact path.
 
-### Power Platform environment (`config/agent-academy-config.yml`)
+### Power Platform environment (`.env`)
 
-The `environment.default_url` setting controls which Copilot Studio environment the plugin navigates to at the start of every test run:
+Your environment URL is resolved in this order:
+1. `--env-url` flag (per-run override)
+2. `AGENT_ACADEMY_ENV_URL` in your `.env` file
+3. `environment.default_url` in `config/agent-academy-config.yml` (fallback)
 
-```yaml
-environment:
-  default_url: "https://copilotstudio.microsoft.com/environments/f4742039-a72b-ee20-b60b-139dea70dc02/home"
+Set it in your `.env` file:
+
+```bash
+AGENT_ACADEMY_ENV_URL=https://copilotstudio.microsoft.com/environments/YOUR-ENV-ID/home
 ```
 
 Override per-run with `--env-url`:
