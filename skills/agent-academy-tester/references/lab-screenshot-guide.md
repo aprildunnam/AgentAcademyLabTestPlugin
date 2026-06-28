@@ -8,16 +8,25 @@ helps learners immediately see where to look and what to click.
 
 ## Two-file strategy
 
-For every screenshot captured during lab generation, produce TWO files:
+For every screenshot captured during lab generation, produce TWO files using
+Agent Academy's naming convention (`{section}_{subsection}_{seq}_{Description}.png`):
 
 ```
 assets/
-  step-03.png              ← clean screenshot (backup, not used in markdown)
-  step-03-annotated.png    ← annotated version (used in the rendered markdown)
+  4.1_01_Solutions.png              ← clean screenshot (backup, not used in markdown)
+  4.1_01_Solutions-annotated.png    ← annotated version (used in the rendered markdown)
 ```
 
 The `index.md` always references the `-annotated` version. The clean version exists
 as a backup in case the annotation is wrong or needs to be re-done.
+
+### Naming convention
+
+Follow Agent Academy's established pattern:
+- `{section}_{subsection}_{seq}_{Description}.png` for clean
+- `{section}_{subsection}_{seq}_{Description}-annotated.png` for annotated
+
+Examples: `4.1_01_Solutions.png`, `4.1_02_NewSolution.png`, `4.1_02_NewSolution-annotated.png`
 
 ## When to annotate
 
@@ -77,8 +86,8 @@ After capturing each step's screenshot:
    })();
    ```
 
-4. **Take the annotated screenshot.** Use `browser_take_screenshot` and save as
-   `step-<N>-annotated.png`.
+4. **Take the annotated screenshot.** Use `browser_take_screenshot` and save with
+   the `-annotated` suffix (e.g., `4.1_01_Solutions-annotated.png`).
 
 5. **Remove the overlay.** Use `browser_evaluate`:
    ```javascript
@@ -115,10 +124,10 @@ In the generated `index.md`:
 ```markdown
 1. Click the **New agent** button in the top toolbar.
 
-   ![Click New agent button](./assets/step-01-annotated.png)
+   ![Click New agent button](./assets/1.1_01_NewAgent-annotated.png)
 ```
 
-The `-annotated` version is always what's referenced. The clean `step-01.png` sits
+The `-annotated` version is always what's referenced. The clean `1.1_01_NewAgent.png` sits
 in the same `assets/` folder as a backup.
 
 ## Fallback behavior

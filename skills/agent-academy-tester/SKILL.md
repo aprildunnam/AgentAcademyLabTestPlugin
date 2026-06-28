@@ -74,7 +74,38 @@ This file is the orchestrator. It loads reference files as needed:
    markdown. Parse the target lab's `index.md` into a step tree.
 
 2. **Verify Playwright MCP is available.** Confirm the `playwright` MCP server is accessible
-   (it's bundled via `.github/mcp.json`).
+   (it's bundled via `.github/mcp.json`). Skip this check if `--dry-run` or `--static-only`.
+
+3. **Handle early-exit modes:**
+   - If `--dry-run`: output the parsed step tree and STOP. No browser, no execution.
+   - If `--static-only`: run static validation (Phase 1.5 below) and STOP. No browser.
+
+### Phase 1.5 — Static Validation (for `--static-only`)
+
+When `--static-only` is passed, validate the lab markdown without launching a browser:
+
+1. **Check markdown structure.** Verify the lab has:
+   - Valid VitePress frontmatter (prev/next, difficulty, time, tags)
+   - Required sections: `## 🎯 Mission Brief`, `## 🔎 Objectives`, `## 🧪 Lab`, `## ✅ Mission Complete`
+   - `<mission-meta />` component after the H1
+   - Heading anchors on all `##` headings
+
+2. **Validate images.** For every `![alt](./assets/file.png)` reference:
+   - Check that the image file exists in the repo at `docs/<course>/<slug>/assets/`
+   - Flag missing images
+
+3. **Validate links.** For every `[text](link)` reference:
+   - Internal links: verify the target file/anchor exists
+   - External links: flag any broken patterns (optional: HEAD request)
+
+4. **Check step formatting.** For each numbered step:
+   - Bold text exists (UI element targets)
+   - Code blocks use ` ```text ` fence (not bare ` ``` `)
+   - Screenshots are indented under their step
+
+5. **Write static validation report** to `runtime/test-results/<course>-<slug>-static-<timestamp>.md`.
+
+After static validation, STOP — do not proceed to Phase 2.
 
 ### Phase 2 — Browser Authentication (Manual)
 
@@ -355,6 +386,17 @@ See `commands/create-lab.md` for the full VitePress template and writing style g
 Produces a Power Platform solution .zip "starter pack" so learners can skip
 prerequisite labs by importing the solution.
 
+**Power Platform CLI authentication.** Before using `pac` commands, authenticate:
+```bash
+# Translate your Copilot Studio URL to a Dataverse org URL:
+# From: https://copilotstudio.microsoft.com/environments/ENVID/home
+# To:   https://ORGNAME.crm.dynamics.com   (or .crm2, .crm4, etc.)
+#
+# Find yours at: Power Platform Admin Center → Environments → your env → Environment URL
+pac auth create --environment https://ORGNAME.crm.dynamics.com
+```
+If `pac` is not installed, fall back to browser-based operations via Playwright.
+
 1. **Identify prerequisites.** Determine which prior labs produce artifacts needed
    for the target lab (agents, topics, flows, tables, etc.).
 
@@ -419,7 +461,7 @@ are confusing, slightly off, or have non-obvious workarounds:
 - Steps where a modal/dialog appeared that wasn't mentioned in the instructions
 - Steps where the UI element was found but in a different location than described
 
-**Output format.** Generate `<output-dir>/common-issues.md` in Agent Academy style:
+**Output format.** Generate `runtime/test-results/<course>-<slug>-common-issues-<timestamp>.md` in Agent Academy style:
 
 ```markdown
 ## 🛟 Common Issues {#common-issues}

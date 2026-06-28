@@ -121,10 +121,22 @@ lab:
 - If a prerequisite references another lab's output, note it as a dependency
 
 ### Alert blocks
+
+VitePress supports **two alert syntaxes** — both may appear in Agent Academy labs:
+
+**GitHub-style (blockquote):**
 - `> [!TIP]` — helpful hint, not a step (skip)
 - `> [!NOTE]` — informational, may provide alternative approaches
 - `> [!WARNING]` / `> [!IMPORTANT]` — critical context that may affect step execution
-- Attach alert blocks to the preceding step as metadata
+
+**VitePress custom containers (fenced):**
+- `::: tip` / `::: tip Title` — same as `> [!TIP]`
+- `::: info` / `::: info Title` — same as `> [!NOTE]`
+- `::: warning` / `::: warning Title` — same as `> [!WARNING]`
+- `::: danger` / `::: danger Title` — critical, treat like `> [!IMPORTANT]`
+
+Custom containers end with `:::` on its own line. Parse both formats.
+Attach alert blocks to the preceding step as metadata.
 
 ### Multi-line steps
 - A numbered step continues until the next numbered step or heading

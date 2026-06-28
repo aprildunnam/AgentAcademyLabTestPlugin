@@ -158,5 +158,6 @@ environment:
 portals:
   copilot_studio: "https://copilotstudio.microsoft.com/"
   power_apps: "https://make.powerapps.com/"
+  power_automate: "https://make.powerautomate.com/"
   m365_copilot: "https://m365.cloud.microsoft/chat/"
   power_platform_admin: "https://admin.powerplatform.microsoft.com/"
