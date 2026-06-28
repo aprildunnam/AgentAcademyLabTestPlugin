@@ -22,6 +22,7 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 | `/test-course [<course>]` | Test all interactive labs in a course sequentially |
 | `/reproduce-issue [<issue-number>]` | Reproduce a bug reported in a GitHub issue by re-running the relevant lab steps |
 | `/rewrite-lab [<course>/<slug>]` | Rewrite a lab for a new UI experience — generates updated markdown + screenshots locally |
+| `/create-lab [<course>]` | Create a brand-new lab from scratch — explores the feature live and generates complete lab markdown |
 
 ### Command flags
 
@@ -35,7 +36,9 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 | `--dry-run` | `/test-lab` | Parse the lab into a step tree only, no browser |
 | `--static-only` | `/test-lab` | Check markdown structure, links, and images only |
 | `--stop-on-failure` | `/test-course` | Halt the run if any lab has a high-severity broken finding |
-| `--output-dir <path>` | `/rewrite-lab` | Custom output directory for the rewritten lab files |
+| `--output-dir <path>` | `/rewrite-lab`, `/create-lab` | Custom output directory for generated lab files |
+| `--title <title>` | `/create-lab` | The mission title for the new lab |
+| `--topic <description>` | `/create-lab` | Brief description of what the lab should teach |
 
 ### Available courses
 
@@ -87,6 +90,12 @@ A Copilot CLI / Claude Code plugin that **tests [Copilot Studio Agent Academy](h
 
 # Rewrite with custom output location
 /rewrite-lab recruit/04-creating-a-solution --env-url https://copilotstudio.microsoft.com/environments/NEW-ENV/home --output-dir ~/Desktop/lab-rewrites/04
+
+# Create a brand-new lab
+/create-lab operative --title "Connecting a SharePoint Knowledge Source" --topic "Teach users how to add a SharePoint site as a knowledge source to their agent and test it with sample questions"
+
+# Create a lab with a specific environment
+/create-lab recruit --topic "Setting up an MCP server connection" --env-url https://copilotstudio.microsoft.com/environments/NEW-ENV/home
 ```
 
 ## Prerequisites
@@ -295,6 +304,19 @@ Output goes to `runtime/rewrites/<course>-<slug>/` (or `--output-dir`). You revi
 
 **Key: blockers are flagged prominently.** If something from the old lab can't be done in the new UI, the evaluation file calls it out with the reason, potential alternatives, and impact on the learning objective.
 
+### Creating new labs from scratch (`/create-lab`)
+
+When you need a net-new lab (not a rewrite of an existing one):
+
+1. **Tell it the course and topic** — e.g., `/create-lab operative --topic "teach users how to connect an MCP server"`
+2. **It explores the feature live** in your Copilot Studio environment — discovers the full click path, decision points, and pitfalls
+3. **Captures screenshots** at every meaningful step
+4. **Writes a complete lab** in the exact Agent Academy VitePress format (mission brief, objectives, numbered steps with bold UI elements, tips, code blocks, screenshots)
+5. **Self-validates** by running through its own instructions to confirm they work
+6. **Generates an evaluation file** with stats, validation results, and suggested placement in the course
+
+Output is local only (`runtime/new-labs/<course>-<slug>/`). You review the generated `index.md`, edit to taste, and manually add it to the agent-academy repo when ready. The writing style matches the Agent Academy voice — friendly, precise, one action per step.
+
 ## Architecture
 
 ```
@@ -308,6 +330,7 @@ commands/
   test-course.md                    — /test-course command definition
   reproduce-issue.md                — /reproduce-issue command definition
   rewrite-lab.md                    — /rewrite-lab command definition
+  create-lab.md                     — /create-lab command definition
 skills/
   agent-academy-tester/
     SKILL.md                        — Main orchestration skill (auth → parse → execute → judge → report)

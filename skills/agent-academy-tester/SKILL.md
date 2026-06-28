@@ -59,6 +59,7 @@ This file is the orchestrator. It loads reference files as needed:
 | `/test-course [<course>]` | Test all interactive labs in a course sequentially |
 | `/reproduce-issue [<issue-number>]` | Reproduce a reported GitHub issue by re-running the relevant lab steps |
 | `/rewrite-lab [<course>/<slug>]` | Rewrite a lab for a new UI experience — documents changes and generates updated markdown locally |
+| `/create-lab [<course>]` | Create a brand-new lab from scratch — explores the feature live and generates complete lab markdown |
 
 ## Run lifecycle
 
@@ -299,6 +300,41 @@ review, edit, and manually submit.
    no PR creation. The user reviews the output and decides what to do with it.
 
 See `commands/rewrite-lab.md` for the full evaluation table structure and output format.
+
+### Phase 9 — Lab Creation (for `/create-lab`)
+
+When invoked via `/create-lab`, the plugin creates a net-new lab from scratch:
+
+1. **Gather requirements.** Determine the course, topic, title, prerequisites, and
+   difficulty level. Ask the user for anything not provided via flags.
+
+2. **Explore the feature live.** Open the browser, authenticate, and walk through the
+   feature described by the user. The goal is to discover the full click path, decision
+   points, and potential pitfalls. Capture screenshots at every meaningful step.
+
+3. **Plan the lab structure.** Based on exploration:
+   - Determine the next available mission number in the target course
+   - Group steps into logical sections (2–5 sections)
+   - Define 3–5 learning objectives
+   - Identify prerequisites
+
+4. **Write the lab markdown.** Generate a complete `index.md` in the Agent Academy
+   VitePress format with:
+   - Mission brief, objectives, prerequisites
+   - Numbered steps with bold UI elements, screenshots, code blocks, and tips
+   - One action per step — never combine multiple actions
+   - Mission Complete summary with accomplishments and next steps
+
+5. **Self-validate.** Run through the generated lab instructions in the same browser
+   session to confirm every step works. Fix any issues found.
+
+6. **Generate evaluation.** Write an `evaluation.md` with stats, validation results,
+   and suggested placement (slug, path, mission number, dependencies).
+
+7. **All output is local.** Save to `runtime/new-labs/<course>-<slug>/`. No PR, no issue.
+   The user reviews and submits manually.
+
+See `commands/create-lab.md` for the full VitePress template and writing style guidelines.
 
 ## Lab parsing rules
 
