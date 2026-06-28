@@ -61,6 +61,7 @@ This file is the orchestrator. It loads reference files as needed:
 | `/reproduce-issue [<issue-number>]` | Reproduce a reported GitHub issue by re-running the relevant lab steps |
 | `/rewrite-lab [<course>/<slug>]` | Rewrite a lab for a new UI experience — documents changes and generates updated markdown locally |
 | `/create-lab [<course>]` | Create a brand-new lab from scratch — explores the feature live and generates complete lab markdown |
+| `/export-solution [<course>/<slug>]` | Export a Power Platform starter solution .zip so learners can skip prerequisite labs |
 
 ## Run lifecycle
 
@@ -343,6 +344,35 @@ When invoked via `/create-lab`, the plugin creates a net-new lab from scratch:
    The user reviews and submits manually.
 
 See `commands/create-lab.md` for the full VitePress template and writing style guidelines.
+
+### Phase 10 — Solution Export (for `/export-solution` or `--export-solution`)
+
+Produces a Power Platform solution .zip "starter pack" so learners can skip
+prerequisite labs by importing the solution.
+
+1. **Identify prerequisites.** Determine which prior labs produce artifacts needed
+   for the target lab (agents, topics, flows, tables, etc.).
+
+2. **Validate or create artifacts.** Either validate that artifacts already exist in
+   the environment, or run prerequisite steps (with `--run-prereqs`) to create them.
+
+3. **Ensure artifacts are in the correct solution.** Navigate to Solution Explorer,
+   verify components are in the target solution. Add any missing components via
+   "Add existing" → select → "Add".
+
+4. **Run solution validation.** Use Solution Checker if available. Block export on
+   critical errors; note warnings in the manifest.
+
+5. **Publish and export.** Publish all customizations, then export as unmanaged,
+   managed, or both. Save .zip files to the output directory.
+
+6. **Generate manifest.** Write `manifest.md` with solution details, component list,
+   import instructions, and post-import setup steps.
+
+This phase can run standalone (via `/export-solution`) or as a final step of other
+commands when `--export-solution` is passed.
+
+See `commands/export-solution.md` for full details.
 
 ## Lab parsing rules
 

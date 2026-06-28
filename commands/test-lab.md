@@ -29,6 +29,8 @@ Flags:
   full Copilot Studio environment URL, e.g.
   `https://copilotstudio.microsoft.com/environments/<env-id>/home`.
   If omitted, uses `environment.default_url` from `config/agent-academy-config.yml`.
+- `--export-solution` — after testing, also export the resulting environment state as
+  a Power Platform solution .zip starter pack. See `/export-solution` for details.
 
 ## Your task
 
