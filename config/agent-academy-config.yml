@@ -54,6 +54,44 @@ courses:
         title: "Understanding Licensing"
         interactive: false  # conceptual only
 
+  recruit-v2-preview:
+    title: "Recruit v2 (Preview)"
+    path: "docs/recruit-v2-preview"
+    labs:
+      - slug: "00-course-setup"
+        title: "Course Setup"
+        interactive: true
+      - slug: "01-introduction-to-agents"
+        title: "Introduction to Agents"
+        interactive: false
+      - slug: "02-declarative-agent"
+        title: "Declarative Agent"
+        interactive: true
+      - slug: "03-copilot-studio-fundamentals"
+        title: "Copilot Studio Fundamentals"
+        interactive: false
+      - slug: "04-creating-a-solution"
+        title: "Creating a Solution"
+        interactive: true
+      - slug: "05-build-a-custom-agent"
+        title: "Build a Custom Agent"
+        interactive: true
+      - slug: "06-add-a-skill"
+        title: "Add a Skill"
+        interactive: true
+      - slug: "07-add-tools"
+        title: "Add Tools"
+        interactive: true
+      - slug: "08-automate-with-workflows"
+        title: "Automate with Workflows"
+        interactive: true
+      - slug: "09-publish-your-agent"
+        title: "Publish Your Agent"
+        interactive: true
+      - slug: "10-understanding-licensing"
+        title: "Understanding Licensing"
+        interactive: false
+
   operative:
     title: "Operative"
     path: "docs/operative"
